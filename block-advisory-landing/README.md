@@ -1,5 +1,7 @@
 # Block Advisory: new development landing pages
 
+> **On block.ke, use the WordPress version in [`wordpress/`](wordpress/README.md).** It applies this design to the property listing itself, so a development stays a normal block.ke property page, and it adds the off-plan payment calculator to every for-sale listing. The static pages below are for standalone use, such as ad landing pages hosted elsewhere.
+
 One template for every new development. Each development page is a single file holding only that project's details. The design, layout and lead capture are shared, so improving them once updates every page.
 
 ```
