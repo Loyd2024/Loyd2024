@@ -1,6 +1,6 @@
 # block.ke: development property page and payment calculators
 
-`block-development-page.php` is a single WPCode PHP snippet with two features. Everything it shows is read from the listing, so a development keeps working like any other block.ke property: same URL, site header and menu, search and maps, agent, similar listings and SEO. To update the page, edit the property as usual.
+`block-development-page.php` is a single WPCode PHP snippet that improves block.ke property pages in three ways. Everything it shows is read from the listing, so a development keeps working like any other block.ke property: same URL, site header and menu, search and maps, agent, similar listings and SEO. To update the page, edit the property as usual.
 
 ## 1. Payment calculators on every for-sale property page
 
@@ -19,7 +19,17 @@ Its button opens the agent contact form with "Please send me the official paymen
 
 **Mortgage defaults need updating.** The theme's mortgage calculator currently assumes 4.125% interest over 30 years, which are US figures. Update them in *WpResidence Options → Property Page → Mortgage calculator*, for example to 13% over 20 years.
 
-## 2. Development layout (switched on per listing)
+## 2. Amenities and nearby places on every property page
+
+These two changes apply to the theme's own (classic) property pages.
+
+**Features & Amenities** opens with up to six amenity tiles, as on the development layout: navy tiles with a brass icon, the amenity's name and a one-line description. Everything else follows as one checklist, titled "The everyday essentials" when it holds only security, parking, lifts, water and power, otherwise "Also included". This replaces the theme's list of feature groups, where most groups held one to three items under their own heading. The items are the listing's *Features & Amenities* ticks, as before, so there is nothing new to fill in.
+
+**Address** gains a *What's nearby* panel. It lists the nearest two business districts, malls, schools or universities, hospitals, parks and airports, with straight-line distances from the listing's map pin. The places are a curated list of 36 Nairobi landmarks in `blockke_dev_landmarks()`, and more can be added there, for example Gateway Mall for Syokimau listings. A group appears only when one of its places is close enough to matter: 6 km for malls and parks, 8 km for schools and hospitals (5 km for universities), and further for business districts and airports. There is no panel for listings outside Nairobi, without a map pin, or with the pin left on the theme's default map centre. To show your own list instead, fill in **Places nearby** in the listing's *Development page* box, one per line as `Place | travel time`.
+
+Both are moved into place by a small script at the end of the page. Without JavaScript, or if the theme's markup changes, the theme's own content stays as it was.
+
+## 3. Development layout (switched on per listing)
 
 A landing-page layout for new developments, drawn between the site's normal header and footer.
 
@@ -32,7 +42,7 @@ A landing-page layout for new developments, drawn between the site's normal head
 | Residences table, with filters | The description's Unit / Size / Price table, linked to the unit listings. With no table, the unit listings (Multi Units) are used. |
 | Amenities | Up to six feature tiles for the stand-out amenities (pool, sky lounge, gym, cinema and so on), each with an icon and a one-line description, then a checklist of everything else. The items come from bold-titled groups in the description's *Amenities* section, otherwise the *Features & Amenities* ticks. |
 | Payment plan | Off-plan: the *Payment Plan* steps plus the instalment calculator. Complete: a mortgage calculator. |
-| Location | Map pin from the listing coordinates, plus places and travel times from the *Location* section |
+| Location | Map pin from the listing coordinates, plus places and travel times from the *Location* section. With none listed, the nearest business district, mall, school, hospital, park and airport, with straight-line distances. |
 | FAQ | The description's *FAQ* / *Frequently Asked Questions* section |
 | Similar developments | Other developments for sale in the same area |
 | Enquiry form and advisor | The listing's agent |
@@ -68,8 +78,10 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `enabled` | `true` | Development layout available |
 | `auto` | `false` | Layout on for every listing with units |
 | `offplan_calculator` | `true` | Instalment calculator on off-plan pages |
+| `classic_amenities` | `true` | Amenity tiles and checklist in *Features & Amenities* on classic pages |
+| `classic_nearby` | `true` | *What's nearby* in *Address* on classic pages |
 | `price_check_popup` | `false` | Show the site-wide price-check popup on development pages, which already carry their own forms. The popup is unchanged everywhere else. |
-| `display_font` | `'Instrument Serif'` | Heading font on development pages. Use a Google Font that has an italic. `''` keeps the site font. |
+| `display_font` | `'Instrument Serif'` | Heading font on development pages, and in the amenity tiles and *What's nearby* on classic pages. Use a Google Font that has an italic. `''` keeps the site font. |
 | `default_deposit` | `20` | Deposit % used when a listing states none |
 | `mortgage_rate`, `mortgage_years`, `mortgage_deposit` | `13`, `20`, `20` | Mortgage calculator defaults on complete developments |
 | `notify_emails` | `[]` | Who receives enquiries. Empty uses the popup's list. |
@@ -79,11 +91,11 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 
 1. Open **WPCode → Code Snippets**. To install from this file instead, add a new PHP snippet and paste the file without its first `<?php` line.
 2. Set *Insert method* to Auto Insert and *Location* to Run Everywhere. Turn on **Active** and click **Update**.
-3. Check an off-plan property: the payment plan calculator replaces the mortgage one. Then preview a development with `?bke_layout=1`.
+3. Check an off-plan property: the payment plan calculator replaces the mortgage one, *Features & Amenities* shows the tiles, and *Address* shows *What's nearby*. Then preview a development with `?bke_layout=1`.
 
 To roll back, deactivate the snippet. Every page returns to the theme's own template and calculator.
 
-**Upgrading from v1.0 to v1.1.** v1.1 is staged as its own snippet, *… v1.1*, with priority 5, so it runs before v1.0 (priority 10). The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the other skips itself. To upgrade, switch v1.1 on, and it takes over at once. Then switch v1.0 off, or keep it as a fallback. To go back, switch v1.1 off.
+**Upgrading from v1.0.** The new version is staged as its own snippet, *… v1.2*, with priority 5, so it runs before v1.0 (priority 10). The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the other skips itself. To upgrade, switch v1.2 on, and it takes over at once. Then switch v1.0 off, or keep it as a fallback. To go back, switch v1.2 off.
 
 WPCode runs a cached copy of each active snippet, refreshed when a snippet is saved in WPCode. A snippet edited through the API stays as it was on the site until someone clicks **Update** on it, or on any other snippet.
 
@@ -98,6 +110,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - the unit pop-up, gallery, filters, sticky section bar and mobile bar;
 - both calculators;
 - the calculator swap on classic off-plan and complete pages;
-- v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback.
+- v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback;
+- v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.

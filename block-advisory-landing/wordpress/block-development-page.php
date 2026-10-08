@@ -2,9 +2,10 @@
 /* marker line - keeps the connector from Markdown-converting this snippet; harmless in PHP */
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
- * BLOCK - Development property page + payment calculators v1.1 (2026-10-08)
+ * BLOCK - Development property page + payment calculators v1.2 (2026-10-08)
  *
- * 1) PAYMENT CALCULATORS on every for-sale property page (classic theme template):
+ * 1) CLASSIC PROPERTY PAGES (the theme's own template)
+ *    PAYMENT CALCULATORS on every for-sale property page:
  *    - Off-plan listings (Property Status "Off-Plan / Ongoing", completion not "Ready now"): the theme's
  *      mortgage calculator (#accordion_property_payment_calculator) is hidden and a payment-plan
  *      instalment calculator takes its place: deposit, then monthly or quarterly instalments up to
@@ -12,6 +13,15 @@
  *      description's "Payment Plan" section, and the completion date (bke_completion_stated, the
  *      "Completion" / "Occupation" row, or the Completion year).
  *    - Complete listings keep the theme's mortgage calculator.
+ *    AMENITIES AND NEARBY PLACES on every classic property page:
+ *    - Features & Amenities (#accordion_features_details) shows up to six amenity tiles (pool, gym, sky
+ *      lounge...) and the rest as one checklist, instead of a list per feature group (config
+ *      classic_amenities).
+ *    - Address (#accordion_property_address) adds "What's nearby": the nearest business districts,
+ *      malls, schools and universities, hospitals, parks and airports with straight-line distances from
+ *      the map pin (blockke_dev_landmarks(), Nairobi only), or the listing's own "Places nearby" box
+ *      (config classic_nearby).
+ *    Both are moved into place by a small script; without JavaScript the theme's own content stays.
  *
  * 2) DEVELOPMENT LAYOUT (opt-in per listing): a landing-page layout for new developments that is still a
  *    normal block.ke property page: same URL, the site's header, menu and footer, Rank Math SEO, search,
@@ -20,9 +30,9 @@
  *      key facts ("at a Glance" / "Project Snapshot" rows + unit sizes), residences (the Unit / Size /
  *      Price table in the description, linked to the sub-unit listings; else the sub-units), amenities
  *      (up to six feature tiles plus a checklist, from the Amenities section, else from Features &
- *      Amenities), payment plan (instalment
- *      calculator for off-plan, mortgage calculator for complete), location (map + places), FAQ, similar
- *      developments in the same area, the listing's agent, and the full description under "Read more".
+ *      Amenities), payment plan (instalment calculator for off-plan, mortgage calculator for complete),
+ *      location (map + places, else distances to nearby places), FAQ, similar developments in the same
+ *      area, the listing's agent, and the full description under "Read more".
  *    Turn it on: Edit property > "Development page" box > Layout: On.
  *    Every listing with units: option blockke_dev_page['auto'] = true.
  *    Preview while logged in: any property URL + ?bke_layout=1 (?bke_layout=0 shows the classic page).
@@ -36,6 +46,8 @@
  * Created by Claude session 2026-10-07.
  * v1.1 (2026-10-08): warmer colours (paper and sand backgrounds, navy bands, brass accents), serif
  * headings (config display_font), and amenities as feature tiles plus an essentials checklist.
+ * v1.2 (2026-10-08): the amenity tiles and checklist on classic property pages too, and distances to
+ * nearby places under Address (and in the development layout's Location when the description lists none).
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -49,6 +61,8 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'enabled'            => true,  // development layout
 			'auto'               => false, // true: every listing with units gets the layout unless switched off
 			'offplan_calculator' => true,  // instalment calculator instead of the mortgage one on off-plan pages
+			'classic_amenities'  => true,  // classic property pages: amenity tiles and a checklist in Features & Amenities
+			'classic_nearby'     => true,  // classic property pages: distances to nearby places under Address
 			'brand'              => 'Block',
 			'brand_full'         => 'Block Real Estate',
 			'phone'              => '+254725937686',
@@ -819,6 +833,190 @@ JS;
 	);
 
 	/* =====================================================================
+	   1b) Classic property pages: amenity tiles, and distances to nearby places
+	   ===================================================================== */
+
+	/** The heading font from the config, '' for the site font. */
+	function blockke_dev_display_font() {
+		return trim( preg_replace( '/[^A-Za-z0-9 ]/', '', (string) blockke_dev_config()['display_font'] ) );
+	}
+
+	/** The Google Fonts link and the --display value for a scope, e.g. "#bkd". */
+	function blockke_dev_font_head( $scope ) {
+		$font = blockke_dev_display_font();
+		if ( '' === $font ) {
+			return array( '', '' );
+		}
+		return array(
+			'<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+				. '<link id="bkd-font" rel="stylesheet" href="' . esc_url( 'https://fonts.googleapis.com/css2?family=' . str_replace( ' ', '+', $font ) . ':ital@0;1&display=swap' ) . "\">\n",
+			$scope . '{--display:"' . $font . '",Georgia,"Times New Roman",serif;--display-w:400}',
+		);
+	}
+
+	/** What a classic property page gets: the amenity layout (Features & Amenities) and nearby places (Address). */
+	function blockke_dev_classic_extras() {
+		static $x = null;
+		if ( null !== $x ) {
+			return $x;
+		}
+		$x = array(
+			'feat' => null,
+			'near' => array(),
+			'own'  => array(),
+		);
+		if ( is_admin() || ! is_singular( 'estate_property' ) || ! empty( $GLOBALS['blockke_dev_active'] ) ) {
+			return $x;
+		}
+		$cfg = blockke_dev_config();
+		$id  = get_queried_object_id();
+		if ( ! empty( $cfg['classic_amenities'] ) ) {
+			$am = blockke_dev_amenity_layout( blockke_dev_feature_groups( $id ) );
+			if ( $am['tiles'] || $am['rest'] ) {
+				$x['feat'] = $am;
+			}
+		}
+		if ( ! empty( $cfg['classic_nearby'] ) ) {
+			$x['own'] = blockke_dev_places_override( $id );
+			if ( ! $x['own'] ) {
+				$x['near'] = blockke_dev_nearby( get_post_meta( $id, 'property_latitude', true ), get_post_meta( $id, 'property_longitude', true ) );
+			}
+		}
+		return $x;
+	}
+
+	function blockke_dev_classic_features( $am ) {
+		$o = '<div class="bkd-cls" id="bkd-feat">';
+		if ( $am['tiles'] ) {
+			$o .= '<ul class="bkd-ft" data-n="' . count( $am['tiles'] ) . '">';
+			foreach ( $am['tiles'] as $t ) {
+				$o .= '<li>' . blockke_dev_icon( $t['icon'] ) . '<b>' . esc_html( $t['title'] ) . '</b><span>' . esc_html( $t['text'] ) . '</span></li>';
+			}
+			$o .= '</ul>';
+		}
+		if ( $am['rest'] ) {
+			$o .= '<div class="bkd-fe">' . ( $am['tiles'] ? '<h3 class="bkd-cls-h">' . ( $am['essentials'] ? 'The everyday <em>essentials</em>' : 'Also <em>included</em>' ) . '</h3>' : '' ) . '<ul>';
+			foreach ( $am['rest'] as $r ) {
+				$o .= '<li>' . blockke_dev_icon( 'check' ) . '<span>' . esc_html( $r ) . '</span></li>';
+			}
+			$o .= '</ul></div>';
+		}
+		return $o . '</div>';
+	}
+
+	function blockke_dev_classic_nearby( $groups, $own ) {
+		$o = '<div class="bkd-cls" id="bkd-near"><h3 class="bkd-cls-h">What’s <em>nearby</em></h3>';
+		if ( $own ) {
+			$o .= '<ul class="bkd-nr-own">';
+			foreach ( $own as $p ) {
+				$o .= '<li><span>' . esc_html( $p[0] ) . '</span>' . ( '' !== $p[1] ? '<b>' . esc_html( $p[1] ) . '</b>' : '' ) . '</li>';
+			}
+			return $o . '</ul><p class="bkd-nr-note">Approximate travel times; they vary with traffic.</p></div>';
+		}
+		$o .= '<div class="bkd-nr">';
+		foreach ( $groups as $g ) {
+			$o .= '<div class="bkd-nr-c"><p class="bkd-nr-k">' . blockke_dev_icon( $g['icon'] ) . esc_html( $g['label'] ) . '</p><ul>';
+			foreach ( $g['places'] as $p ) {
+				$o .= '<li><span>' . esc_html( $p[0] ) . '</span><b>' . blockke_dev_km_label( $p[1] ) . '</b></li>';
+			}
+			$o .= '</ul></div>';
+		}
+		return $o . '</div><p class="bkd-nr-note">Straight-line distances from the map pin. Road distances and travel times will be longer.</p></div>';
+	}
+
+	function blockke_dev_classic_css() {
+		return <<<'CSS'
+.bkd-cls{--navy:#0D2440;--navy-l:#2B4568;--ink:#22303C;--muted:#5F6D7E;--mist:#F4EEE4;--line:#E6DFD4;--line-2:#D5CBBB;--brass:#B98A44;--brass-d:#80602A;--brass-t:#9E7433;--brass-l:#DDB97F;--font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--display:var(--font);--display-w:600;
+display:block;clear:both;float:none;flex:0 0 100%;width:100%;max-width:100%;margin:0;padding:0;container-type:inline-size;text-align:left;font:400 15px/1.6 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
+.bkd-cls :where(*,*::before,*::after){box-sizing:border-box}
+.bkd-cls :is(h3,p,ul,li){margin:0!important;padding:0!important;border:0;background:none;list-style:none!important;text-transform:none}
+.bkd-cls li::before,.bkd-cls li::after{content:none!important;display:none!important}
+.bkd-cls .bkd-i{display:block;width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#accordion_features_details .bkd-feat-on>:not(#bkd-feat){display:none!important}
+:is(#bkd-feat,#bkd-near) .bkd-cls-h{margin:0 0 10px!important;font-family:var(--display)!important;font-size:27px!important;font-weight:var(--display-w)!important;font-style:normal!important;line-height:1.15!important;letter-spacing:0!important;color:var(--navy)!important}
+:is(#bkd-feat,#bkd-near) .bkd-cls-h em{font-family:inherit!important;font-style:italic;font-weight:inherit;color:var(--brass-t)!important}
+#bkd-feat .bkd-ft{display:grid;grid-template-columns:minmax(0,1fr);gap:1px;margin:0 0 34px!important;background:var(--navy-l);border:1px solid var(--navy)}
+#bkd-feat .bkd-ft li{display:grid;grid-template-columns:26px minmax(0,1fr);align-content:start;gap:2px 14px;padding:20px!important;background:var(--navy)}
+#bkd-feat .bkd-ft .bkd-i{grid-row:span 2;width:26px;height:26px;margin-top:3px;color:var(--brass-l);stroke-width:1.4}
+#bkd-feat .bkd-ft b{display:block;font-family:var(--display)!important;font-size:23px!important;font-weight:var(--display-w)!important;line-height:1.2!important;letter-spacing:0!important;color:#fff!important}
+#bkd-feat .bkd-ft span{display:block;font-size:14px!important;line-height:1.55!important;color:rgba(255,255,255,.72)!important}
+#bkd-feat .bkd-fe ul{display:grid;grid-template-columns:minmax(0,1fr);column-gap:28px}
+#bkd-feat .bkd-fe li{display:flex;align-items:flex-start;gap:12px;padding:12px 0!important;border-bottom:1px solid var(--line)!important;font-size:15px!important;font-weight:500!important;line-height:1.45!important;color:var(--navy)!important}
+#bkd-feat .bkd-fe li span{color:inherit!important;font-size:inherit!important;font-weight:inherit!important}
+#bkd-feat .bkd-fe .bkd-i{width:16px;height:16px;margin-top:2px;color:var(--brass-d);stroke-width:2.2}
+#bkd-near{padding-top:44px!important}
+#bkd-near .bkd-nr{display:grid;grid-template-columns:minmax(0,1fr);gap:24px 32px;margin-top:6px!important;padding:24px!important;background:var(--mist)}
+#bkd-near .bkd-nr-k{display:flex;align-items:center;gap:10px;margin:0 0 4px!important;font-size:11px!important;font-weight:600!important;line-height:1.4!important;letter-spacing:.16em!important;text-transform:uppercase!important;color:var(--brass-d)!important}
+#bkd-near .bkd-nr-k .bkd-i{width:20px;height:20px;color:var(--brass)}
+#bkd-near li{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:9px 0!important;border-bottom:1px solid var(--line-2)!important;font-size:14.5px!important;line-height:1.4!important;color:var(--ink)!important}
+#bkd-near .bkd-nr li:last-child{border-bottom:0!important}
+#bkd-near .bkd-nr-own{margin-top:6px!important;border-top:1px solid var(--line)!important}
+#bkd-near .bkd-nr-own li{border-bottom-color:var(--line)!important}
+#bkd-near li span{color:inherit!important;font-size:inherit!important}
+#bkd-near li b{flex:none;font-weight:600!important;color:var(--navy)!important;font-variant-numeric:tabular-nums;white-space:nowrap}
+#bkd-near .bkd-nr-note{margin-top:12px!important;font-size:12px!important;line-height:1.55!important;color:var(--muted)!important}
+@container (min-width:460px){#bkd-feat .bkd-fe ul{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (min-width:520px){#bkd-near .bkd-nr{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (min-width:560px){#bkd-feat .bkd-ft:is([data-n="2"],[data-n="4"],[data-n="6"]){grid-template-columns:repeat(2,minmax(0,1fr))}#bkd-feat .bkd-ft:not([data-n="1"],[data-n="3"]) li{display:block;padding:26px 24px!important}#bkd-feat .bkd-ft:not([data-n="1"],[data-n="3"]) b{margin:16px 0 6px!important}}
+@container (min-width:680px){#bkd-feat .bkd-ft:is([data-n="3"],[data-n="6"]){grid-template-columns:repeat(3,minmax(0,1fr))}#bkd-feat .bkd-ft[data-n="3"] li{display:block;padding:26px 24px!important}#bkd-feat .bkd-ft[data-n="3"] b{margin:16px 0 6px!important}#bkd-feat .bkd-fe ul{grid-template-columns:repeat(3,minmax(0,1fr))}}
+CSS;
+	}
+
+	add_action(
+		'wp_head',
+		function () {
+			$x = blockke_dev_classic_extras();
+			if ( ! $x['feat'] && ! $x['near'] && ! $x['own'] ) {
+				return;
+			}
+			$font = blockke_dev_font_head( '.bkd-cls' );
+			echo $font[0] . '<style id="bkd-cls-css">' . blockke_dev_classic_css() . $font[1] . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput -- fixed markup.
+		},
+		99
+	);
+
+	add_action(
+		'wp_footer',
+		function () {
+			$x = blockke_dev_classic_extras();
+			if ( ! $x['feat'] && ! $x['near'] && ! $x['own'] ) {
+				return;
+			}
+			$html  = '';
+			$icons = array( 'check' );
+			if ( $x['feat'] ) {
+				$html .= blockke_dev_classic_features( $x['feat'] );
+				foreach ( $x['feat']['tiles'] as $t ) {
+					$icons[] = $t['icon'];
+				}
+			}
+			if ( $x['near'] || $x['own'] ) {
+				$html .= blockke_dev_classic_nearby( $x['near'], $x['own'] );
+				foreach ( $x['near'] as $g ) {
+					$icons[] = $g['icon'];
+				}
+			}
+			$move = <<<'JS'
+(function(){
+  var w=document.getElementById('bkd-cls');if(!w){return;}
+  function box(id){var a=document.getElementById(id),b,d;if(!a){return null;}
+    b=a.querySelector('.accordion-body,.panel-body');
+    if(!b&&(d=a.querySelector('.listing_detail'))){b=d.parentNode;}
+    return b;}
+  var f=document.getElementById('bkd-feat'),fb=f&&box('accordion_features_details');
+  if(fb){fb.insertBefore(f,fb.firstChild);fb.classList.add('bkd-feat-on');}
+  var n=document.getElementById('bkd-near'),nb=n&&box('accordion_property_address');
+  if(nb){nb.appendChild(n);}
+  w.parentNode.removeChild(w);
+})();
+JS;
+			echo blockke_dev_sprite( array_unique( $icons ) ) . '<div id="bkd-cls" hidden>' . $html . "</div>\n" // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+				. '<script id="bkd-cls-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $move . "</script>\n";
+		},
+		25
+	);
+
+	/* =====================================================================
 	   2) Development layout: data
 	   ===================================================================== */
 
@@ -1198,6 +1396,11 @@ JS;
 				return $groups;
 			}
 		}
+		return blockke_dev_feature_groups( $id );
+	}
+
+	/** The listing's Features & Amenities terms, grouped under their parent terms (best groups first). */
+	function blockke_dev_feature_groups( $id ) {
 		$terms = get_the_terms( $id, 'property_features' );
 		if ( ! is_array( $terms ) || ! $terms ) {
 			return array();
@@ -1368,6 +1571,145 @@ JS;
 	/** Escapes a heading and turns *words* into its italic accent. */
 	function blockke_dev_accent( $s ) {
 		return preg_replace( '/\*([^*]+)\*/u', '<em>$1</em>', esc_html( $s ) );
+	}
+
+	/* =====================================================================
+	   Nearby places: straight-line distances from the listing's map pin
+	   ===================================================================== */
+
+	/**
+	 * Kinds of place, in display order: group heading, name for one place, icon, search radius (km), places shown.
+	 * Kinds that share a heading are listed together (schools and universities under Education).
+	 */
+	function blockke_dev_place_kinds() {
+		return array(
+			'work'   => array( 'Business districts', 'Business district', 'building', 40, 2 ),
+			'shop'   => array( 'Shopping', 'Shopping', 'bag', 6, 2 ),
+			'school' => array( 'Education', 'School', 'cap', 8, 2 ),
+			'uni'    => array( 'Education', 'University', 'cap', 5, 2 ),
+			'health' => array( 'Hospitals', 'Hospital', 'medical', 8, 2 ),
+			'park'   => array( 'Parks', 'Park', 'leaf', 6, 2 ),
+			'air'    => array( 'Airports', 'Airport', 'plane', 60, 2 ),
+		);
+	}
+
+	/** Nairobi landmarks: name, kind, latitude, longitude[, own radius in km]. Add places here to widen coverage. */
+	function blockke_dev_landmarks() {
+		return array(
+			array( 'Nairobi CBD', 'work', -1.28840, 36.82280 ),
+			array( 'Westlands', 'work', -1.26694, 36.81167 ),
+			array( 'Upper Hill', 'work', -1.29972, 36.81610, 8 ),
+			array( 'UN offices, Gigiri', 'work', -1.23233, 36.80753, 8 ),
+			array( 'Sarit Centre', 'shop', -1.25972, 36.80139 ),
+			array( 'Westgate Mall', 'shop', -1.25694, 36.80333 ),
+			array( 'The Village Market', 'shop', -1.22917, 36.80472 ),
+			array( 'Two Rivers Mall', 'shop', -1.21056, 36.79444 ),
+			array( 'Rosslyn Riviera Mall', 'shop', -1.21595, 36.79954 ),
+			array( 'The Junction Mall', 'shop', -1.29840, 36.76250 ),
+			array( 'Yaya Centre', 'shop', -1.29250, 36.78750 ),
+			array( 'Galleria Mall', 'shop', -1.34370, 36.76560 ),
+			array( 'The Hub Karen', 'shop', -1.32036, 36.70411 ),
+			array( 'Garden City Mall', 'shop', -1.23194, 36.87778 ),
+			array( 'Thika Road Mall', 'shop', -1.21956, 36.88833 ),
+			array( 'International School of Kenya', 'school', -1.23165, 36.76424 ),
+			array( 'Rosslyn Academy', 'school', -1.22480, 36.80854 ),
+			array( 'Hillcrest International Schools', 'school', -1.33849, 36.74215 ),
+			array( 'Brookhouse School', 'school', -1.34403, 36.76478 ),
+			array( 'Braeburn School', 'school', -1.28892, 36.75561 ),
+			array( 'Kenton College', 'school', -1.27943, 36.78707 ),
+			array( 'Aga Khan Junior Academy', 'school', -1.26600, 36.82271 ),
+			array( 'Strathmore University', 'uni', -1.31000, 36.81333 ),
+			array( 'University of Nairobi', 'uni', -1.28040, 36.81630 ),
+			array( 'USIU-Africa', 'uni', -1.21806, 36.87917 ),
+			array( 'Aga Khan University Hospital', 'health', -1.26180, 36.82386 ),
+			array( 'MP Shah Hospital', 'health', -1.26353, 36.81211 ),
+			array( 'The Nairobi Hospital', 'health', -1.29612, 36.80472 ),
+			array( 'Kenyatta National Hospital', 'health', -1.30054, 36.80695 ),
+			array( 'The Karen Hospital', 'health', -1.33611, 36.72615 ),
+			array( 'Gertrude’s Children’s Hospital', 'health', -1.25606, 36.83167 ),
+			array( 'Karura Forest', 'park', -1.23700, 36.83033 ),
+			array( 'Nairobi Arboretum', 'park', -1.27430, 36.81310 ),
+			array( 'City Park', 'park', -1.26330, 36.83060 ),
+			array( 'Jomo Kenyatta International Airport', 'air', -1.31920, 36.92780 ),
+			array( 'Wilson Airport', 'air', -1.32172, 36.81483, 10 ),
+		);
+	}
+
+	/** Great-circle distance in km. */
+	function blockke_dev_km( $lat1, $lng1, $lat2, $lng2 ) {
+		$p = M_PI / 180;
+		$a = sin( ( $lat2 - $lat1 ) * $p / 2 ) ** 2 + cos( $lat1 * $p ) * cos( $lat2 * $p ) * sin( ( $lng2 - $lng1 ) * $p / 2 ) ** 2;
+		return 12742 * asin( min( 1, sqrt( $a ) ) );
+	}
+
+	function blockke_dev_km_label( $km ) {
+		return ( $km < 10 ? number_format( max( 0.1, $km ), 1 ) : number_format( round( $km ) ) ) . ' km';
+	}
+
+	/**
+	 * The nearest places of each kind around a map pin, grouped for display:
+	 * array( array( 'label', 'icon', 'places' => array( array( name, km, name for one place ), ... ) ), ... ).
+	 * Empty when the pin is missing or outside Nairobi, which the landmark list covers.
+	 */
+	function blockke_dev_nearby( $lat, $lng ) {
+		$lat = (float) $lat;
+		$lng = (float) $lng;
+		if ( ( ! $lat && ! $lng ) || abs( $lat ) > 90 || abs( $lng ) > 180 || blockke_dev_km( $lat, $lng, -1.28840, 36.82280 ) > 60 ) {
+			return array();
+		}
+		if ( function_exists( 'wpresidence_get_option' ) ) { // a pin never moved off the theme's default map centre is not a location
+			$dlat = (float) wpresidence_get_option( 'wp_estate_general_latitude', '' );
+			$dlng = (float) wpresidence_get_option( 'wp_estate_general_longitude', '' );
+			if ( ( $dlat || $dlng ) && abs( $lat - $dlat ) < 0.00001 && abs( $lng - $dlng ) < 0.00001 ) {
+				return array();
+			}
+		}
+		$kinds  = blockke_dev_place_kinds();
+		$groups = array();
+		foreach ( $kinds as $k ) {
+			$groups[ $k[0] ] = array( 'label' => $k[0], 'icon' => $k[2], 'max' => $k[4], 'places' => array() );
+		}
+		foreach ( blockke_dev_landmarks() as $l ) {
+			if ( ! isset( $kinds[ $l[1] ] ) ) {
+				continue;
+			}
+			$k  = $kinds[ $l[1] ];
+			$km = blockke_dev_km( $lat, $lng, $l[2], $l[3] );
+			if ( $km <= ( isset( $l[4] ) ? $l[4] : $k[3] ) ) {
+				$groups[ $k[0] ]['places'][] = array( $l[0], $km, $k[1] );
+			}
+		}
+		$out = array();
+		foreach ( $groups as $g ) {
+			if ( ! $g['places'] ) {
+				continue;
+			}
+			usort(
+				$g['places'],
+				function ( $a, $b ) {
+					return $a[1] < $b[1] ? -1 : ( $a[1] > $b[1] ? 1 : 0 );
+				}
+			);
+			$g['places'] = array_slice( $g['places'], 0, $g['max'] );
+			unset( $g['max'] );
+			$out[] = $g;
+		}
+		return $out;
+	}
+
+	/** The listing's own "Places nearby" box (Place | travel time per line), if filled in. */
+	function blockke_dev_places_override( $id ) {
+		$places = array();
+		$raw    = trim( (string) get_post_meta( $id, 'bke_dev_places', true ) );
+		if ( '' !== $raw ) {
+			foreach ( preg_split( '/\r?\n/', $raw ) as $line ) {
+				$p = array_map( 'trim', explode( '|', $line, 2 ) );
+				if ( '' !== $p[0] ) {
+					$places[] = array( $p[0], isset( $p[1] ) ? $p[1] : '' );
+				}
+			}
+		}
+		return $places;
 	}
 
 	function blockke_dev_faqs( $tokens ) {
@@ -1705,14 +2047,18 @@ JS;
 				}
 			}
 		}
-		$places_raw = trim( (string) get_post_meta( $id, 'bke_dev_places', true ) );
-		if ( '' !== $places_raw ) {
-			$loc['places'] = array();
-			foreach ( preg_split( '/\r?\n/', $places_raw ) as $line ) {
-				$p = array_map( 'trim', explode( '|', $line, 2 ) );
-				if ( '' !== $p[0] ) {
-					$loc['places'][] = array( $p[0], isset( $p[1] ) ? $p[1] : '' );
-				}
+		$own = blockke_dev_places_override( $id );
+		if ( $own ) {
+			$loc['places'] = $own;
+		}
+		$lat = (float) get_post_meta( $id, 'property_latitude', true );
+		$lng = (float) get_post_meta( $id, 'property_longitude', true );
+		if ( ! $loc['places'] ) {
+			foreach ( blockke_dev_nearby( $lat, $lng ) as $g ) {
+				$loc['places'][] = array( $g['places'][0][0], $g['places'][0][2] . ' · ' . blockke_dev_km_label( $g['places'][0][1] ) );
+			}
+			if ( $loc['places'] ) {
+				$loc['note'] = 'Straight-line distances from the map pin. Road distances and travel times will be longer.';
 			}
 		}
 		if ( ! $loc['note'] ) {
@@ -1772,8 +2118,8 @@ JS;
 			'amen'       => blockke_dev_amenity_layout( $amenities ),
 			'amen_intro' => $amenities ? blockke_dev_amenity_intro( $secs ) : '',
 			'plan'       => $plan,
-			'lat'        => (float) get_post_meta( $id, 'property_latitude', true ),
-			'lng'        => (float) get_post_meta( $id, 'property_longitude', true ),
+			'lat'        => $lat,
+			'lng'        => $lng,
 			'location'   => $loc,
 			'faqs'       => $fi >= 0 ? blockke_dev_faqs( $secs[ $fi ]['tokens'] ) : array(),
 			'similar'    => blockke_dev_similar( $id, $area_t, array_merge( array( $id ), wp_list_pluck( $subs, 'id' ) ), (int) $cfg['similar_count'] ),
@@ -1793,7 +2139,8 @@ JS;
 		return '<svg class="bkd-i' . ( 'wa' === $n ? ' bkd-i-f' : '' ) . ( $cls ? ' ' . $cls : '' ) . '" aria-hidden="true" focusable="false"><use href="#bkd-i-' . $n . '"></use></svg>';
 	}
 
-	function blockke_dev_sprite() {
+	/** The icon sprite; $only limits it to the icons a page uses. */
+	function blockke_dev_sprite( $only = array() ) {
 		$i = array(
 			'arrow'    => '<path d="M5 12h14M13 6l6 6-6 6"/>',
 			'check'    => '<path d="M20 6 9 17l-5-5"/>',
@@ -1824,13 +2171,19 @@ JS;
 			'ball'     => '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c3.6 3.6 3.6 9.2 0 12.8M18.4 5.6c-3.6 3.6-3.6 9.2 0 12.8"/>',
 			'flag'     => '<path d="M6 22V3"/><path d="M6 3.5 18 8 6 12.5"/><path d="M3 22h7"/>',
 			'route'    => '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/>',
+			'medical'  => '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z"/>',
+			'cap'      => '<path d="M2 9l10-5 10 5-10 5Z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/><path d="M22 9v5"/>',
+			'plane'    => '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2Z"/>',
 		);
+		if ( $only ) {
+			$i = array_intersect_key( $i, array_flip( $only ) );
+		}
 		$wa = '<path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.39-1.47-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.91-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.22 1.36.19 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.27-.2-.57-.35m-5.42 7.4h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88a9.82 9.82 0 0 1 9.88 9.89c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89a11.82 11.82 0 0 0-3.48-8.41Z"/>';
-		$out = '<svg class="bkd-sprite" width="0" height="0" aria-hidden="true" focusable="false">';
+		$out = '<svg class="bkd-sprite" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">';
 		foreach ( $i as $k => $p ) {
 			$out .= '<symbol id="bkd-i-' . $k . '" viewBox="0 0 24 24">' . $p . '</symbol>';
 		}
-		return $out . '<symbol id="bkd-i-wa" viewBox="0 0 24 24">' . $wa . '</symbol></svg>';
+		return $out . ( ! $only || in_array( 'wa', $only, true ) ? '<symbol id="bkd-i-wa" viewBox="0 0 24 24">' . $wa . '</symbol>' : '' ) . '</svg>';
 	}
 
 	function blockke_dev_img( $aid, $size, $attr ) {
@@ -2840,15 +3193,11 @@ JS;
 			add_action(
 				'wp_head',
 				function () {
-					$font = trim( preg_replace( '/[^A-Za-z0-9 ]/', '', (string) blockke_dev_config()['display_font'] ) );
-					if ( '' !== $font ) {
-						echo '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-							. '<link id="bkd-font" rel="stylesheet" href="' . esc_url( 'https://fonts.googleapis.com/css2?family=' . str_replace( ' ', '+', $font ) . ':ital@0;1&display=swap' ) . "\">\n";
-						$display = '#bkd{--display:"' . $font . '",Georgia,"Times New Roman",serif}';
-					} else {
-						$display = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
+					$font = blockke_dev_font_head( '#bkd' );
+					if ( '' === $font[0] ) {
+						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
 					}
-					echo '<style id="bkd-css">' . blockke_dev_css() . $display . blockke_dev_calc_css() . "</style>\n";
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_dev_calc_css() . "</style>\n";
 				},
 				99
 			);
@@ -3130,7 +3479,7 @@ JS;
 			'bke_dev_reservation'      => array( 'Reservation fee (KES)', 'number', 'Empty: read from the Payment Plan section.' ),
 			'bke_dev_plan_until'       => array( 'Instalments until (YYYY-MM)', 'text', 'Empty: the completion date.' ),
 			'bke_dev_plan_text'        => array( 'Payment plan text', 'textarea', 'Empty: the first paragraph of the Payment Plan section.' ),
-			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Empty: read from the Location section.' ),
+			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Shown under Address and in Location. Empty: the description\'s Location section, else straight-line distances from the map pin.' ),
 			'bke_dev_brochure'         => array( 'Brochure (PDF link)', 'url', 'Opens for the visitor right after they send their details. Empty: the first PDF attached to the listing.' ),
 			'bke_dev_video'            => array( 'Video (YouTube or Vimeo link)', 'url', 'Empty: the listing\'s video, else its virtual tour.' ),
 			'bke_dev_similar'          => array( 'Similar listings (IDs)', 'text', 'Comma-separated listing IDs. Empty: other developments in the same area.' ),
