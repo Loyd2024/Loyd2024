@@ -1,6 +1,6 @@
 # block.ke: development property page and payment calculators
 
-`block-development-page.php` is a single WPCode PHP snippet that improves block.ke property pages in three ways. Everything it shows is read from the listing, so a development keeps working like any other block.ke property: same URL, site header and menu, search and maps, agent, similar listings and SEO. To update the page, edit the property as usual.
+`block-development-page.php` is a single WPCode PHP snippet that improves block.ke property pages in four ways. Everything it shows is read from the listing, so a development keeps working like any other block.ke property: same URL, site header and menu, search and maps, agent, similar listings and SEO. To update the page, edit the property as usual.
 
 ## 1. Payment calculators on every for-sale property page
 
@@ -57,6 +57,22 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 **Turn it on for every development at once.** Set the option `blockke_dev_page['auto'] = true`. Every listing with units (`property_has_subunits = 1`) then uses the layout unless its box says *Off*.
 
+## 4. Ad landing pages (for Google Ads and other campaigns)
+
+Every for-sale listing has a landing page for paid campaigns, with nothing to set up: its URL plus `?lp=1`, for example `https://block.ke/property/santorini-residences-westlands-1-4-bed-apartments-lofts/?lp=1`. For a tidier address, create a page (for example `lp/santorini-residences`) and add a custom field `bke_lp_listing` holding the listing's ID. The page itself can stay empty.
+
+It shows the development layout's content, built for visitors arriving from an ad:
+
+- **A slim header** with the logo, phone, WhatsApp and *Get the price list*, instead of the site menu. The footer holds only the address, contact details and privacy policy.
+- **No ways off the page but contact.** Breadcrumbs, the share button, *Similar developments*, the unit "Details" links and links inside the description and FAQ are left out.
+- **Phone first.** The development's name sits over the photo, followed by the price, completion and deposit, then the two-field form. The submit button is on the first screen of a 390×844 phone. The advisor's photo and name sit under the form, and the WhatsApp and price list bar appears once the form scrolls away.
+- **Hidden from search** (`noindex, follow`), so it never competes with the listing in Google results.
+- **Tracking as usual.** The page runs WordPress's head and footer hooks, so Google Ads conversions (form, WhatsApp and call clicks), GA4, Meta Pixel, Zoho PageSense and SalesIQ load as on every page. Leads carry the ad's gclid and UTM tags, and the lead email shows the landing page address.
+
+Rentals never become landing pages. Set `landing_pages` to `false` to switch them off.
+
+**Who it suits best.** Both layouts now show the description's "Who … suits best" list, its note on who it suits less well, and the first three sentences of its "… for Investors" section with a button to ask for rental and resale comparables.
+
 ## Enquiries
 
 Every form posts to `/wp-json/block/v1/development-lead`, which:
@@ -80,6 +96,9 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `offplan_calculator` | `true` | Instalment calculator on off-plan pages |
 | `classic_amenities` | `true` | Amenity tiles and checklist in *Features & Amenities* on classic pages |
 | `classic_nearby` | `true` | *What's nearby* in *Address* on classic pages |
+| `landing_pages` | `true` | Ad landing pages at `?lp=1` and on pages with a `bke_lp_listing` field |
+| `logo` | `''` | Landing page header logo. `''` uses the theme logo. |
+| `address` | Upper Hill Gardens… | Office address in the landing page footer |
 | `price_check_popup` | `false` | Show the site-wide price-check popup on development pages, which already carry their own forms. The popup is unchanged everywhere else. |
 | `display_font` | `'Instrument Serif'` | Heading font on development pages, and in the amenity tiles and *What's nearby* on classic pages. Use a Google Font that has an italic. `''` keeps the site font. |
 | `default_deposit` | `20` | Deposit % used when a listing states none |
@@ -95,7 +114,7 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 
 To roll back, deactivate the snippet. Every page returns to the theme's own template and calculator.
 
-**Upgrading.** Each version is staged as its own snippet with a lower priority number than the one before, so it runs first: v1.2 at priority 4, v1.1 at 5, v1.0 at 10. The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the others skip themselves. To upgrade, switch the new snippet on, and it takes over at once. Then switch the older ones off, or keep the newest of them as a fallback. To go back, switch the new one off.
+**Upgrading.** Each version is staged as its own snippet with a lower priority number than the one before, so it runs first: v1.3 at priority 4, v1.1 at 5, v1.0 at 10. (v1.2 was never switched on; its snippet became v1.3.) The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the others skip themselves. To upgrade, switch the new snippet on, and it takes over at once. Then switch the older ones off, or keep the newest of them as a fallback. To go back, switch the new one off.
 
 WPCode runs a cached copy of each active snippet, refreshed when a snippet is saved in WPCode. A snippet edited through the API stays as it was on the site until someone clicks **Update** on it, or on any other snippet.
 
@@ -111,6 +130,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - both calculators;
 - the calculator swap on classic off-plan and complete pages;
 - v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback;
+- v1.3: landing pages at `?lp=1` and on a page, for an off-plan development, a unit and a completed development: no theme header or footer, no links off the page but the privacy policy, `noindex, follow`, the phone's submit button at 721px on a 390×844 screen, lead submission with gclid and the Google Ads conversion call, the contact bar, rentals refused, the `landing_pages` switch, and no sideways scrolling from 320px to 1440px;
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.

@@ -2,7 +2,7 @@
 /* marker line - keeps the connector from Markdown-converting this snippet; harmless in PHP */
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
- * BLOCK - Development property page + payment calculators v1.2 (2026-10-08)
+ * BLOCK - Development property page + payment calculators v1.3 (2026-10-08)
  *
  * 1) CLASSIC PROPERTY PAGES (the theme's own template)
  *    PAYMENT CALCULATORS on every for-sale property page:
@@ -34,6 +34,12 @@
  *      location (map + places, else distances to nearby places), FAQ, similar developments in the same
  *      area, the listing's agent, and the full description under "Read more".
  *    Turn it on: Edit property > "Development page" box > Layout: On.
+ *    AD LANDING PAGES (config landing_pages): the same content as a focused page for Google Ads and other
+ *    campaigns, with its own slim header and footer instead of the site's menu, no breadcrumbs, share
+ *    button, similar listings or links out, the name over the photo and the form on the first phone
+ *    screen, and noindex. Any for-sale listing: its URL + ?lp=1. A tidy URL: a page with a custom field
+ *    bke_lp_listing = the listing ID (e.g. /lp/santorini-residences/). Tracking (Google Ads conversions,
+ *    GA4, Meta, Zoho) runs as on every page, through wp_head and wp_footer.
  *    Every listing with units: option blockke_dev_page['auto'] = true.
  *    Preview while logged in: any property URL + ?bke_layout=1 (?bke_layout=0 shows the classic page).
  *    Enquiries: POST /wp-json/block/v1/development-lead - emails the price-check popup's notify list
@@ -48,6 +54,8 @@
  * headings (config display_font), and amenities as feature tiles plus an essentials checklist.
  * v1.2 (2026-10-08): the amenity tiles and checklist on classic property pages too, and distances to
  * nearby places under Address (and in the development layout's Location when the description lists none).
+ * v1.3 (2026-10-08): ad landing pages, and a "Who it suits best" section with the investor view, read from
+ * the description's "Who ... suits" and "... for Investors" sections.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -63,6 +71,9 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'offplan_calculator' => true,  // instalment calculator instead of the mortgage one on off-plan pages
 			'classic_amenities'  => true,  // classic property pages: amenity tiles and a checklist in Features & Amenities
 			'classic_nearby'     => true,  // classic property pages: distances to nearby places under Address
+			'landing_pages'      => true,  // ad landing pages: {listing URL}?lp=1, or a page with a bke_lp_listing field
+			'logo'               => '',    // landing page header logo URL; '' uses the theme logo
+			'address'            => 'Upper Hill Gardens, Suite D15, Upper Hill, Nairobi',
 			'brand'              => 'Block',
 			'brand_full'         => 'Block Real Estate',
 			'phone'              => '+254725937686',
@@ -1712,6 +1723,54 @@ JS;
 		return $places;
 	}
 
+	/** "Who it suits" from the description: its list, and the closing note on who it suits less well. */
+	function blockke_dev_suits( $sections ) {
+		$out = array(
+			'items' => array(),
+			'note'  => '',
+		);
+		$i   = blockke_dev_find( $sections, '/\bwho\b.*\b(suits?|for)\b|suits? (best|well)|ideal (for|buyers)|right for you/i', '/faq|question/i' );
+		if ( $i < 0 ) {
+			return $out;
+		}
+		foreach ( $sections[ $i ]['tokens'] as $t ) {
+			if ( 'ul' === $t['tag'] && ! $out['items'] ) {
+				foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+					if ( mb_strlen( $it['text'] ) <= 140 ) {
+						$out['items'][] = rtrim( $it['text'], ' .;' );
+					}
+				}
+			} elseif ( 'p' === $t['tag'] && $out['items'] && '' === $out['note'] ) {
+				$tx = blockke_dev_text( $t['inner'] );
+				if ( preg_match( '/less well|not (ideal|suited|for)|may not suit|isn.t for/i', $tx ) ) {
+					$out['note'] = blockke_dev_trim_words( blockke_dev_sentences( $tx, 2 ), 320 );
+				}
+			}
+		}
+		$out['items'] = array_slice( $out['items'], 0, 8 );
+		return $out;
+	}
+
+	/** The description's investor view: up to three sentences, leaving out links and "see our analysis" asides. */
+	function blockke_dev_investors( $sections ) {
+		$i = blockke_dev_find( $sections, '/investor|investment|rental yield|returns/i', '/faq|question/i' );
+		if ( $i < 0 ) {
+			return '';
+		}
+		$keep = array();
+		foreach ( $sections[ $i ]['tokens'] as $t ) {
+			if ( 'p' !== $t['tag'] ) {
+				continue;
+			}
+			foreach ( preg_split( '/(?<=[.!?])\s+(?=[A-Z0-9“"])/u', blockke_dev_text( $t['inner'] ) ) as $sn ) {
+				if ( count( $keep ) < 3 && '' !== $sn && ! preg_match( '/\b(see|read) our\b|\bask (block|us)\b|\bclick\b/i', $sn ) ) {
+					$keep[] = $sn;
+				}
+			}
+		}
+		return blockke_dev_trim_words( implode( ' ', $keep ), 640 );
+	}
+
 	function blockke_dev_faqs( $tokens ) {
 		$faqs  = array();
 		$q     = '';
@@ -2118,6 +2177,8 @@ JS;
 			'amen'       => blockke_dev_amenity_layout( $amenities ),
 			'amen_intro' => $amenities ? blockke_dev_amenity_intro( $secs ) : '',
 			'plan'       => $plan,
+			'suits'      => blockke_dev_suits( $secs ),
+			'investors'  => blockke_dev_investors( $secs ),
 			'lat'        => $lat,
 			'lng'        => $lng,
 			'location'   => $loc,
@@ -2173,6 +2234,7 @@ JS;
 			'route'    => '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/>',
 			'medical'  => '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z"/>',
 			'cap'      => '<path d="M2 9l10-5 10 5-10 5Z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/><path d="M22 9v5"/>',
+			'chart'    => '<path d="M22 7 13.5 15.5l-5-5L2 17"/><path d="M16 7h6v6"/>',
 			'plane'    => '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2Z"/>',
 		);
 		if ( $only ) {
@@ -2216,7 +2278,7 @@ JS;
 			. '<a class="bkd-btn bkd-btn-line" data-wa-ok href="#" target="_blank" rel="noopener">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'Continue on WhatsApp</a></div></div>';
 	}
 
-	function blockke_dev_consent( $d ) {
+	function blockke_dev_privacy_url() {
 		$privacy = function_exists( 'get_privacy_policy_url' ) ? get_privacy_policy_url() : '';
 		if ( function_exists( 'blockke_bp_config' ) ) {
 			$bp = blockke_bp_config();
@@ -2224,8 +2286,93 @@ JS;
 				$privacy = $bp['privacy_url'];
 			}
 		}
+		return $privacy;
+	}
+
+	function blockke_dev_consent( $d ) {
+		$privacy = blockke_dev_privacy_url();
 		return '<div class="bkd-consent">We\'ll reply by WhatsApp or phone. By sending this you agree to be contacted about ' . esc_html( $d['short'] ) . '.'
 			. ( $privacy ? ' <a href="' . esc_url( $privacy ) . '" target="_blank" rel="noopener">Privacy policy</a>' : '' ) . '</div>';
+	}
+
+	/* =====================================================================
+	   2) Development layout: ad landing pages (no site menu or footer)
+	   ===================================================================== */
+
+	/**
+	 * The listing an ad landing page shows, or 0: a page with a bke_lp_listing field (listing ID),
+	 * or a for-sale listing's own URL with ?lp=1.
+	 */
+	function blockke_dev_lp_target() {
+		static $id = null;
+		if ( null !== $id ) {
+			return $id;
+		}
+		$id  = 0;
+		$cfg = blockke_dev_config();
+		if ( empty( $cfg['landing_pages'] ) || is_admin() || is_feed() || is_embed() ) {
+			return $id;
+		}
+		foreach ( array( 'elementor-preview', 'vcv-editable', 'vcv-source-id', 'print' ) as $k ) {
+			if ( isset( $_GET[ $k ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				return $id;
+			}
+		}
+		$lid = 0;
+		if ( is_page() ) {
+			$lid = (int) get_post_meta( get_queried_object_id(), 'bke_lp_listing', true );
+		} elseif ( is_singular( 'estate_property' ) && isset( $_GET['lp'] ) && '1' === (string) $_GET['lp'] ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$lid = get_queried_object_id();
+		}
+		if ( $lid && 'estate_property' === get_post_type( $lid ) && 'publish' === get_post_status( $lid ) && blockke_dev_is_for_sale( $lid ) ) {
+			$id = $lid;
+		}
+		return $id;
+	}
+
+	function blockke_dev_logo() {
+		$cfg = blockke_dev_config();
+		if ( '' !== (string) $cfg['logo'] ) {
+			return (string) $cfg['logo'];
+		}
+		$l = function_exists( 'wpresidence_get_option' ) ? wpresidence_get_option( 'wp_estate_logo_image', '' ) : '';
+		if ( is_array( $l ) && ! empty( $l['url'] ) ) {
+			return (string) $l['url'];
+		}
+		return is_string( $l ) && '' !== $l ? $l : content_url( '/uploads/2026/09/block-advisory-horizontal.png' );
+	}
+
+	/** Landing page header: logo, phone, WhatsApp and the price list button. No menu, so ad visitors stay on the page. */
+	function blockke_dev_lp_header( $d, $wa ) {
+		$cfg = blockke_dev_config();
+		$ag  = $d['agent'];
+		return '<header class="bkd-lph"><div class="bkd-wrap bkd-lph-in">'
+			. '<img class="bkd-lph-logo" src="' . esc_url( blockke_dev_logo() ) . '" alt="' . esc_attr( $cfg['brand_full'] ) . '" width="193" height="28">'
+			. '<div class="bkd-lph-r"><a class="bkd-lph-a" href="tel:' . esc_attr( $ag['phone'] ) . '" aria-label="Call ' . esc_attr( $ag['phone_display'] ) . '">' . blockke_dev_icon( 'phone' ) . '<span>' . esc_html( $ag['phone_display'] ) . '</span></a>'
+			. '<a class="bkd-lph-a" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
+			. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm bkd-lph-cta" type="button" data-bkd-enquire="lp-header">Get the price list</button></div></div></header>';
+	}
+
+	function blockke_dev_lp_footer( $d ) {
+		$cfg     = blockke_dev_config();
+		$ag      = $d['agent'];
+		$privacy = blockke_dev_privacy_url();
+		return '<footer class="bkd-lpf"><div class="bkd-wrap"><p><b>' . esc_html( $cfg['brand_full'] ) . '</b>' . ( $cfg['address'] ? '<span>' . esc_html( $cfg['address'] ) . '</span>' : '' ) . '</p>'
+			. '<p><a href="tel:' . esc_attr( $ag['phone'] ) . '">' . esc_html( $ag['phone_display'] ) . '</a><a href="mailto:' . esc_attr( $cfg['email'] ) . '">' . esc_html( $cfg['email'] ) . '</a>'
+			. ( $privacy ? '<a href="' . esc_url( $privacy ) . '" target="_blank" rel="noopener">Privacy policy</a>' : '' ) . '<span>© ' . esc_html( wp_date( 'Y' ) ) . '</span></p></div></footer>';
+	}
+
+	/** A whole landing page document: the site's head and footer hooks (tracking, chat) without the theme's header, menu or footer. */
+	function blockke_dev_lp_document( $d ) {
+		echo "<!DOCTYPE html>\n<html " . get_language_attributes() . '><head><meta charset="' . esc_attr( get_bloginfo( 'charset' ) ) . '"><meta name="viewport" content="width=device-width, initial-scale=1">' . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+		wp_head();
+		echo '</head><body class="' . esc_attr( implode( ' ', get_body_class() ) ) . '">' . "\n";
+		if ( function_exists( 'wp_body_open' ) ) {
+			wp_body_open();
+		}
+		echo blockke_dev_render( $d, true ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+		wp_footer();
+		echo "\n</body></html>\n";
 	}
 
 	function blockke_dev_quick_form( $source, $cta, $d ) {
@@ -2254,7 +2401,8 @@ JS;
 		return $h;
 	}
 
-	function blockke_dev_render( $d ) {
+	/** The development layout; $lp: as an ad landing page (own header and footer, no ways off the page but contact). */
+	function blockke_dev_render( $d, $lp = false ) {
 		$cfg   = blockke_dev_config();
 		$ag    = $d['agent'];
 		$e     = 'esc_html';
@@ -2265,7 +2413,10 @@ JS;
 		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $d['price_from'] ? ' (from ' . blockke_dev_short( $d['price_from'] ) . ')' : '' ) . '. Please share the price list and floor plans. ' . $d['url'] );
 		$o     = array();
 
-		$o[] = '<div id="bkd" class="bkd" data-listing="' . (int) $d['id'] . '">' . blockke_dev_sprite();
+		$o[] = '<div id="bkd" class="bkd' . ( $lp ? ' bkd-lpm' : '' ) . '" data-listing="' . (int) $d['id'] . '">' . blockke_dev_sprite();
+		if ( $lp ) {
+			$o[] = blockke_dev_lp_header( $d, $wa );
+		}
 
 		// Hero
 		$crumbs = '<a href="' . esc_url( home_url( '/' ) ) . '">Home</a>';
@@ -2285,8 +2436,8 @@ JS;
 			$hfacts[] = array( 'Location', $d['area'] );
 		}
 		$o[] = '<section class="bkd-hero" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">'
-			. '<div class="bkd-hero-head"><div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav>'
-			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div>'
+			. '<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav>'
+			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div>' )
 			. '<p class="bkd-status">' . ( $d['chip'] ? '<b>' . $e( $d['chip'] ) . '</b>' : '' ) . '<span>' . $e( $d['area_line'] ) . '</span></p>'
 			. '<h1 class="bkd-h1">' . $e( $d['name'] ) . '</h1>'
 			. ( $d['tagline'] ? '<p class="bkd-hero-tag">' . $e( $d['tagline'] ) . '</p>' : '' ) . '</div>'
@@ -2314,6 +2465,8 @@ JS;
 			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
 			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
 			. ( $d['brochure'] ? '<div class="bkd-quick-alt"><button class="bkd-link" type="button" data-bkd-enquire="brochure">Or download the brochure' . blockke_dev_icon( 'arrow' ) . '</button></div>' : '' )
+			. ( $lp && $ag['name'] ? '<div class="bkd-qa">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" width="40" height="40" loading="lazy">' : '<span class="bkd-qa-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</span>' )
+				. '<span><b>' . $e( $ag['name'] ) . '</b>' . $e( $ag['role'] ? $ag['role'] : 'Your advisor' ) . '</span></div>' : '' )
 			. '</div></div></div></section>';
 
 		// Section nav
@@ -2366,7 +2519,7 @@ JS;
 				$o[] = '</ul>';
 			}
 			if ( $d['desc'] ) {
-				$o[] = '<details class="bkd-more"><summary><span class="bkd-more-open">Read the full description</span><span class="bkd-more-close">Show less</span></summary><div class="bkd-prose">' . $d['desc'] . '</div></details>';
+				$o[] = '<details class="bkd-more"><summary><span class="bkd-more-open">Read the full description</span><span class="bkd-more-close">Show less</span></summary><div class="bkd-prose">' . ( $lp ? preg_replace( '#</?a\b[^>]*>#i', '', $d['desc'] ) : $d['desc'] ) . '</div></details>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -2419,7 +2572,7 @@ JS;
 				$o[]   = '<tr data-g="' . esc_attr( $u['group'] ) . '"><td class="bkd-t">' . $e( $u['type'] ) . ( $u['note'] ? '<small>' . $e( $u['note'] ) . '</small>' : '' ) . '</td>'
 					. ( $has_size ? '<td class="bkd-s">' . $e( $u['size'] ? $u['size'] : '—' ) . '</td>' : '' )
 					. ( $has_pr ? '<td class="bkd-p">' . $e( $u['price'] ? blockke_dev_money( $u['price'] ) : 'On request' ) . '</td>' : '' )
-					. '<td class="bkd-a">' . ( $u['url'] ? '<a class="bkd-link" href="' . esc_url( $u['url'] ) . '">Details</a>' : '' )
+					. '<td class="bkd-a">' . ( $u['url'] && ! $lp ? '<a class="bkd-link" href="' . esc_url( $u['url'] ) . '">Details</a>' : '' )
 					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">Floor plan &amp; price' . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
 			}
 			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">Starting prices. Ask for the latest price list for current availability.</p></div></section>';
@@ -2478,6 +2631,26 @@ JS;
 				. '<div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your monthly repayment</p>' . blockke_dev_calc_mortgage( $d['price_from'], $cta ) . '</div></div></section>';
 		}
 
+		// Who it suits, and the investor view
+		$suits = $d['suits'];
+		if ( $suits['items'] || $d['investors'] ) {
+			$o[] = '<section class="bkd-sec" id="bkd-suits"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">' . ( $suits['items'] ? 'Is it right for you?' : 'For investors' ) . '</p><h2 class="bkd-h2">'
+				. ( $suits['items'] ? 'Who it <em>suits best</em>' : 'The <em>investor view</em>' ) . '</h2>'
+				. ( $suits['note'] ? '<p class="bkd-body bkd-mt">Our honest view of who it suits, and who it may not.</p>' : '' ) . '</div><div class="bkd-rv">';
+			if ( $suits['items'] ) {
+				$o[] = '<ul class="bkd-suits">';
+				foreach ( $suits['items'] as $it ) {
+					$o[] = '<li>' . blockke_dev_icon( 'check' ) . '<span>' . $e( $it ) . '</span></li>';
+				}
+				$o[] = '</ul>' . ( $suits['note'] ? '<p class="bkd-suits-note">' . $e( $suits['note'] ) . '</p>' : '' );
+			}
+			if ( $d['investors'] ) {
+				$o[] = '<div class="bkd-inv"><p class="bkd-inv-t">' . blockke_dev_icon( 'chart' ) . 'For investors</p><p class="bkd-inv-p">' . $e( $d['investors'] ) . '</p>'
+					. '<button class="bkd-link" type="button" data-bkd-enquire="comparables">Ask for rental and resale comparables' . blockke_dev_icon( 'arrow' ) . '</button></div>';
+			}
+			$o[] = '</div></div></section>';
+		}
+
 		// Location
 		if ( isset( $nav['location'] ) ) {
 			$loc = $d['location'];
@@ -2508,8 +2681,8 @@ JS;
 			$o[] = '</div></div></section>';
 		}
 
-		// Similar developments
-		if ( $d['similar'] ) {
+		// Similar developments (not on landing pages, where they would only lead visitors away)
+		if ( $d['similar'] && ! $lp ) {
 			$all = $d['area'] && ( $t = get_term_by( 'name', $d['area'], 'property_area' ) ) ? get_term_link( $t ) : home_url( '/' );
 			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-similar"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Also consider</p><h2 class="bkd-h2">' . ( $d['area'] ? 'More in <em>' . $e( $d['area'] ) . '</em>' : 'Similar <em>developments</em>' ) . '</h2></div>'
 				. '<a class="bkd-link" href="' . esc_url( is_wp_error( $all ) ? home_url( '/' ) : $all ) . '">See all' . ( $d['area'] ? ' in ' . $e( $d['area'] ) : '' ) . blockke_dev_icon( 'arrow' ) . '</a></div><div class="bkd-cards" style="--n:' . min( count( $d['similar'] ), 4 ) . '">';
@@ -2526,7 +2699,7 @@ JS;
 			$o[] = '<section class="bkd-sec" id="bkd-faq"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">FAQ</p><h2 class="bkd-h2">Questions buyers <em>ask</em></h2>'
 				. '<p class="bkd-body bkd-mt">Can\'t see yours? <a class="bkd-inline" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>Ask us on WhatsApp</a>.</p></div><div class="bkd-faq bkd-rv">';
 			foreach ( $d['faqs'] as $f ) {
-				$o[] = '<details><summary>' . $e( $f[0] ) . '</summary><div class="bkd-faq-a">' . $f[1] . '</div></details>';
+				$o[] = '<details><summary>' . $e( $f[0] ) . '</summary><div class="bkd-faq-a">' . ( $lp ? preg_replace( '#</?a\b[^>]*>#i', '', $f[1] ) : $f[1] ) . '</div></details>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -2537,7 +2710,7 @@ JS;
 		if ( $ag['name'] ) {
 			$o[] = '<div class="bkd-agent">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" loading="lazy" width="64" height="64">' : '<div class="bkd-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</div>' )
 				. '<div><b>' . $e( $ag['name'] ) . '</b><span>' . $e( trim( $ag['role'] . ', ' . $cfg['brand_full'], ', ' ) ) . '</span>'
-				. ( $ag['url'] ? '<a class="bkd-inline" href="' . esc_url( $ag['url'] ) . '">View profile</a>' : '' ) . '</div></div>';
+				. ( $ag['url'] && ! $lp ? '<a class="bkd-inline" href="' . esc_url( $ag['url'] ) . '">View profile</a>' : '' ) . '</div></div>';
 		}
 		$o[] = '<div class="bkd-direct"><a href="tel:' . esc_attr( $ag['phone'] ) . '">' . blockke_dev_icon( 'phone' ) . $e( $ag['phone_display'] ) . '</a>'
 			. '<a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'WhatsApp</a>'
@@ -2556,6 +2729,9 @@ JS;
 			. '<button class="bkd-lb-x" type="button" data-bkd-lbclose aria-label="Close gallery">' . blockke_dev_icon( 'close' ) . '</button></div>'
 			. '<div class="bkd-lb-stage"><button class="bkd-lb-prev" type="button" aria-label="Previous photo">‹</button><img id="bkd-lb-img" alt=""><button class="bkd-lb-next" type="button" aria-label="Next photo">›</button></div>'
 			. '<div class="bkd-lb-strip" id="bkd-lb-strip"></div></div>';
+		if ( $lp ) {
+			$o[] = blockke_dev_lp_footer( $d );
+		}
 		$o[] = '</div>';
 		return implode( '', $o );
 	}
@@ -2819,6 +2995,17 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-panel-t{margin:0 0 24px;font-size:16px;font-weight:600;line-height:1.4;color:var(--navy)}
 #bkd #bkd-calc{--c-line:var(--line-2);--c-muted:var(--muted)}
 #bkd #bkd-calc .bkd-co-main strong{font-family:var(--display)!important;font-size:clamp(40px,4.4vw,54px);font-weight:var(--display-w);letter-spacing:0;line-height:1.05}
+/* Who it suits, investors */
+#bkd .bkd-suits{border-top:1px solid var(--line)}
+#bkd .bkd-suits li{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-bottom:1px solid var(--line);line-height:1.55;color:var(--ink)}
+#bkd .bkd-suits .bkd-i{margin-top:4px;color:var(--brass-d);stroke-width:2}
+#bkd .bkd-suits-note{margin-top:20px;padding:18px 20px;background:var(--mist);font-size:14.5px;line-height:1.65;color:var(--slate)}
+#bkd .bkd-inv{margin-top:36px;padding:clamp(24px,3.4vw,36px);background:var(--navy);color:var(--on-navy)}
+#bkd .bkd-inv-t{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--brass-l)}
+#bkd .bkd-inv-t .bkd-i{width:20px;height:20px}
+#bkd .bkd-inv-p{font-size:15.5px;line-height:1.75;color:rgba(255,255,255,.84)}
+#bkd .bkd-inv .bkd-link,#bkd .bkd-inv .bkd-link:hover{margin-top:22px;color:#fff!important;border-bottom-color:rgba(255,255,255,.5)!important}
+#bkd .bkd-inv :focus-visible{outline-color:var(--brass-l)}
 /* Location */
 #bkd .bkd-map{position:relative;aspect-ratio:4/3;overflow:hidden;background:var(--mist)}
 #bkd .bkd-map iframe{position:absolute;inset:0;width:100%;height:100%;border:0;filter:grayscale(1) contrast(1.04)}
@@ -2888,6 +3075,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-md .bkd-h2{font-size:clamp(32px,3.4vw,40px)!important}
 #bkd .bkd-md-sub{margin:10px 0 24px;color:var(--slate)}
 html.bkd-lock,html.bkd-lock body{overflow:hidden}
+html.bkd-mb-on #zsiq_float{bottom:calc(84px + env(safe-area-inset-bottom))!important;transition:bottom .3s}
 html.bkd-lock #zsiq_float{display:none!important}
 /* Gallery viewer */
 #bkd .bkd-lb{position:fixed;inset:0;z-index:999993;display:grid;grid-template-rows:auto 1fr auto;background:rgba(8,18,32,.97);color:#fff}
@@ -2913,6 +3101,51 @@ html.bkd-lock #zsiq_float{display:none!important}
 @media (prefers-reduced-motion:reduce){#bkd *,#bkd *::before,#bkd *::after{animation:none!important;transition:none!important}#bkd.bkd-js .bkd-rv{opacity:1;transform:none}}
 @media (max-width:379px){#bkd .bkd-btn{padding:0 16px!important;letter-spacing:.08em!important}}
 @media print{#bkd .bkd-subnav,#bkd .bkd-mb,#bkd .bkd-md,#bkd .bkd-lb,#bkd .bkd-quick,#bkd .bkd-formcard,#bkd .bkd-map{display:none!important}#bkd .bkd-rv{opacity:1!important;transform:none!important}}
+CSS;
+	}
+
+	/** Extra styles on ad landing pages: their own header and footer, and a phone-first hero. */
+	function blockke_dev_lp_css() {
+		return <<<'CSS'
+html body.bkd-lp{margin:0!important;padding:0!important;background:#FBF9F6!important}
+body.bkd-lp #bkd{margin:0;width:100%}
+#bkd .bkd-lph{position:relative;z-index:45;background:#fff;border-bottom:1px solid var(--line)}
+#bkd .bkd-lph-in{display:flex;align-items:center;justify-content:space-between;gap:16px;height:64px}
+#bkd .bkd-lph-logo{display:block;width:auto!important;max-width:58vw;height:26px!important;object-fit:contain;object-position:left center}
+#bkd .bkd-lph-r{display:flex;align-items:center;gap:8px}
+#bkd .bkd-lph-a{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-width:44px;height:44px;border:1px solid var(--line-2);border-radius:50%;color:var(--navy);font-size:14px;font-weight:600;white-space:nowrap}
+#bkd .bkd-lph-a span,#bkd .bkd-lph-cta{display:none}
+#bkd .bkd-lph-a .bkd-i{width:19px;height:19px}
+#bkd .bkd-lph-a:hover{border-color:var(--navy)}
+@media (min-width:1000px){#bkd .bkd-lph-in{height:80px}#bkd .bkd-lph-logo{height:30px!important}#bkd .bkd-lph-r{gap:26px}#bkd .bkd-lph-a{min-width:0;height:auto;border:0;border-radius:0}#bkd .bkd-lph-a span{display:inline}#bkd .bkd-lph-a:hover span{text-decoration:underline;text-underline-offset:4px}#bkd .bkd-lph-cta{display:inline-flex}}
+#bkd .bkd-qa{display:flex;align-items:center;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.16);font-size:13px;line-height:1.4;color:var(--on-navy)}
+#bkd .bkd-qa img,#bkd .bkd-qa-av{flex:none;width:40px!important;height:40px!important;border-radius:50%;object-fit:cover;background:var(--navy-2)}
+#bkd .bkd-qa-av{display:grid;place-items:center;font-weight:600;color:#fff}
+#bkd .bkd-qa b{display:block;font-weight:600;color:#fff}
+#bkd .bkd-lpf{padding:34px 0 calc(110px + env(safe-area-inset-bottom));background:var(--navy);color:var(--on-navy);font-size:13px;line-height:1.7}
+#bkd .bkd-lpf p{display:flex;flex-wrap:wrap;gap:4px 18px;color:var(--on-navy)}
+#bkd .bkd-lpf p+p{margin-top:6px}
+#bkd .bkd-lpf b{color:#fff;font-weight:600}
+#bkd .bkd-lpf a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+@media (min-width:1000px){#bkd .bkd-lpf{padding-bottom:34px}}
+@media (max-width:999px){
+#bkd.bkd-lpm .bkd-hero{padding-top:0}
+#bkd.bkd-lpm .bkd-hero-grid{grid-template-areas:"top" "body";row-gap:0}
+#bkd.bkd-lpm .bkd-hero-head,#bkd.bkd-lpm .bkd-hero-media{grid-area:top}
+#bkd.bkd-lpm .bkd-hero-media{aspect-ratio:auto;min-height:clamp(290px,76vw,460px)}
+#bkd.bkd-lpm .bkd-hero-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,36,64,0) 30%,rgba(13,36,64,.88) 100%)}
+#bkd.bkd-lpm .bkd-hero-media figcaption{left:auto;right:16px;top:14px;bottom:auto;z-index:1}
+#bkd.bkd-lpm .bkd-all{display:none}
+#bkd.bkd-lpm .bkd-hero-head{position:relative;z-index:2;align-self:end;padding:0 0 22px;pointer-events:none}
+#bkd.bkd-lpm .bkd-status{margin-bottom:12px;color:rgba(255,255,255,.88)}
+#bkd.bkd-lpm .bkd-status b{background:rgba(255,255,255,.16);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#bkd.bkd-lpm .bkd-status b::before{background:var(--brass-l)}
+#bkd.bkd-lpm .bkd-h1{color:#fff!important;font-size:clamp(40px,11vw,60px)!important;text-shadow:0 2px 24px rgba(0,0,0,.25)}
+#bkd.bkd-lpm .bkd-hero-tag{display:none}
+#bkd.bkd-lpm .bkd-hero-body{padding-top:4px}
+#bkd.bkd-lpm .bkd-hfacts{margin-bottom:18px}
+}
+@media (min-width:360px) and (max-width:559px){#bkd.bkd-lpm .bkd-quick .bkd-qgrid{grid-template-columns:1fr 1fr;gap:12px}#bkd.bkd-lpm .bkd-quick .bkd-f>input{padding:0 12px}}
 CSS;
 	}
 
@@ -3029,9 +3262,9 @@ CSS;
     var f=$('form',mdForm),ok=$('.bkd-ok',mdForm);f.hidden=false;ok.hidden=true;
     var b=f.querySelector('[type=submit]');b.disabled=false;var al=f.querySelector('.bkd-alert');if(al){al.remove();}
     f.setAttribute('data-unit',unit||'');f.setAttribute('data-intent',source||'');
-    var titles={'payment-plan':'Get the payment plan',mortgage:'Talk to us about financing',brochure:'Download the brochure'};
+    var titles={'payment-plan':'Get the payment plan',mortgage:'Talk to us about financing',brochure:'Download the brochure',comparables:'Get rental and resale comparables'};
     document.getElementById('bkd-md-t').textContent=unit?'Floor plan and price':(titles[source]||'Get the price list');
-    document.getElementById('bkd-md-sub').textContent=unit?unit+' at '+C.name+'. Sent to your WhatsApp.':(source==='brochure'?'Leave your details and the brochure opens straight away.':(source==='mortgage'?'We will compare mortgage options for you.':'Floor plans and the payment plan, sent to your WhatsApp.'));
+    document.getElementById('bkd-md-sub').textContent=unit?unit+' at '+C.name+'. Sent to your WhatsApp.':(source==='brochure'?'Leave your details and the brochure opens straight away.':(source==='mortgage'?'We will compare mortgage options for you.':(source==='comparables'?'Recent rents and resale prices near '+C.name+', sent to your WhatsApp.':'Floor plans and the payment plan, sent to your WhatsApp.')));
     prefill(f);lastFocus=document.activeElement;md.hidden=false;lock(true);
     var first=f.querySelector('input[name="name"]');setTimeout(function(){(first.value?f.querySelector('[type=submit]'):first).focus();},30);
     track('enquiry_open',{source:source,unit:unit||''});
@@ -3098,7 +3331,7 @@ CSS;
     var now=Date.now();if(now-lastProbe>250){lastProbe=now;topOffset();}
     var qb=quick?quick.getBoundingClientRect().bottom:0,eb=enquire?enquire.getBoundingClientRect():null;
     var inContact=eb&&eb.top<window.innerHeight*0.75&&eb.bottom>0;
-    if(mb){mb.classList.toggle('on',qb<0&&!inContact&&!themeBar());}
+    if(mb){var mbOn=qb<0&&!inContact&&!themeBar();mb.classList.toggle('on',mbOn);html.classList.toggle('bkd-mb-on',mbOn&&window.innerWidth<1000);}
     var on=-1,line=lastTop+120;
     targets.forEach(function(t,i){if(t&&t.getBoundingClientRect().top<line){on=i;}});
     links.forEach(function(a,i){a.classList.toggle('on',i===on);});
@@ -3171,10 +3404,11 @@ JS;
 	add_filter(
 		'template_include',
 		function ( $template ) {
-			if ( ! blockke_dev_should_render() ) {
+			$lp = blockke_dev_lp_target();
+			if ( ! $lp && ! blockke_dev_should_render() ) {
 				return $template;
 			}
-			$id   = get_queried_object_id();
+			$id   = $lp ? $lp : get_queried_object_id();
 			$data = blockke_dev_data( $id );
 			if ( ! $data ) {
 				return $template;
@@ -3185,25 +3419,49 @@ JS;
 			}
 			add_filter(
 				'body_class',
-				function ( $c ) {
+				function ( $c ) use ( $lp ) {
 					$c[] = 'bkd-page';
+					if ( $lp ) {
+						$c[] = 'bkd-lp';
+					}
 					return $c;
 				}
 			);
+			if ( $lp ) { // ad landing pages stay out of search results; the listing itself is the page to index
+				add_filter(
+					'wp_robots',
+					function ( $r ) {
+						unset( $r['index'] );
+						$r['noindex'] = true;
+						$r['follow']  = true;
+						return $r;
+					},
+					99
+				);
+				add_filter(
+					'rank_math/frontend/robots',
+					function ( $r ) {
+						$r['index']  = 'noindex';
+						$r['follow'] = 'follow';
+						return $r;
+					},
+					99
+				);
+			}
 			add_action(
 				'wp_head',
-				function () {
+				function () use ( $lp ) {
 					$font = blockke_dev_font_head( '#bkd' );
 					if ( '' === $font[0] ) {
 						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
 					}
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_dev_calc_css() . "</style>\n";
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_dev_calc_css() . ( $lp ? blockke_dev_lp_css() : '' ) . "</style>\n";
 				},
 				99
 			);
 			add_action(
 				'wp_footer',
-				function () use ( $data ) {
+				function () use ( $data, $lp ) {
 					$cfg     = blockke_dev_config();
 					$gallery = array();
 					foreach ( $data['images'] as $aid ) {
@@ -3224,19 +3482,26 @@ JS;
 						'wa'       => $data['agent']['wa'],
 						'endpoint' => esc_url_raw( rest_url( 'block/v1/development-lead' ) ),
 						'gallery'  => $gallery,
+						'lp'       => $lp ? 1 : 0,
 					);
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
 					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_dev_calc_js() . "</script>\n";
 				},
 				20
 			);
-			blockke_dev_count_view( $id );
+			if ( ! $lp ) {
+				blockke_dev_count_view( $id );
+			}
 			if ( have_posts() ) {
 				the_post();
 			}
-			get_header();
-			echo blockke_dev_render( $data ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
-			get_footer();
+			if ( $lp ) {
+				blockke_dev_lp_document( $data );
+			} else {
+				get_header();
+				echo blockke_dev_render( $data ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+				get_footer();
+			}
 			$blank = WP_CONTENT_DIR . '/index.php';
 			return file_exists( $blank ) ? $blank : '';
 		},
@@ -3321,6 +3586,8 @@ JS;
 			'payment-plan' => 'Payment plan request',
 			'mortgage'     => 'Financing request',
 			'floorplan'    => 'Floor plan & price request',
+			'comparables'  => 'Rental and resale comparables request',
+			'lp-header'    => 'Landing page header',
 			'brochure'     => 'Brochure download',
 			'mobile-bar'   => 'Mobile bar',
 			'subnav'       => 'Section bar',
@@ -3497,6 +3764,10 @@ JS;
 					$cfg  = blockke_dev_config();
 					$mode = (string) get_post_meta( $post->ID, 'bke_dev_layout', true );
 					echo '<p style="margin-top:0">The development layout turns this listing into a landing page with the price list form, residences table, payment plan calculator, map and FAQ, all read from this listing. <a href="' . esc_url( add_query_arg( 'bke_layout', '1', get_permalink( $post ) ) ) . '" target="_blank">Preview it</a>.</p>';
+					if ( ! empty( $cfg['landing_pages'] ) && blockke_dev_is_for_sale( $post->ID ) ) {
+						$lp_url = add_query_arg( 'lp', '1', get_permalink( $post ) );
+						echo '<p>Ad landing page for Google Ads and other campaigns: <a href="' . esc_url( $lp_url ) . '" target="_blank">' . esc_html( $lp_url ) . '</a>. The same content without the site menu or footer, hidden from search engines. Nothing to set up.</p>';
+					}
 					echo '<table class="form-table" role="presentation"><tbody>';
 					foreach ( blockke_dev_fields() as $key => $f ) {
 						$val = (string) get_post_meta( $post->ID, $key, true );
@@ -3572,6 +3843,9 @@ JS;
 			$bar->add_node( array( 'id' => 'bkd', 'title' => 'Development layout: ' . ( $live ? 'on' : 'off' ), 'href' => get_edit_post_link( $id ) . '#bkd-meta' ) );
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-on', 'title' => 'Preview the development layout', 'href' => add_query_arg( 'bke_layout', '1', $url ) ) );
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-off', 'title' => 'Preview the classic page', 'href' => add_query_arg( 'bke_layout', '0', $url ) ) );
+			if ( ! empty( blockke_dev_config()['landing_pages'] ) && blockke_dev_is_for_sale( $id ) ) {
+				$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-lp', 'title' => 'Open the ad landing page', 'href' => add_query_arg( 'lp', '1', $url ) ) );
+			}
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-edit', 'title' => 'Layout settings', 'href' => get_edit_post_link( $id ) . '#bkd-meta' ) );
 		},
 		90
