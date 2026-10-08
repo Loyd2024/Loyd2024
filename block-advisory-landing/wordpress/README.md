@@ -65,7 +65,7 @@ It shows the development layout's content, built for visitors arriving from an a
 
 - **A slim header** with the logo, phone, WhatsApp and *Get the price list*, instead of the site menu. The footer holds only the address, contact details and privacy policy.
 - **No ways off the page but contact.** Breadcrumbs, the share button, *Similar developments*, the unit "Details" links and links inside the description and FAQ are left out.
-- **Phone first.** The development's name sits over the photo, followed by the price, completion and deposit, then the two-field form. The submit button is on the first screen of a 390×844 phone. The advisor's photo and name sit under the form, and the WhatsApp and price list bar appears once the form scrolls away.
+- **Phone first.** A tall photo carries the development's name, its homes and street (for example "1 – 3 Bed & Lofts · Lantana Road, Westlands") and the price, completion and deposit. The two-field form follows straight after, and the whole form, button included, fits the first screen of an iPhone with Safari's or Chrome's bars showing (390×664) and of most Android phones. The advisor's photo and name sit under the form, and the WhatsApp and price list bar appears once the form scrolls away.
 - **Hidden from search** (`noindex, follow`), so it never competes with the listing in Google results.
 - **Tracking as usual.** The page runs WordPress's head and footer hooks, so Google Ads conversions (form, WhatsApp and call clicks), GA4, Meta Pixel, Zoho PageSense and SalesIQ load as on every page. Leads carry the ad's gclid and UTM tags, and the lead email shows the landing page address.
 
@@ -84,6 +84,10 @@ Every form posts to `/wp-json/block/v1/development-lead`, which:
 - fires the Google Ads lead conversion (`window.blockkeLeadConversion`), GA4 `generate_lead` and Meta `Lead`.
 
 If the listing has a brochure, either a PDF link in the box or a PDF attached to the listing, it opens straight after the visitor sends their details.
+
+**Optional questions after a quick enquiry.** The hero and pop-up forms ask only for a name and phone number. Once the lead is in, the thank-you panel offers three one-tap questions: which home, when they would like to buy (within 3 months, 3–12 months, just exploring) and whether they are buying to live in or invest. Answers are added to the same lead in `blockke_dev_leads` and emailed as "[Block] More details: …"; add them to the Zoho lead by hand, as Web-to-Lead can't update a lead. Skipping them loses nothing. The full enquiry form asks the timeline as well. The questions are not a separate form, so GA4 and Meta form tracking don't count the lead twice.
+
+**Visitors abroad.** When the browser's time zone isn't Nairobi, the phone fields show an international example for that country (for example `+44 7700 900123` in the UK), so diaspora buyers include their country code.
 
 ## Settings
 
@@ -130,7 +134,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - both calculators;
 - the calculator swap on classic off-plan and complete pages;
 - v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback;
-- v1.3: landing pages at `?lp=1` and on a page, for an off-plan development, a unit and a completed development: no theme header or footer, no links off the page but the privacy policy, `noindex, follow`, the phone's submit button at 721px on a 390×844 screen, lead submission with gclid and the Google Ads conversion call, the contact bar, rentals refused, the `landing_pages` switch, and no sideways scrolling from 320px to 1440px;
+- v1.3: landing pages at `?lp=1` and on a page, for an off-plan development, a unit and a completed development: no theme header or footer, no links off the page but the privacy policy, `noindex, follow`, lead submission with gclid and the Google Ads conversion call, the contact bar, rentals refused, the `landing_pages` switch, and no sideways scrolling from 320px to 1440px. Also at real phone viewports with browser bars (390×664, 360×640, 412×780, 430×740): the whole form on the first screen and the cover copy on the photo. The optional questions were checked end to end: saved on the same lead, emailed, accepted once, unknown references refused, no extra form submit event, the contact bar never covering them, and no "Which home?" after a unit's own enquiry. Also tested: the timeline on the full form, and the phone examples for six time zones;
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.

@@ -36,8 +36,9 @@
  *    Turn it on: Edit property > "Development page" box > Layout: On.
  *    AD LANDING PAGES (config landing_pages): the same content as a focused page for Google Ads and other
  *    campaigns, with its own slim header and footer instead of the site's menu, no breadcrumbs, share
- *    button, similar listings or links out, the name over the photo and the form on the first phone
- *    screen, and noindex. Any for-sale listing: its URL + ?lp=1. A tidy URL: a page with a custom field
+ *    button, similar listings or links out, and noindex. On phones the photo carries the name, homes,
+ *    street, price, completion and deposit, and the whole form fits the first screen of an iPhone with its
+ *    browser bars (390x664). Any for-sale listing: its URL + ?lp=1. A tidy URL: a page with a custom field
  *    bke_lp_listing = the listing ID (e.g. /lp/santorini-residences/). Tracking (Google Ads conversions,
  *    GA4, Meta, Zoho) runs as on every page, through wp_head and wp_footer.
  *    Every listing with units: option blockke_dev_page['auto'] = true.
@@ -45,7 +46,9 @@
  *    Enquiries: POST /wp-json/block/v1/development-lead - emails the price-check popup's notify list
  *    plus the listing's agent, forwards to Zoho through blockke_bp_send_zoho() once that snippet's tokens
  *    are set, keeps the last 200 in option blockke_dev_leads, and fires the Google Ads lead conversion
- *    (window.blockkeLeadConversion), GA4 generate_lead and Meta Lead.
+ *    (window.blockkeLeadConversion), GA4 generate_lead and Meta Lead. After a quick (name + phone)
+ *    enquiry, three optional one-tap questions (which home, when, live in or invest) add to the same
+ *    lead and email a "More details" note; the full form asks the timeline too.
  *
  * Config: option blockke_dev_page (array) overrides any key of blockke_dev_config().
  * Rollback: deactivate this snippet; every page returns to the theme's own template and calculator.
@@ -55,7 +58,9 @@
  * v1.2 (2026-10-08): the amenity tiles and checklist on classic property pages too, and distances to
  * nearby places under Address (and in the development layout's Location when the description lists none).
  * v1.3 (2026-10-08): ad landing pages, and a "Who it suits best" section with the investor view, read from
- * the description's "Who ... suits" and "... for Investors" sections.
+ * the description's "Who ... suits" and "... for Investors" sections. Optional questions after a quick
+ * enquiry, a timeline question, international phone examples for visitors abroad, and the visitor's
+ * name in the thank-you heading kept in the heading font.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -2272,9 +2277,41 @@ JS;
 		return $h . '</div></fieldset>';
 	}
 
-	function blockke_dev_ok() {
+	function blockke_dev_timelines() {
+		return array( 'Within 3 months', '3–12 months', 'Just exploring' );
+	}
+
+	function blockke_dev_timeline( $s ) {
+		return in_array( $s, blockke_dev_timelines(), true ) ? $s : '';
+	}
+
+	function blockke_dev_unit_groups( $units ) {
+		$groups = array();
+		foreach ( $units as $u ) {
+			if ( ! in_array( $u['group'], $groups, true ) ) {
+				$groups[] = $u['group'];
+			}
+		}
+		return $groups;
+	}
+
+	/**
+	 * Optional questions shown once a quick enquiry is in; the answers are added to the same lead.
+	 * Not a <form>, so tools that count form submissions (GA4, Meta) don't count the lead twice.
+	 */
+	function blockke_dev_more( $d, $key ) {
+		$groups = blockke_dev_unit_groups( $d['units'] );
+		return '<div class="bkd-more" data-more role="group" aria-label="Optional questions" hidden><p class="bkd-more-t">Help us send the right details <small>(optional)</small></p>'
+			. ( count( $groups ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Which home?', $groups, '' ) . '</div>' : '' )
+			. blockke_dev_chips( 'timeline-' . $key, 'When would you like to buy?', blockke_dev_timelines(), '' )
+			. blockke_dev_chips( 'purpose-' . $key, 'Buying to', array( 'Live in', 'Invest', 'Both' ), '' )
+			. '<button class="bkd-btn bkd-btn-line bkd-btn-sm" type="button" data-more-send>Send these answers</button>'
+			. '<p class="bkd-more-done" role="status" hidden></p></div>';
+	}
+
+	function blockke_dev_ok( $more = '' ) {
 		return '<div class="bkd-ok" hidden tabindex="-1"><div class="bkd-ok-tick">' . blockke_dev_icon( 'check' ) . '</div><h3>Thank you<span data-first></span>.</h3>'
-			. '<div class="bkd-ok-msg" data-okmsg></div><div class="bkd-ok-actions"><a class="bkd-btn bkd-btn-navy" data-asset hidden target="_blank" rel="noopener"></a>'
+			. '<div class="bkd-ok-msg" data-okmsg></div>' . $more . '<div class="bkd-ok-actions"><a class="bkd-btn bkd-btn-navy" data-asset hidden target="_blank" rel="noopener"></a>'
 			. '<a class="bkd-btn bkd-btn-line" data-wa-ok href="#" target="_blank" rel="noopener">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'Continue on WhatsApp</a></div></div>';
 	}
 
@@ -2378,23 +2415,19 @@ JS;
 	function blockke_dev_quick_form( $source, $cta, $d ) {
 		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '" novalidate><input class="bkd-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">'
 			. '<div class="bkd-qgrid">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>'
-			. '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">' . esc_html( $cta ) . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok();
+			. '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">' . esc_html( $cta ) . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok( blockke_dev_more( $d, $source ) );
 	}
 
 	function blockke_dev_full_form( $d ) {
-		$groups = array();
-		foreach ( $d['units'] as $u ) {
-			if ( ! in_array( $u['group'], $groups, true ) ) {
-				$groups[] = $u['group'];
-			}
-		}
-		$h  = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$groups = blockke_dev_unit_groups( $d['units'] );
+		$h      = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">';
 		$h .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
 		if ( count( $groups ) > 1 ) {
 			$h .= blockke_dev_chips( 'unit', 'Interested in', array_merge( $groups, array( 'Not sure yet' ) ), 'Not sure yet' );
 		}
 		$h .= blockke_dev_chips( 'purpose', 'Buying to', array( 'Live in', 'Invest', 'Both' ), 'Live in' );
+		$h .= blockke_dev_chips( 'timeline', 'When would you like to buy?', blockke_dev_timelines(), '' );
 		$h .= blockke_dev_chips( 'contact', 'Best way to reach you', array( 'WhatsApp', 'Phone call', 'Email' ), 'WhatsApp' );
 		$h .= '<label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="Anything we should know: budget, timing, questions."></textarea></label>';
 		$h .= '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send my enquiry' . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok();
@@ -2435,12 +2468,20 @@ JS;
 		} elseif ( $d['area'] ) {
 			$hfacts[] = array( 'Location', $d['area'] );
 		}
-		$o[] = '<section class="bkd-hero" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">'
+		$hf_html = '';
+		foreach ( $hfacts as $f ) {
+			$hf_html .= '<div><dt>' . $e( $f[0] ) . '</dt><dd>' . $e( $f[1] ) . '</dd></div>';
+		}
+		// Landing pages on phones lay the offer and the key figures over the photo, like a cover.
+		$offer = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( blockke_dev_homes_label( $d['units'] ), $d['address'] ) ) ) ) : '';
+		$o[]   = '<section class="bkd-hero" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">'
 			. '<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav>'
 			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div>' )
 			. '<p class="bkd-status">' . ( $d['chip'] ? '<b>' . $e( $d['chip'] ) . '</b>' : '' ) . '<span>' . $e( $d['area_line'] ) . '</span></p>'
 			. '<h1 class="bkd-h1">' . $e( $d['name'] ) . '</h1>'
-			. ( $d['tagline'] ? '<p class="bkd-hero-tag">' . $e( $d['tagline'] ) . '</p>' : '' ) . '</div>'
+			. ( $d['tagline'] ? '<p class="bkd-hero-tag">' . $e( $d['tagline'] ) . '</p>' : '' )
+			. ( $offer ? '<p class="bkd-hero-offer">' . $offer . '</p>' : '' )
+			. ( $lp ? '<dl class="bkd-hfacts bkd-hfacts-cover">' . $hf_html . '</dl>' : '' ) . '</div>'
 			. '<figure class="bkd-hero-media">'
 			. blockke_dev_img(
 				$hero,
@@ -2457,10 +2498,7 @@ JS;
 			)
 			. ( $hero && $d['offplan'] ? '<figcaption>Artist\'s impression</figcaption>' : '' )
 			. ( $n_img > 1 ? '<button class="bkd-btn bkd-btn-white bkd-btn-sm bkd-all" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View ' . $n_img . ' photos</button>' : '' )
-			. '</figure><div class="bkd-hero-body"><dl class="bkd-hfacts">';
-		foreach ( $hfacts as $f ) {
-			$o[] = '<div><dt>' . $e( $f[0] ) . '</dt><dd>' . $e( $f[1] ) . '</dd></div>';
-		}
+			. '</figure><div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
 		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">Get the price list and floor plans</div>'
 			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
 			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
@@ -2868,8 +2906,21 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-ok-tick{display:grid;place-items:center;width:52px;height:52px;margin-bottom:22px;border-radius:50%;background:var(--navy);color:#fff}
 #bkd .bkd-ok-tick .bkd-i{width:24px;height:24px;stroke-width:2.2}
 #bkd .bkd-ok h3{margin-bottom:10px!important;font-family:var(--display)!important;font-size:32px!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;line-height:1.15!important}
+#bkd .bkd-ok h3 span{font-family:inherit!important;font-weight:inherit!important;letter-spacing:inherit!important}
 #bkd .bkd-ok-msg{margin-bottom:22px;color:var(--slate)}
 #bkd .bkd-ok-actions{display:flex;flex-wrap:wrap;gap:10px}
+#bkd .bkd-more{display:grid;gap:14px;margin:0 0 22px;padding-top:18px;border-top:1px solid var(--line)}
+#bkd .bkd-more-t{margin:0;font-size:14px;font-weight:600;line-height:1.4;color:var(--navy)}
+#bkd .bkd-more-t small{font-weight:400;color:var(--muted)}
+#bkd .bkd-more .bkd-chip span{min-height:38px;padding:0 13px}
+#bkd .bkd-more>.bkd-btn{justify-self:start}
+#bkd .bkd-more-done{margin:0;font-size:14px;line-height:1.55;color:var(--slate)}
+#bkd .bkd-quick .bkd-more{border-top-color:rgba(255,255,255,.16)}
+#bkd .bkd-quick .bkd-more-t{color:#fff}
+#bkd .bkd-quick .bkd-more-t small,#bkd .bkd-quick .bkd-more .bkd-f legend,#bkd .bkd-quick .bkd-more-done{color:var(--on-navy)}
+#bkd .bkd-quick .bkd-chip span{background:transparent;border-color:rgba(255,255,255,.35);color:#fff}
+#bkd .bkd-quick .bkd-chip input:checked+span{background:var(--brass);border-color:var(--brass);color:var(--navy)}
+#bkd .bkd-quick .bkd-chip input:focus-visible+span{outline-color:var(--brass-l)}
 /* Section nav */
 #bkd .bkd-subnav{position:sticky;top:var(--top);z-index:40;display:none;background:rgba(251,249,246,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 @media (min-width:1000px){#bkd .bkd-subnav{display:block}}
@@ -3128,22 +3179,33 @@ body.bkd-lp #bkd{margin:0;width:100%}
 #bkd .bkd-lpf b{color:#fff;font-weight:600}
 #bkd .bkd-lpf a{color:#fff;text-decoration:underline;text-underline-offset:3px}
 @media (min-width:1000px){#bkd .bkd-lpf{padding-bottom:34px}}
+#bkd .bkd-hero-offer,#bkd .bkd-hfacts-cover{display:none}
 @media (max-width:999px){
 #bkd.bkd-lpm .bkd-hero{padding-top:0}
 #bkd.bkd-lpm .bkd-hero-grid{grid-template-areas:"top" "body";row-gap:0}
 #bkd.bkd-lpm .bkd-hero-head,#bkd.bkd-lpm .bkd-hero-media{grid-area:top}
-#bkd.bkd-lpm .bkd-hero-media{aspect-ratio:auto;min-height:clamp(290px,76vw,460px)}
-#bkd.bkd-lpm .bkd-hero-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,36,64,0) 30%,rgba(13,36,64,.88) 100%)}
+#bkd.bkd-lpm .bkd-hero-media{aspect-ratio:auto;min-height:clamp(330px,92vw,500px)}
+#bkd.bkd-lpm .bkd-hero-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,36,64,0) 24%,rgba(13,36,64,.5) 52%,rgba(13,36,64,.94) 88%,#0D2440 100%)}
 #bkd.bkd-lpm .bkd-hero-media figcaption{left:auto;right:16px;top:14px;bottom:auto;z-index:1}
 #bkd.bkd-lpm .bkd-all{display:none}
-#bkd.bkd-lpm .bkd-hero-head{position:relative;z-index:2;align-self:end;padding:0 0 22px;pointer-events:none}
-#bkd.bkd-lpm .bkd-status{margin-bottom:12px;color:rgba(255,255,255,.88)}
+#bkd.bkd-lpm .bkd-hero-head{position:relative;z-index:2;align-self:end;padding:0 0 18px;pointer-events:none}
+#bkd.bkd-lpm .bkd-status{margin-bottom:10px;color:rgba(255,255,255,.88)}
+#bkd.bkd-lpm .bkd-status span{display:none}
 #bkd.bkd-lpm .bkd-status b{background:rgba(255,255,255,.16);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 #bkd.bkd-lpm .bkd-status b::before{background:var(--brass-l)}
 #bkd.bkd-lpm .bkd-h1{color:#fff!important;font-size:clamp(40px,11vw,60px)!important;text-shadow:0 2px 24px rgba(0,0,0,.25)}
 #bkd.bkd-lpm .bkd-hero-tag{display:none}
-#bkd.bkd-lpm .bkd-hero-body{padding-top:4px}
-#bkd.bkd-lpm .bkd-hfacts{margin-bottom:18px}
+#bkd.bkd-lpm .bkd-hero-offer{display:block;margin:8px 0 0;font-size:15px;line-height:1.45;color:rgba(255,255,255,.9)}
+#bkd.bkd-lpm .bkd-hero-offer span{display:inline-block}
+#bkd.bkd-lpm .bkd-hfacts-cover{display:grid;margin:16px 0 0;border-top:1px solid rgba(255,255,255,.24);border-bottom:0}
+#bkd.bkd-lpm .bkd-hfacts-cover>div{padding:12px 0 0}
+#bkd.bkd-lpm .bkd-hfacts-cover>div+div{padding-left:14px;border-left-color:rgba(255,255,255,.24)}
+#bkd.bkd-lpm .bkd-hfacts-cover dt{color:rgba(255,255,255,.72)}
+#bkd.bkd-lpm .bkd-hfacts-cover dd{color:#fff;font-size:clamp(21px,6.2vw,30px)}
+#bkd.bkd-lpm .bkd-hero-body{padding-top:0}
+#bkd.bkd-lpm .bkd-hero-body>.bkd-hfacts,#bkd.bkd-lpm .bkd-quick-s{display:none}
+#bkd.bkd-lpm .bkd-quick{margin:0 calc(var(--gutter) * -1);padding:20px var(--gutter) 24px}
+#bkd.bkd-lpm .bkd-quick-t{margin-bottom:14px}
 }
 @media (min-width:360px) and (max-width:559px){#bkd.bkd-lpm .bkd-quick .bkd-qgrid{grid-template-columns:1fr 1fr;gap:12px}#bkd.bkd-lpm .bkd-quick .bkd-f>input{padding:0 12px}}
 CSS;
@@ -3219,7 +3281,24 @@ CSS;
     ok.querySelector('[data-wa-ok]').href=waUrl(leadText(p));
     var ab=ok.querySelector('[data-asset]');
     if(j&&j.asset){ab.href=j.asset;ab.hidden=false;ab.innerHTML='Download the brochure'+icon('arrow');ab.addEventListener('click',function(){track('asset_open');},{once:true});}else{ab.hidden=true;}
+    var mf=ok.querySelector('[data-more]');
+    if(mf){$$('input',mf).forEach(function(i){i.checked=false;});mf.setAttribute('data-ref',(j&&j.ref)||'');mf.hidden=!(j&&j.ref);
+      $$('fieldset,.bkd-more-t,[data-more-send]',mf).forEach(function(x){x.hidden=false;});mf.querySelector('[data-more-send]').disabled=false;
+      var dn=mf.querySelector('.bkd-more-done');dn.hidden=true;dn.textContent='';
+      var mu=mf.querySelector('[data-more-unit]');if(mu){mu.hidden=!!p.unit;}}
     form.hidden=true;ok.hidden=false;try{ok.focus({preventScroll:true});}catch(e){}
+  }
+  /* the optional questions after a quick enquiry: added to the same lead */
+  function sendMore(mf){
+    var q={more:mf.getAttribute('data-ref')||'',listing:C.id,unit:'',timeline:'',purpose:''};
+    $$('input:checked',mf).forEach(function(i){q[i.name.split('-')[0]]=i.value;});
+    if(!q.unit&&!q.timeline&&!q.purpose){var r0=$$('input',mf).filter(function(i){return i.offsetParent!==null;})[0];if(r0){r0.focus();}return;}
+    mf.querySelector('[data-more-send]').disabled=true;
+    function done(msg){$$('fieldset,.bkd-more-t,[data-more-send]',mf).forEach(function(x){x.hidden=true;});var dn=mf.querySelector('.bkd-more-done');dn.textContent=msg;dn.hidden=false;}
+    fetch(C.endpoint,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(q),credentials:'same-origin'})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(j){if(!r.ok||!j||!j.ok){throw new Error('fail');}});})
+      .then(function(){track('lead_details',{lead_unit:q.unit,timeline:q.timeline,purpose:q.purpose});done('Thank you, noted. Your advisor will have this before they get in touch.');})
+      .catch(function(){done('Those answers did not go through, but your enquiry is with us.');});
   }
   function fail(form,p,msg){
     var btn=form.querySelector('[type=submit]');btn.disabled=false;
@@ -3228,6 +3307,7 @@ CSS;
     al.innerHTML=(msg?esc(msg)+' ':"Sorry, that didn't go through. ")+'<a target="_blank" rel="noopener" href="'+esc(waUrl(leadText(p)))+'">Send it on WhatsApp instead</a>.';
     if(!al.parentNode){btn.insertAdjacentElement('beforebegin',al);}
   }
+  root.addEventListener('click',function(e){var s=e.target.closest&&e.target.closest('[data-more-send]');if(s){sendMore(s.closest('[data-more]'));}});
   root.addEventListener('submit',function(e){
     var form=e.target.closest&&e.target.closest('form[data-bkd-lead]');if(!form){return;}
     e.preventDefault();
@@ -3238,7 +3318,7 @@ CSS;
     if(d.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)){errs.email='Please check your email address.';}
     $$('[data-f]',form).forEach(function(w){var k=w.getAttribute('data-f');w.classList.toggle('bkd-bad',!!errs[k]);var er=w.querySelector('.bkd-err');if(er){er.textContent=errs[k]||'';}});
     var firstErr=Object.keys(errs)[0];if(firstErr){form.querySelector('[name="'+firstErr+'"]').focus();return;}
-    var p={listing:C.id,name:d.name,phone:d.phone,email:d.email||'',unit:d.unit&&d.unit!=='Not sure yet'?d.unit:(form.getAttribute('data-unit')||''),purpose:d.purpose||'',contact:d.contact||'',message:d.message||'',
+    var p={listing:C.id,name:d.name,phone:d.phone,email:d.email||'',unit:d.unit&&d.unit!=='Not sure yet'?d.unit:(form.getAttribute('data-unit')||''),purpose:d.purpose||'',timeline:d.timeline||'',contact:d.contact||'',message:d.message||'',
       source:form.getAttribute('data-bkd-lead'),intent:form.getAttribute('data-intent')||'',page:location.href.slice(0,300),attr:attr(),company:d.company||''};
     remembered={name:d.name,phone:d.phone,email:d.email||remembered.email||''};try{sessionStorage.setItem('bkd_lead',JSON.stringify(remembered));}catch(er){}
     var btn=form.querySelector('[type=submit]');btn.disabled=true;
@@ -3254,6 +3334,15 @@ CSS;
       .catch(function(err){fail(form,p,err&&err.msg);});
   });
   $$('form[data-bkd-lead] input').forEach(function(i){i.addEventListener('input',function(){var w=i.closest('[data-f]');if(w){w.classList.remove('bkd-bad');var er=w.querySelector('.bkd-err');if(er){er.textContent='';}}});});
+  /* visitors abroad see an international example in the phone fields */
+  try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+    if(tz&&tz!=='Africa/Nairobi'){
+      var ph={'Europe/London':'+44 7700 900123','Europe/Dublin':'+353 85 123 4567','Europe/Berlin':'+49 151 23456789','Europe/Amsterdam':'+31 6 12345678','Europe/Paris':'+33 6 12 34 56 78','Europe/Stockholm':'+46 70 123 4567','Europe/Oslo':'+47 412 34 567','Europe/Zurich':'+41 78 123 45 67',
+        'Asia/Dubai':'+971 50 123 4567','Asia/Qatar':'+974 3312 3456','Asia/Riyadh':'+966 50 123 4567','Asia/Kolkata':'+91 98765 43210','Africa/Kampala':'+256 772 123456','Africa/Dar_es_Salaam':'+255 712 345 678','Africa/Kigali':'+250 788 123 456',
+        'Africa/Addis_Ababa':'+251 91 123 4567','Africa/Lagos':'+234 802 123 4567','Africa/Johannesburg':'+27 82 123 4567'}[tz]
+        ||(/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Indiana|Kentucky|Boise|Toronto|Vancouver|Edmonton|Winnipeg|Halifax|Regina)/.test(tz)?'+1 202 555 0123':(/^Australia\//.test(tz)?'+61 412 345 678':'+ code and number'));
+      $$('input[name="phone"]').forEach(function(i){i.placeholder=ph;});
+    }}catch(e){}
 
   /* enquiry dialog */
   var md=document.getElementById('bkd-md'),mdForm=document.getElementById('bkd-md-form'),lastFocus=null;
@@ -3512,9 +3601,79 @@ JS;
 	   Enquiries: POST /wp-json/block/v1/development-lead
 	   ===================================================================== */
 
-	function blockke_dev_handle_lead( $req ) {
+	/** Who gets the lead emails: the notify list (or the popup's), plus the listing's agent. */
+	function blockke_dev_lead_to( $lid ) {
 		$cfg = blockke_dev_config();
-		$p   = $req->get_json_params();
+		$to  = array();
+		foreach ( (array) $cfg['notify_emails'] as $em ) {
+			$to[] = $em;
+		}
+		if ( ! $to && function_exists( 'blockke_bp_config' ) ) {
+			$bp = blockke_bp_config();
+			$to = (array) $bp['notify_emails'];
+		}
+		if ( ! $to ) {
+			$to = array( 'loyd@block.ke' );
+		}
+		if ( ! empty( $cfg['copy_agent'] ) ) {
+			$ag = blockke_dev_agent( (int) get_post_meta( $lid, 'property_agent', true ) );
+			if ( $ag['email'] ) {
+				$to[] = $ag['email'];
+			}
+		}
+		return array_values( array_unique( array_filter( array_map( 'sanitize_email', $to ) ) ) );
+	}
+
+	/** The optional answers given after a quick enquiry: added to the stored lead (once, within a day) and emailed. */
+	function blockke_dev_lead_more( $ref, $get ) {
+		$log = get_option( 'blockke_dev_leads', array() );
+		$key = null;
+		foreach ( is_array( $log ) ? $log : array() as $k => $row ) {
+			if ( ! empty( $row['ref'] ) && hash_equals( (string) $row['ref'], $ref ) ) {
+				$key = $k;
+				break;
+			}
+		}
+		if ( null === $key || ! empty( $log[ $key ]['more'] ) || strtotime( $log[ $key ]['time'] ) < strtotime( current_time( 'mysql' ) ) - DAY_IN_SECONDS ) {
+			return new WP_REST_Response( array( 'ok' => false, 'message' => 'Those answers could not be added, but your enquiry was received.' ), 400 );
+		}
+		$row      = $log[ $key ];
+		$unit     = $get( 'unit', 160 );
+		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ) );
+		$purpose  = in_array( $get( 'purpose', 20 ), array( 'Live in', 'Invest', 'Both' ), true ) ? $get( 'purpose', 20 ) : '';
+		if ( '' === $unit . $timeline . $purpose ) {
+			return new WP_REST_Response( array( 'ok' => true ), 200 );
+		}
+		$lines = array( 'MORE DETAILS ON A DEVELOPMENT ENQUIRY', $row['name'] . ' answered the optional questions after enquiring about ' . $row['dev'] . ' (' . $row['time'] . ').', '' );
+		if ( $unit ) {
+			$lines[] = 'Interested in: ' . $unit;
+			if ( empty( $row['unit'] ) ) {
+				$row['unit'] = $unit;
+			}
+		}
+		if ( $timeline ) {
+			$lines[]         = 'Timeline: ' . $timeline;
+			$row['timeline'] = $timeline;
+		}
+		if ( $purpose ) {
+			$lines[]        = 'Buying to: ' . $purpose;
+			$row['purpose'] = $purpose;
+		}
+		$lines[]     = '';
+		$lines[]     = 'Phone / WhatsApp: ' . blockke_dev_phone_display( $row['phone'] ) . '  (https://wa.me/' . $row['phone'] . ')';
+		$lines[]     = 'Add these to the lead in Zoho.';
+		$row['more'] = current_time( 'mysql' );
+		$log[ $key ] = $row;
+		update_option( 'blockke_dev_leads', $log, false );
+		$to = blockke_dev_lead_to( (int) $row['listing'] );
+		if ( $to ) {
+			wp_mail( $to, sprintf( '[Block] More details: %s - %s', $row['name'], $row['dev'] ), implode( "\n", $lines ), array( 'Content-Type: text/plain; charset=UTF-8' ) );
+		}
+		return new WP_REST_Response( array( 'ok' => true ), 200 );
+	}
+
+	function blockke_dev_handle_lead( $req ) {
+		$p = $req->get_json_params();
 		if ( ! is_array( $p ) ) {
 			$p = $req->get_params();
 		}
@@ -3538,6 +3697,11 @@ JS;
 		}
 		set_transient( $rk, $n + 1, HOUR_IN_SECONDS );
 
+		$more = preg_replace( '/[^A-Za-z0-9]/', '', $get( 'more', 40 ) );
+		if ( '' !== $more ) {
+			return blockke_dev_lead_more( $more, $get );
+		}
+
 		$lid  = (int) $get( 'listing', 12 );
 		$post = $lid ? get_post( $lid ) : null;
 		if ( ! $post || 'estate_property' !== $post->post_type || 'publish' !== $post->post_status ) {
@@ -3555,14 +3719,15 @@ JS;
 		if ( ! is_email( $email ) ) {
 			$email = '';
 		}
-		$unit    = $get( 'unit', 160 );
-		$purpose = $get( 'purpose', 20 );
-		$contact = $get( 'contact', 20 );
-		$source  = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'source', 30 ) ) );
-		$intent  = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'intent', 30 ) ) );
-		$message = isset( $p['message'] ) && is_scalar( $p['message'] ) ? mb_substr( sanitize_textarea_field( (string) $p['message'] ), 0, 1500 ) : '';
-		$page    = esc_url_raw( $get( 'page', 300 ) );
-		$attr    = array();
+		$unit     = $get( 'unit', 160 );
+		$purpose  = $get( 'purpose', 20 );
+		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ) );
+		$contact  = $get( 'contact', 20 );
+		$source   = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'source', 30 ) ) );
+		$intent   = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'intent', 30 ) ) );
+		$message  = isset( $p['message'] ) && is_scalar( $p['message'] ) ? mb_substr( sanitize_textarea_field( (string) $p['message'] ), 0, 1500 ) : '';
+		$page     = esc_url_raw( $get( 'page', 300 ) );
+		$attr     = array();
 		if ( isset( $p['attr'] ) && is_array( $p['attr'] ) ) {
 			foreach ( array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'gbraid', 'wbraid', 'ref', 'land' ) as $k ) {
 				if ( isset( $p['attr'][ $k ] ) && is_scalar( $p['attr'][ $k ] ) ) {
@@ -3604,6 +3769,9 @@ JS;
 		$lines[] = 'Email: ' . ( $email ? $email : '-' );
 		if ( $purpose ) {
 			$lines[] = 'Buying to: ' . $purpose;
+		}
+		if ( $timeline ) {
+			$lines[] = 'Timeline: ' . $timeline;
 		}
 		if ( $contact ) {
 			$lines[] = 'Best way to reach them: ' . $contact;
@@ -3656,24 +3824,7 @@ JS;
 			);
 		}
 
-		$to = array();
-		foreach ( (array) $cfg['notify_emails'] as $em ) {
-			$to[] = $em;
-		}
-		if ( ! $to && function_exists( 'blockke_bp_config' ) ) {
-			$bp = blockke_bp_config();
-			$to = (array) $bp['notify_emails'];
-		}
-		if ( ! $to ) {
-			$to = array( 'loyd@block.ke' );
-		}
-		if ( ! empty( $cfg['copy_agent'] ) ) {
-			$ag = blockke_dev_agent( (int) get_post_meta( $lid, 'property_agent', true ) );
-			if ( $ag['email'] ) {
-				$to[] = $ag['email'];
-			}
-		}
-		$to      = array_values( array_unique( array_filter( array_map( 'sanitize_email', $to ) ) ) );
+		$to      = blockke_dev_lead_to( $lid );
 		$subject = sprintf( '[Block] Development enquiry: %s - %s%s', $name, $dev_name, $unit ? ' - ' . $unit : '' );
 		$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
 		if ( $email ) {
@@ -3686,22 +3837,26 @@ JS;
 		if ( ! is_array( $log ) ) {
 			$log = array();
 		}
+		$ref = wp_generate_password( 20, false, false ); // lets the visitor add the optional answers to this lead
 		array_unshift(
 			$log,
 			array(
-				'time'    => current_time( 'mysql' ),
-				'listing' => $lid,
-				'dev'     => $dev_name,
-				'unit'    => $unit,
-				'name'    => $name,
-				'phone'   => $phone,
-				'email'   => $email,
-				'form'    => $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
-				'channel' => $channel,
-				'source'  => $lead_source,
-				'page'    => $page,
-				'zoho'    => $zoho,
-				'mail'    => $mail_ok,
+				'time'     => current_time( 'mysql' ),
+				'listing'  => $lid,
+				'dev'      => $dev_name,
+				'unit'     => $unit,
+				'name'     => $name,
+				'phone'    => $phone,
+				'email'    => $email,
+				'purpose'  => $purpose,
+				'timeline' => $timeline,
+				'form'     => $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
+				'channel'  => $channel,
+				'source'   => $lead_source,
+				'page'     => $page,
+				'zoho'     => $zoho,
+				'mail'     => $mail_ok,
+				'ref'      => $ref,
 			)
 		);
 		update_option( 'blockke_dev_leads', array_slice( $log, 0, 200 ), false );
@@ -3709,6 +3864,7 @@ JS;
 		$out = array(
 			'ok'            => true,
 			'phone_display' => blockke_dev_phone_display( $phone ),
+			'ref'           => $ref,
 		);
 		$brochure = blockke_dev_brochure( $lid );
 		if ( $brochure ) {
