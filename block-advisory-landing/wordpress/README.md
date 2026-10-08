@@ -30,12 +30,16 @@ A landing-page layout for new developments, drawn between the site's normal head
 | Overview and *Read the full description* | The description's opening paragraphs and its *Why …* list. The full description stays on the page, collapsed. |
 | Photos | The listing gallery |
 | Residences table, with filters | The description's Unit / Size / Price table, linked to the unit listings. With no table, the unit listings (Multi Units) are used. |
-| Amenities | Bold-titled groups in the description's *Amenities* section, otherwise the *Features & Amenities* ticks grouped by category |
+| Amenities | Up to six feature tiles for the stand-out amenities (pool, sky lounge, gym, cinema and so on), each with an icon and a one-line description, then a checklist of everything else. The items come from bold-titled groups in the description's *Amenities* section, otherwise the *Features & Amenities* ticks. |
 | Payment plan | Off-plan: the *Payment Plan* steps plus the instalment calculator. Complete: a mortgage calculator. |
 | Location | Map pin from the listing coordinates, plus places and travel times from the *Location* section |
 | FAQ | The description's *FAQ* / *Frequently Asked Questions* section |
 | Similar developments | Other developments for sale in the same area |
 | Enquiry form and advisor | The listing's agent |
+
+**Look and feel.** The page uses block.ke's warm off-white with sand-coloured sections. Navy is used for the key facts strip, the hero enquiry card, Amenities and *Why Block*, with brass accents. Headings are set in Instrument Serif, a Google Font, and a few words in each are picked out in brass italics, for example "What comes *with the keys.*". To accent part of the overview headline override, wrap those words in asterisks: `About *the building*`. Setting `display_font` to `''` returns all headings to the site font.
+
+**Amenity tiles.** Tiles are chosen by kind, best first, and appear in full rows of 1, 2, 3, 4 or 6. The kinds are: beach, pool, sky lounge or sky garden, cinema, spa, gym, nature, kids' play, café, golf, gardens, yoga, shops, co-working, sports courts, BBQ, residents' lounge and jogging track. A tile keeps the listing's own name when it is short. A longer item becomes the tile's description under a short title, for example "Sky garden" over "Terrace sky garden with panoramic city views". Security, parking, lifts, power and water go in the checklist, titled "The everyday essentials" when that is all it holds.
 
 **Turn it on for one listing.** Edit the property, find the **Development page** box, and set **Layout: On**. The box also has optional overrides: hero line, key facts, deposit, reservation fee, places, brochure PDF, video and similar listings.
 
@@ -65,6 +69,7 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `auto` | `false` | Layout on for every listing with units |
 | `offplan_calculator` | `true` | Instalment calculator on off-plan pages |
 | `price_check_popup` | `false` | Show the site-wide price-check popup on development pages, which already carry their own forms. The popup is unchanged everywhere else. |
+| `display_font` | `'Instrument Serif'` | Heading font on development pages. Use a Google Font that has an italic. `''` keeps the site font. |
 | `default_deposit` | `20` | Deposit % used when a listing states none |
 | `mortgage_rate`, `mortgage_years`, `mortgage_deposit` | `13`, `20`, `20` | Mortgage calculator defaults on complete developments |
 | `notify_emails` | `[]` | Who receives enquiries. Empty uses the popup's list. |
@@ -72,11 +77,15 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 
 ## Install and roll back
 
-1. Open **WPCode → Code Snippets → BLOCK — Development property page + payment calculators v1**. It is staged there as an inactive draft. To install from this file instead, add a new PHP snippet and paste the file without its first `<?php` line.
+1. Open **WPCode → Code Snippets**. To install from this file instead, add a new PHP snippet and paste the file without its first `<?php` line.
 2. Set *Insert method* to Auto Insert and *Location* to Run Everywhere. Turn on **Active** and click **Update**.
 3. Check an off-plan property: the payment plan calculator replaces the mortgage one. Then preview a development with `?bke_layout=1`.
 
 To roll back, deactivate the snippet. Every page returns to the theme's own template and calculator.
+
+**Upgrading from v1.0 to v1.1.** v1.1 is staged as its own snippet, *… v1.1*, with priority 5, so it runs before v1.0 (priority 10). The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the other skips itself. To upgrade, switch v1.1 on, and it takes over at once. Then switch v1.0 off, or keep it as a fallback. To go back, switch v1.1 off.
+
+WPCode runs a cached copy of each active snippet, refreshed when a snippet is saved in WPCode. A snippet edited through the API stays as it was on the site until someone clicks **Update** on it, or on any other snippet.
 
 ## Testing
 
@@ -88,6 +97,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - the Google Ads conversion call;
 - the unit pop-up, gallery, filters, sticky section bar and mobile bar;
 - both calculators;
-- the calculator swap on classic off-plan and complete pages.
+- the calculator swap on classic off-plan and complete pages;
+- v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.

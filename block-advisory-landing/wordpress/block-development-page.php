@@ -2,7 +2,7 @@
 /* marker line - keeps the connector from Markdown-converting this snippet; harmless in PHP */
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
- * BLOCK - Development property page + payment calculators v1.0 (2026-10-07)
+ * BLOCK - Development property page + payment calculators v1.1 (2026-10-08)
  *
  * 1) PAYMENT CALCULATORS on every for-sale property page (classic theme template):
  *    - Off-plan listings (Property Status "Off-Plan / Ongoing", completion not "Ready now"): the theme's
@@ -19,7 +19,8 @@
  *      hero (title, area, status, lowest unit price, completion, featured image, 2-field enquiry form),
  *      key facts ("at a Glance" / "Project Snapshot" rows + unit sizes), residences (the Unit / Size /
  *      Price table in the description, linked to the sub-unit listings; else the sub-units), amenities
- *      (grouped from the Amenities section, else from Features & Amenities), payment plan (instalment
+ *      (up to six feature tiles plus a checklist, from the Amenities section, else from Features &
+ *      Amenities), payment plan (instalment
  *      calculator for off-plan, mortgage calculator for complete), location (map + places), FAQ, similar
  *      developments in the same area, the listing's agent, and the full description under "Read more".
  *    Turn it on: Edit property > "Development page" box > Layout: On.
@@ -33,6 +34,8 @@
  * Config: option blockke_dev_page (array) overrides any key of blockke_dev_config().
  * Rollback: deactivate this snippet; every page returns to the theme's own template and calculator.
  * Created by Claude session 2026-10-07.
+ * v1.1 (2026-10-08): warmer colours (paper and sand backgrounds, navy bands, brass accents), serif
+ * headings (config display_font), and amenities as feature tiles plus an essentials checklist.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -61,6 +64,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'mortgage_deposit'   => 20,
 			'count_views'        => true, // keep the theme's view statistics counting on development pages
 			'price_check_popup'  => false, // the site-wide price-check popup on development pages (they carry their own forms)
+			'display_font'       => 'Instrument Serif', // headings: a Google Font with an italic; '' keeps the site font
 			'similar_count'      => 4,
 			'why'                => array(
 				array( 'Independent advice', 'We compare developments, layouts and payment plans side by side, so you choose with clarity rather than pressure.' ),
@@ -1230,6 +1234,142 @@ JS;
 		return $groups;
 	}
 
+	/**
+	 * Amenities worth a feature tile: pattern on the lower-case item, kind, short title, icon, rank, one line.
+	 * The first match wins, so specific patterns come before general ones. Anything else goes in the checklist.
+	 */
+	function blockke_dev_amenity_lib() {
+		return array(
+			array( '/\bbeach|ocean ?front|sea ?front|water ?front/u', 'beach', 'Beach access', 'waves', 100, 'Sand, sea and salt air on your doorstep.' ),
+			array( '/infinity/u', 'pool', 'Infinity pool', 'waves', 99, 'Swim to the edge of the view.' ),
+			array( '/(kid|child|paddling|toddler)[^,;]{0,14}pool/u', 'kidspool', 'Kids’ pool', 'waves', 70, 'Shallow water for the youngest swimmers.' ),
+			array( '/(roof ?top|sky|terrace)[^,;]{0,14}pool/u', 'pool', 'Rooftop pool', 'waves', 98, 'Laps with the skyline for company.' ),
+			array( '/(heated|indoor)[^,;]{0,20}pool/u', 'pool', 'Heated pool', 'waves', 97, 'Warm water all year round, whatever the weather.' ),
+			array( '/swimming|(?<!car )\bpool\b(?! ?table)/u', 'pool', 'Swimming pool', 'waves', 95, 'Morning laps, or a slow afternoon by the water.' ),
+			array( '/(sky|roof ?top|roof|terrace)[^,;]{0,8}gardens?/u', 'skygarden', 'Sky garden', 'leaf', 90, 'Green space with a view, a lift ride from home.' ),
+			array( '/sky ?(lounge|bar|terrace|deck|restaurant|club)|roof ?top ?(lounge|terrace|deck|bar|restaurant|area|space|club)|roof (terrace|deck|lounge)|^roof ?top$/u', 'sky', 'Sky lounge', 'glass', 92, 'Sundowners and long evenings above the city.' ),
+			array( '/cinema|theat(re|er)|movie|screening room|media room/u', 'cinema', 'Private cinema', 'film', 89, 'Movie nights without the Nairobi traffic.' ),
+			array( '/\bspa\b|sauna|steam|jacuzzi|hot tub|massage|hammam|wellness (centre|center|lounge|suite)/u', 'spa', 'Spa and sauna', 'lotus', 88, 'Unwind after a long day without leaving home.' ),
+			array( '/\bgym|fitness|health club|work ?out/u', 'gym', 'Gym', 'dumbbell', 87, 'Train before work, with no membership or commute.' ),
+			array( '/forest|botanical|arboretum|\bnature\b/u', 'nature', 'Nature walks', 'leaf', 86, 'Trees and birdsong instead of traffic.' ),
+			array( '/\bkids?\b|child|play ?(area|ground|room|park|zone)|creche|crèche|day ?care/u', 'kids', 'Kids’ play area', 'kite', 85, 'A safe place for children to play, close to home.' ),
+			array( '/restaurant|caf[eé]|coffee|bistro|eatery|food court/u', 'cafe', 'Café and restaurant', 'cup', 84, 'Coffee, lunch or dinner without getting in the car.' ),
+			array( '/golf/u', 'golf', 'Golf', 'flag', 83, 'Tee times close to home.' ),
+			array( '/garden|landscap|green (space|area)|lawn|(?<!car )\bpark\b|courtyard|orchard/u', 'garden', 'Gardens', 'leaf', 82, 'Green space for slow mornings and fresh air.' ),
+			array( '/yoga|pilates|aerobics|dance studio|meditation/u', 'yoga', 'Yoga studio', 'lotus', 80, 'Room to stretch, breathe and reset.' ),
+			array( '/supermarket|grocer|mini ?mart|convenience store|retail|\bshops?\b|shopping|\bmall\b/u', 'shops', 'Shops on site', 'bag', 79, 'Groceries and everyday errands, close at hand.' ),
+			array( '/co-?working|business (centre|center|lounge)|work ?(space|lounge|station)|study|library|reading/u', 'work', 'Co-working lounge', 'laptop', 78, 'A quiet place to work or study, steps from home.' ),
+			array( '/tennis|squash|basketball|padel|paddle|volleyball|badminton|football|sports? (court|ground|field|facilit)/u', 'sport', 'Sports courts', 'ball', 77, 'Game on, without driving to the club.' ),
+			array( '/bbq|barbe?cue|braai|nyama|grill (area|deck|terrace)/u', 'bbq', 'BBQ area', 'flame', 76, 'Weekend nyama choma with family and neighbours.' ),
+			array( '/club ?house|lounge|social|entertainment|function (room|hall)|events?\b|party|multi-?purpose|dining|residents/u', 'social', 'Residents’ lounge', 'users', 74, 'Room to host friends, family and celebrations.' ),
+			array( '/jog|running|walking (track|trail|path)|cycl|\btrails?\b|\btracks?\b/u', 'trail', 'Jogging track', 'route', 72, 'Morning runs without leaving the gate.' ),
+		);
+	}
+
+	/** Splits the amenity groups into feature tiles (one per kind, best first, 1-4 or 6) and a checklist. */
+	function blockke_dev_amenity_layout( $groups ) {
+		$lib   = blockke_dev_amenity_lib();
+		$items = array();
+		$seen  = array();
+		foreach ( $groups as $g ) {
+			foreach ( $g['items'] as $it ) {
+				$it = trim( preg_replace( '/\s+/u', ' ', (string) $it ) );
+				$lc = strtolower( $it );
+				if ( '' === $it || isset( $seen[ $lc ] ) ) {
+					continue;
+				}
+				$seen[ $lc ] = true;
+				$hit         = null;
+				foreach ( $lib as $l ) {
+					if ( preg_match( $l[0], $lc ) ) {
+						$hit = $l;
+						break;
+					}
+				}
+				$items[] = array(
+					'text' => $it,
+					'lib'  => $hit,
+					'i'    => count( $items ),
+				);
+			}
+		}
+		$cand = array();
+		foreach ( $items as $x ) {
+			if ( $x['lib'] && $x['lib'][4] >= 50 ) {
+				$cand[] = $x;
+			}
+		}
+		usort(
+			$cand,
+			function ( $a, $b ) {
+				return $a['lib'][4] === $b['lib'][4] ? $a['i'] - $b['i'] : $b['lib'][4] - $a['lib'][4];
+			}
+		);
+		$picked = array();
+		$kinds  = array();
+		foreach ( $cand as $c ) {
+			if ( count( $picked ) >= 6 ) {
+				break;
+			}
+			if ( ! isset( $kinds[ $c['lib'][1] ] ) ) {
+				$kinds[ $c['lib'][1] ] = true;
+				$picked[]              = $c;
+			}
+		}
+		if ( 5 === count( $picked ) ) {
+			array_pop( $picked ); // full rows: 1, 2, 3, 4 or 6 tiles
+		}
+		$tiles = array();
+		$used  = array();
+		$shown = array();
+		foreach ( $picked as $c ) {
+			$used[ $c['i'] ]       = true;
+			$shown[ $c['lib'][1] ] = true;
+			$long                  = mb_strlen( $c['text'] ) > 30;
+			$tiles[]               = array(
+				'icon'  => $c['lib'][3],
+				'title' => $long ? $c['lib'][2] : ucfirst( $c['text'] ),
+				'text'  => $long ? preg_replace( '/[.;:,\s]+$/u', '', $c['text'] ) . '.' : $c['lib'][5],
+			);
+		}
+		$rest       = array();
+		$essentials = true;
+		foreach ( $items as $x ) {
+			if ( ! isset( $used[ $x['i'] ] ) && ! ( $x['lib'] && isset( $shown[ $x['lib'][1] ] ) ) ) { // a second pool or gym adds nothing
+				$rest[]     = $x['text'];
+				$essentials = $essentials && ! ( $x['lib'] && $x['lib'][4] >= 50 );
+			}
+		}
+		return array(
+			'tiles'      => $tiles,
+			'rest'       => $rest,
+			'essentials' => $essentials,
+		);
+	}
+
+	/** The Amenities section's own introduction, if the description has one. */
+	function blockke_dev_amenity_intro( $sections ) {
+		$ai = blockke_dev_find( $sections, '/amenit|facilit|lifestyle/i', '/finish|spec/i' );
+		if ( $ai < 0 ) {
+			return '';
+		}
+		foreach ( $sections[ $ai ]['tokens'] as $t ) {
+			if ( 'p' !== $t['tag'] || preg_match( '#^\s*<(strong|b)\b[^>]*>(.*?)</\1>\s*:?\s*$#is', $t['inner'] ) ) {
+				continue;
+			}
+			$txt = blockke_dev_text( $t['inner'] );
+			if ( mb_strlen( $txt ) >= 40 && ! preg_match( '/:$/', $txt ) ) {
+				return blockke_dev_trim_words( blockke_dev_sentences( $txt, 2 ), 260 );
+			}
+		}
+		return '';
+	}
+
+	/** Escapes a heading and turns *words* into its italic accent. */
+	function blockke_dev_accent( $s ) {
+		return preg_replace( '/\*([^*]+)\*/u', '<em>$1</em>', esc_html( $s ) );
+	}
+
 	function blockke_dev_faqs( $tokens ) {
 		$faqs  = array();
 		$q     = '';
@@ -1600,8 +1740,9 @@ JS;
 			}
 		}
 
-		$agent = blockke_dev_agent( (int) get_post_meta( $id, 'property_agent', true ) );
-		$data  = array(
+		$agent     = blockke_dev_agent( (int) get_post_meta( $id, 'property_agent', true ) );
+		$amenities = blockke_dev_amenities( $id, $secs );
+		$data      = array(
 			'id'         => $id,
 			'slug'       => $post->post_name,
 			'title'      => $title,
@@ -1627,7 +1768,9 @@ JS;
 				'highlights' => array_slice( $highlights, 0, 6 ),
 			),
 			'desc'       => trim( $desc ),
-			'amenities'  => blockke_dev_amenities( $id, $secs ),
+			'amenities'  => $amenities,
+			'amen'       => blockke_dev_amenity_layout( $amenities ),
+			'amen_intro' => $amenities ? blockke_dev_amenity_intro( $secs ) : '',
 			'plan'       => $plan,
 			'lat'        => (float) get_post_meta( $id, 'property_latitude', true ),
 			'lng'        => (float) get_post_meta( $id, 'property_longitude', true ),
@@ -1671,6 +1814,16 @@ JS;
 			'sofa'     => '<path d="M20 9V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2"/><path d="M2 11a2 2 0 0 1 4 0v2h12v-2a2 2 0 0 1 4 0v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/><path d="M5 18v2M19 18v2"/>',
 			'star'     => '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
 			'play'     => '<path d="M8 5v14l11-7z"/>',
+			'glass'    => '<path d="M8 22h8M12 15v7M7 3h10l-.4 5.6A4.6 4.6 0 0 1 12 13a4.6 4.6 0 0 1-4.6-4.4Z"/><path d="M7.3 7h9.4"/>',
+			'lotus'    => '<path d="M12 21c-2.6-2-4-5-3-9.6 1.3.7 2.3 1.6 3 2.9.7-1.3 1.7-2.2 3-2.9 1 4.6-.4 7.6-3 9.6Z"/><path d="M12 21c-4.4 0-8.2-2.2-9.6-6.4 2.6-.5 5.2.3 7 2.1M12 21c4.4 0 8.2-2.2 9.6-6.4-2.6-.5-5.2.3-7 2.1"/>',
+			'dumbbell' => '<path d="M6.5 7v10M3.5 9.5v5M17.5 7v10M20.5 9.5v5M6.5 12h11"/>',
+			'kite'     => '<path d="M12 2 5.5 9.5 12 17l6.5-7.5Z"/><path d="M5.5 9.5h13M12 2v15M12 17c0 2-1.2 3.2-3 3.4M9 20.4c-1.4.1-2.4.7-2.8 1.6"/>',
+			'cup'      => '<path d="M17 9h1.5a3 3 0 0 1 0 6H17"/><path d="M3 9h14v6a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5Z"/><path d="M7 2.5v3M10 2.5v3M13 2.5v3"/>',
+			'bag'      => '<path d="M5 8h14l-1 13H6Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+			'flame'    => '<path d="M12 22a7 7 0 0 0 7-7c0-3-1.6-5.2-3.4-7-.2 1.8-1 3-2.1 3.5C13.8 8 12.5 4.6 9.5 2c.3 3.4-1.5 5.5-3 7.4A8.4 8.4 0 0 0 5 15a7 7 0 0 0 7 7Z"/>',
+			'ball'     => '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c3.6 3.6 3.6 9.2 0 12.8M18.4 5.6c-3.6 3.6-3.6 9.2 0 12.8"/>',
+			'flag'     => '<path d="M6 22V3"/><path d="M6 3.5 18 8 6 12.5"/><path d="M3 22h7"/>',
+			'route'    => '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/>',
 		);
 		$wa = '<path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.26-.46-2.39-1.47-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.91-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.22 1.36.19 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.27-.2-.57-.35m-5.42 7.4h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88a9.82 9.82 0 0 1 9.88 9.89c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89a11.82 11.82 0 0 0-3.48-8.41Z"/>';
 		$out = '<svg class="bkd-sprite" width="0" height="0" aria-hidden="true" focusable="false">';
@@ -1848,7 +2001,7 @@ JS;
 		if ( isset( $nav['overview'] ) ) {
 			$ov  = $d['overview'];
 			$o[] = '<section class="bkd-sec" id="bkd-overview"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Overview</p><h2 class="bkd-h2">'
-				. $e( $ov['heading'] ? $ov['heading'] : 'About ' . $d['short'] ) . '</h2></div><div class="bkd-flow bkd-rv">';
+				. ( $ov['heading'] ? blockke_dev_accent( $ov['heading'] ) : 'About <em>' . $e( $d['short'] ) . '</em>' ) . '</h2></div><div class="bkd-flow bkd-rv">';
 			foreach ( $ov['paras'] as $i => $p ) {
 				$o[] = '<p class="' . ( 0 === $i ? 'bkd-lead' : 'bkd-body' ) . '">' . $e( $p ) . '</p>';
 			}
@@ -1906,7 +2059,7 @@ JS;
 				}
 				$filters .= '</div>';
 			}
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Residences</p><h2 class="bkd-h2">Availability and pricing</h2></div>' . $filters . '</div>'
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Residences</p><h2 class="bkd-h2">Availability <em>and pricing</em></h2></div>' . $filters . '</div>'
 				. '<table class="bkd-tbl bkd-rv"><thead><tr><th>Residence</th>' . ( $has_size ? '<th>Size</th>' : '' ) . ( $has_pr ? '<th>Price from</th>' : '' ) . '<th><span class="bkd-sr">Actions</span></th></tr></thead><tbody>';
 			foreach ( $d['units'] as $u ) {
 				$label = $u['type'] . ( $u['size'] ? ' · ' . $u['size'] : '' );
@@ -1919,22 +2072,32 @@ JS;
 			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">Starting prices. Ask for the latest price list for current availability.</p></div></section>';
 		}
 
-		// Amenities
+		// Amenities: feature tiles, then the checklist
 		if ( $d['amenities'] ) {
-			$o[] = '<section class="bkd-sec" id="bkd-amenities"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Amenities</p><h2 class="bkd-h2">Everything close to home</h2></div><div class="bkd-am">';
-			foreach ( $d['amenities'] as $a ) {
-				$o[] = '<div class="bkd-am-i bkd-rv"><div class="bkd-am-ic">' . blockke_dev_icon( $a['icon'] ) . '</div><h3 class="bkd-h3">' . $e( $a['title'] ) . '</h3><ul>';
-				foreach ( $a['items'] as $it ) {
-					$o[] = '<li>' . $e( $it ) . '</li>';
+			$am  = $d['amen'];
+			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-amenities"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Amenities</p><h2 class="bkd-h2">What comes <em>with the keys.</em></h2>'
+				. ( $d['amen_intro'] ? '<p class="bkd-lede">' . $e( $d['amen_intro'] ) . '</p>' : '' ) . '</div>';
+			if ( $am['tiles'] ) {
+				$o[] = '<div class="bkd-amt bkd-rv" data-n="' . count( $am['tiles'] ) . '">';
+				foreach ( $am['tiles'] as $t ) {
+					$o[] = '<div class="bkd-amt-i">' . blockke_dev_icon( $t['icon'] ) . '<h3>' . $e( $t['title'] ) . '</h3><p>' . $e( $t['text'] ) . '</p></div>';
+				}
+				$o[] = '</div>';
+			}
+			if ( $am['rest'] ) {
+				$o[] = '<div class="bkd-ess bkd-rv' . ( $am['tiles'] ? '' : ' bkd-ess-solo' ) . '"><div><h3 class="bkd-ess-h">' . ( $am['essentials'] ? 'The everyday <em>essentials</em>' : 'Also <em>included</em>' ) . '</h3>'
+					. '<p>' . ( $am['essentials'] ? 'The practical things buyers ask about first.' : 'More of what comes with a home at ' . $e( $d['short'] ) . '.' ) . '</p></div><ul>';
+				foreach ( $am['rest'] as $it ) {
+					$o[] = '<li>' . blockke_dev_icon( 'check' ) . '<span>' . $e( $it ) . '</span></li>';
 				}
 				$o[] = '</ul></div>';
 			}
-			$o[] = '</div></div></section>';
+			$o[] = '</div></section>';
 		}
 
 		// Payment plan (off-plan) or mortgage (complete)
 		if ( $d['offplan'] ) {
-			$heading = $plan['reservation'] > 0 ? 'Reserve with ' . blockke_dev_money( $plan['reservation'] ) : ( $plan['deposit'] > 0 ? blockke_dev_num( $plan['deposit'] ) . '% deposit, then instalments' : ( $plan['flexible'] ? 'A flexible payment plan' : 'Pay in instalments' ) );
+			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments' : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : 'Pay in <em>instalments</em>' ) );
 			$text    = $plan['text'] ? $plan['text'] : 'Spread the cost while the building goes up: a deposit, then instalments up to completion. Ask for the developer\'s official schedule.';
 			$steps   = $plan['steps'];
 			$titles  = '';
@@ -1944,7 +2107,7 @@ JS;
 			if ( $d['completion'] && $steps && ! preg_match( '/complet|handover|occupation/i', $titles ) ) {
 				$steps[] = array( 'Completion', 'Scheduled for ' . $d['completion'] . '.' );
 			}
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Payment plan</p><h2 class="bkd-h2">' . $e( $heading ) . '</h2>'
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Payment plan</p><h2 class="bkd-h2">' . $heading . '</h2>'
 				. '<p class="bkd-body bkd-mt">' . $e( $text ) . '</p>';
 			if ( $steps ) {
 				$o[] = '<ol class="bkd-steps">';
@@ -1957,7 +2120,7 @@ JS;
 			$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['price_from'], $plan, $cta ) . '</div></div></section>';
 		} else {
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="mortgage">Talk to us about financing</button></div>';
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Mortgage</p><h2 class="bkd-h2">Ready to move in. Finance it your way.</h2>'
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Mortgage</p><h2 class="bkd-h2">Ready to move in. <em>Finance it your way.</em></h2>'
 				. '<p class="bkd-body bkd-mt">Pay cash, or put down a deposit and finance the rest with a mortgage. We can introduce you to lenders and compare offers before you commit.</p></div>'
 				. '<div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your monthly repayment</p>' . blockke_dev_calc_mortgage( $d['price_from'], $cta ) . '</div></div></section>';
 		}
@@ -1966,7 +2129,10 @@ JS;
 		if ( isset( $nav['location'] ) ) {
 			$loc = $d['location'];
 			$q   = $d['lat'] && $d['lng'] ? $d['lat'] . ',' . $d['lng'] : $d['address'] . ', ' . $d['area_line'];
-			$o[] = '<section class="bkd-sec" id="bkd-location"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Location</p><h2 class="bkd-h2">' . $e( $d['address'] ) . '</h2>'
+			$cut = strrpos( $d['address'], ',' );
+			$end = false === $cut ? '' : trim( substr( $d['address'], $cut + 1 ) );
+			$adr = '' === $end ? $e( $d['address'] ) : $e( substr( $d['address'], 0, $cut + 1 ) ) . ' <em>' . $e( $end ) . '</em>';
+			$o[] = '<section class="bkd-sec" id="bkd-location"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Location</p><h2 class="bkd-h2">' . $adr . '</h2>'
 				. ( $loc['intro'] ? '<p class="bkd-body bkd-mt">' . $e( $loc['intro'] ) . '</p>' : '' );
 			if ( $loc['places'] ) {
 				$o[] = '<ul class="bkd-places">';
@@ -1982,7 +2148,7 @@ JS;
 
 		// Why Block
 		if ( ! empty( $cfg['why'] ) ) {
-			$o[] = '<section class="bkd-sec' . ( isset( $nav['location'] ) ? ' bkd-sec-flush' : '' ) . '" id="bkd-why"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Why ' . $e( $cfg['brand'] ) . '</p><h2 class="bkd-h2">Advice first. Then a decision.</h2></div><div class="bkd-why">';
+			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-why"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Why ' . $e( $cfg['brand'] ) . '</p><h2 class="bkd-h2">Advice first. <em>Then a decision.</em></h2></div><div class="bkd-why">';
 			foreach ( $cfg['why'] as $i => $w ) {
 				$o[] = '<div class="bkd-rv"><b>0' . ( $i + 1 ) . '</b><h3 class="bkd-h3">' . $e( $w[0] ) . '</h3><p>' . $e( $w[1] ) . '</p></div>';
 			}
@@ -1992,7 +2158,7 @@ JS;
 		// Similar developments
 		if ( $d['similar'] ) {
 			$all = $d['area'] && ( $t = get_term_by( 'name', $d['area'], 'property_area' ) ) ? get_term_link( $t ) : home_url( '/' );
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-similar"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Also consider</p><h2 class="bkd-h2">' . $e( $d['area'] ? 'More in ' . $d['area'] : 'Similar developments' ) . '</h2></div>'
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-similar"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Also consider</p><h2 class="bkd-h2">' . ( $d['area'] ? 'More in <em>' . $e( $d['area'] ) . '</em>' : 'Similar <em>developments</em>' ) . '</h2></div>'
 				. '<a class="bkd-link" href="' . esc_url( is_wp_error( $all ) ? home_url( '/' ) : $all ) . '">See all' . ( $d['area'] ? ' in ' . $e( $d['area'] ) : '' ) . blockke_dev_icon( 'arrow' ) . '</a></div><div class="bkd-cards" style="--n:' . min( count( $d['similar'] ), 4 ) . '">';
 			foreach ( $d['similar'] as $s ) {
 				$o[] = '<a class="bkd-card bkd-rv" href="' . esc_url( $s['url'] ) . '"><div class="bkd-card-img">'
@@ -2004,7 +2170,7 @@ JS;
 
 		// FAQ
 		if ( $d['faqs'] ) {
-			$o[] = '<section class="bkd-sec" id="bkd-faq"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">FAQ</p><h2 class="bkd-h2">Questions buyers ask</h2>'
+			$o[] = '<section class="bkd-sec" id="bkd-faq"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">FAQ</p><h2 class="bkd-h2">Questions buyers <em>ask</em></h2>'
 				. '<p class="bkd-body bkd-mt">Can\'t see yours? <a class="bkd-inline" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>Ask us on WhatsApp</a>.</p></div><div class="bkd-faq bkd-rv">';
 			foreach ( $d['faqs'] as $f ) {
 				$o[] = '<details><summary>' . $e( $f[0] ) . '</summary><div class="bkd-faq-a">' . $f[1] . '</div></details>';
@@ -2013,7 +2179,7 @@ JS;
 		}
 
 		// Enquire
-		$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-enquire"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Enquire</p><h2 class="bkd-h2">' . $e( 'Speak to an advisor about ' . $d['short'] ) . '</h2>'
+		$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-enquire"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Enquire</p><h2 class="bkd-h2">Speak to an advisor about <em>' . $e( $d['short'] ) . '</em></h2>'
 			. '<p class="bkd-body bkd-mt">Get the price list, floor plans and payment plan, or book a viewing. We usually reply within a few hours on working days.</p>';
 		if ( $ag['name'] ) {
 			$o[] = '<div class="bkd-agent">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" loading="lazy" width="64" height="64">' : '<div class="bkd-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</div>' )
@@ -2047,8 +2213,8 @@ JS;
 
 	function blockke_dev_css() {
 		return <<<'CSS'
-#bkd{--navy:#0D2440;--navy-2:#16345C;--ink:#22303C;--slate:#46586A;--muted:#66768A;--mist:#F5F6F8;--line:#E4E7EC;--line-2:#D3D9E2;--brass:#B98A44;--brass-d:#8C6A2F;--on-navy:#C9D3DF;--wa:#25D366;--err:#B3261E;--font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--max:1200px;--gutter:20px;--sec:clamp(80px,10vw,150px);--top:0px;
-position:relative;display:block;float:none;clear:both;width:var(--bkd-vw,100vw);max-width:none;margin:0 0 0 calc(50% - var(--bkd-vw,100vw) / 2);padding:0;background:#fff;color:var(--ink);font:400 16px/1.75 var(--font);text-align:left;-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+#bkd{--navy:#0D2440;--navy-2:#16345C;--ink:#22303C;--slate:#46586A;--muted:#5F6D7E;--paper:#FBF9F6;--mist:#F4EEE4;--line:#E6DFD4;--line-2:#D5CBBB;--brass:#B98A44;--brass-d:#80602A;--brass-t:#9E7433;--brass-l:#DDB97F;--brass-tint:#F1E4CC;--on-navy:#C9D3DF;--navy-line:rgba(255,255,255,.14);--wa:#25D366;--err:#B3261E;--font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--display:"Instrument Serif",Georgia,"Times New Roman",serif;--display-w:400;--display-ls:-.01em;--max:1200px;--gutter:20px;--sec:clamp(80px,10vw,150px);--top:0px;
+position:relative;display:block;float:none;clear:both;width:var(--bkd-vw,100vw);max-width:none;margin:0 0 0 calc(50% - var(--bkd-vw,100vw) / 2);padding:0;background:var(--paper);color:var(--ink);font:400 16px/1.75 var(--font);text-align:left;-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
 @media (min-width:768px){#bkd{--gutter:40px}}
 body.bkd-page{overflow-x:clip}
 #bkd :where(*,*::before,*::after){box-sizing:border-box}
@@ -2067,10 +2233,12 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-i-f{fill:currentColor;stroke:none}
 #bkd .bkd-wa-ic{color:#1DA851}
 #bkd h1,#bkd h2,#bkd h3,#bkd h4,#bkd h5,#bkd h6{font-family:var(--font)!important;color:var(--navy)!important;text-transform:none!important;margin:0}
-#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important;font-weight:300!important;letter-spacing:-.025em!important;line-height:1.08!important}
-#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important;font-weight:300!important;letter-spacing:-.025em!important;line-height:1.15!important}
+#bkd .bkd-h1,#bkd .bkd-h2{font-family:var(--display)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important}
+#bkd .bkd-h1{font-size:clamp(46px,5.4vw,78px)!important;line-height:1.02!important}
+#bkd .bkd-h2{font-size:clamp(36px,4vw,56px)!important;line-height:1.06!important}
+#bkd :is(.bkd-h1,.bkd-h2,.bkd-ess-h) em{font-family:inherit!important;font-style:italic;font-weight:inherit;color:var(--brass-t)}
 #bkd .bkd-h3{font-size:18px!important;font-weight:500!important;letter-spacing:-.01em!important;line-height:1.35!important}
-#bkd .bkd-label{display:flex;align-items:center;gap:14px;margin:0 0 20px;font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--slate)}
+#bkd .bkd-label{display:flex;align-items:center;gap:14px;margin:0 0 20px;font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--brass-d)}
 #bkd .bkd-label::before{content:"";width:28px;height:1px;background:var(--brass)}
 #bkd .bkd-lead{font-size:clamp(18px,1.6vw,21px);line-height:1.65;font-weight:300;color:var(--ink)}
 #bkd .bkd-body{color:var(--slate)}
@@ -2107,12 +2275,12 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-share{display:inline-flex;align-items:center;gap:8px;flex:none;margin:0;padding:6px 0!important;border:0!important;background:none!important;box-shadow:none!important;font:600 12px/1 var(--font)!important;letter-spacing:.08em!important;text-transform:uppercase!important;color:var(--navy)!important;cursor:pointer}
 #bkd .bkd-share .bkd-i{width:16px;height:16px}
 #bkd .bkd-status{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 22px;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--slate)}
-#bkd .bkd-status b{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line-2);border-radius:999px;font-weight:600;letter-spacing:.14em;color:var(--navy)}
+#bkd .bkd-status b{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border:0;border-radius:999px;background:var(--brass-tint);font-weight:600;letter-spacing:.14em;color:#7A5A22}
 #bkd .bkd-status b::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--brass)}
 #bkd .bkd-hero-tag{margin-top:20px;max-width:480px;font-size:clamp(17px,1.5vw,19px);font-weight:300;line-height:1.65;color:var(--slate)}
 #bkd .bkd-hero-media{position:relative;margin:0 calc(var(--gutter) * -1);aspect-ratio:4/3;overflow:hidden;background:var(--mist)}
 @media (min-width:1000px){#bkd .bkd-hero-media{margin:0;aspect-ratio:4/5}}
-@media (min-width:1000px) and (max-height:940px){#bkd .bkd-hero{padding-top:18px}#bkd .bkd-hero-top{margin-bottom:16px}#bkd .bkd-status{margin-bottom:14px}#bkd .bkd-h1{font-size:clamp(38px,4vw,54px)!important}#bkd .bkd-hero-tag{margin-top:12px;font-size:17px;line-height:1.6}#bkd .bkd-hfacts{margin-bottom:16px}#bkd .bkd-hfacts>div{padding:11px 0}#bkd .bkd-quick{padding:18px 24px}#bkd .bkd-quick-s{display:none}#bkd .bkd-quick-t{margin-bottom:12px}#bkd .bkd-hero-grid{row-gap:28px}}
+@media (min-width:1000px) and (max-height:940px){#bkd .bkd-hero{padding-top:18px}#bkd .bkd-hero-top{margin-bottom:16px}#bkd .bkd-status{margin-bottom:14px}#bkd .bkd-h1{font-size:clamp(44px,4.2vw,62px)!important}#bkd .bkd-hero-tag{margin-top:12px;font-size:17px;line-height:1.6}#bkd .bkd-hfacts{margin-bottom:16px}#bkd .bkd-hfacts>div{padding:11px 0}#bkd .bkd-quick{padding:18px 24px}#bkd .bkd-quick-s{display:none}#bkd .bkd-quick-t{margin-bottom:12px}#bkd .bkd-hero-grid{row-gap:28px}}
 #bkd .bkd-hero-media>img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover}
 #bkd .bkd-hero-media figcaption{position:absolute;left:16px;bottom:16px;font-size:11px;letter-spacing:.06em;color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.45)}
 #bkd .bkd-all{position:absolute;right:16px;bottom:16px}
@@ -2120,11 +2288,27 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-hfacts>div{padding:16px 0;min-width:0}
 #bkd .bkd-hfacts>div+div{padding-left:18px;border-left:1px solid var(--line)}
 #bkd .bkd-hfacts dt{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-#bkd .bkd-hfacts dd{margin:6px 0 0;font-size:clamp(16px,1.6vw,20px);font-weight:400;letter-spacing:-.01em;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#bkd .bkd-quick{padding:clamp(22px,2.4vw,28px);background:var(--mist)}
-#bkd .bkd-quick-t{margin:0 0 4px;font-size:16px;font-weight:600;line-height:1.4;color:var(--navy)}
-#bkd .bkd-quick-s{margin:0 0 16px;font-size:14px;line-height:1.5;color:var(--slate)}
+#bkd .bkd-hfacts dd{margin:4px 0 0;font-family:var(--display);font-size:clamp(24px,2.2vw,30px);font-weight:var(--display-w);line-height:1.2;letter-spacing:0;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bkd .bkd-quick{padding:clamp(22px,2.4vw,30px);background:var(--navy);color:var(--on-navy)}
+#bkd .bkd-quick-t{margin:0 0 4px;font-family:var(--display)!important;font-size:clamp(24px,2vw,28px);font-weight:var(--display-w);line-height:1.15;color:#fff}
+#bkd .bkd-quick-s{margin:0 0 16px;font-size:14px;line-height:1.5;color:var(--on-navy)}
 #bkd .bkd-quick-alt{margin-top:16px;text-align:center}
+#bkd .bkd-quick :focus-visible{outline-color:var(--brass-l)}
+#bkd .bkd-quick .bkd-f>span{color:var(--on-navy)}
+#bkd .bkd-quick .bkd-f>input{border-color:#fff!important}
+#bkd .bkd-quick .bkd-f>input:focus{border-color:var(--brass-l)!important;box-shadow:0 0 0 3px rgba(221,185,127,.4)!important}
+#bkd .bkd-quick .bkd-f.bkd-bad>input{border-color:#FF8A7A!important;box-shadow:0 0 0 2px rgba(255,138,122,.55)!important}
+#bkd .bkd-quick .bkd-err{color:#FFB4A9}
+#bkd .bkd-quick .bkd-btn-navy{background:var(--brass)!important;border-color:var(--brass)!important;color:var(--navy)!important}
+#bkd .bkd-quick .bkd-btn-navy:hover,#bkd .bkd-quick .bkd-btn-navy:focus-visible{background:var(--brass-l)!important;border-color:var(--brass-l)!important;color:var(--navy)!important}
+#bkd .bkd-quick .bkd-consent{color:rgba(255,255,255,.66)}
+#bkd .bkd-quick .bkd-consent a{color:#fff}
+#bkd .bkd-quick .bkd-link,#bkd .bkd-quick .bkd-link:hover{border-bottom-color:rgba(255,255,255,.45)!important;color:#fff!important}
+#bkd .bkd-quick .bkd-ok h3{color:#fff!important}
+#bkd .bkd-quick .bkd-ok-msg{color:var(--on-navy)}
+#bkd .bkd-quick .bkd-ok-tick{background:var(--brass);color:var(--navy)}
+#bkd .bkd-quick .bkd-btn-line{background:transparent!important;border-color:rgba(255,255,255,.45)!important;color:#fff!important}
+#bkd .bkd-quick .bkd-btn-line:hover{border-color:#fff!important;color:#fff!important}
 /* Forms */
 #bkd .bkd-form{display:grid;gap:16px}
 #bkd .bkd-qgrid,#bkd .bkd-two{display:grid;gap:14px}
@@ -2154,11 +2338,11 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-ok{padding:4px 0}
 #bkd .bkd-ok-tick{display:grid;place-items:center;width:52px;height:52px;margin-bottom:22px;border-radius:50%;background:var(--navy);color:#fff}
 #bkd .bkd-ok-tick .bkd-i{width:24px;height:24px;stroke-width:2.2}
-#bkd .bkd-ok h3{margin-bottom:10px!important;font-size:26px!important;font-weight:300!important;letter-spacing:-.02em!important;line-height:1.2!important}
+#bkd .bkd-ok h3{margin-bottom:10px!important;font-family:var(--display)!important;font-size:32px!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;line-height:1.15!important}
 #bkd .bkd-ok-msg{margin-bottom:22px;color:var(--slate)}
 #bkd .bkd-ok-actions{display:flex;flex-wrap:wrap;gap:10px}
 /* Section nav */
-#bkd .bkd-subnav{position:sticky;top:var(--top);z-index:40;display:none;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#bkd .bkd-subnav{position:sticky;top:var(--top);z-index:40;display:none;background:rgba(251,249,246,.97);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 @media (min-width:1000px){#bkd .bkd-subnav{display:block}}
 #bkd .bkd-subnav-in{display:flex;align-items:center;gap:32px;height:64px}
 #bkd .bkd-subnav-name{flex:none;font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap}
@@ -2170,18 +2354,25 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-subnav-wa{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--navy)}
 #bkd .bkd-subnav-wa .bkd-i{width:20px;height:20px}
 /* Facts band */
-#bkd .bkd-facts{border-bottom:1px solid var(--line)}
+#bkd .bkd-facts{background:var(--navy)}
 #bkd .bkd-facts dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0}
 #bkd .bkd-facts dl>div{padding:24px 0;min-width:0}
-#bkd .bkd-facts dl>div:nth-child(even){padding-left:20px;border-left:1px solid var(--line)}
-#bkd .bkd-facts dl>div:nth-child(n+3){border-top:1px solid var(--line)}
-#bkd .bkd-facts dt{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-#bkd .bkd-facts dd{margin:8px 0 0;font-size:clamp(17px,1.6vw,20px);font-weight:400;line-height:1.35;letter-spacing:-.01em;color:var(--navy)}
-@media (min-width:900px){#bkd .bkd-facts dl{grid-template-columns:repeat(var(--n,4),minmax(0,1fr))}#bkd .bkd-facts dl>div{padding:32px 0;border-top:0!important}#bkd .bkd-facts dl>div:nth-child(even){padding-left:0;border-left:0}#bkd .bkd-facts dl>div+div{padding-left:28px!important;border-left:1px solid var(--line)!important}}
+#bkd .bkd-facts dl>div:nth-child(even){padding-left:20px;border-left:1px solid var(--navy-line)}
+#bkd .bkd-facts dl>div:nth-child(n+3){border-top:1px solid var(--navy-line)}
+#bkd .bkd-facts dt{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-l)}
+#bkd .bkd-facts dd{margin:6px 0 0;font-family:var(--display);font-size:clamp(23px,2.2vw,30px);font-weight:var(--display-w);line-height:1.15;letter-spacing:0;color:#fff}
+@media (min-width:900px){#bkd .bkd-facts dl{grid-template-columns:repeat(var(--n,4),minmax(0,1fr))}#bkd .bkd-facts dl>div{padding:32px 0;border-top:0!important}#bkd .bkd-facts dl>div:nth-child(even){padding-left:0;border-left:0}#bkd .bkd-facts dl>div+div{padding-left:28px!important;border-left:1px solid var(--navy-line)!important}}
 /* Sections */
 #bkd .bkd-sec{padding:var(--sec) 0;scroll-margin-top:calc(var(--top) + 72px)}
-#bkd .bkd-sec-tight,#bkd .bkd-sec-flush{padding-top:0}
+#bkd .bkd-sec-tight{padding-top:0}
 #bkd .bkd-sec-mist{background:var(--mist)}
+#bkd .bkd-sec-navy{background:var(--navy);color:var(--on-navy)}
+#bkd .bkd-sec-navy .bkd-h2,#bkd .bkd-sec-navy h3{color:#fff!important}
+#bkd .bkd-sec-navy :is(.bkd-h2,.bkd-ess-h) em{color:var(--brass-l)}
+#bkd .bkd-sec-navy .bkd-label{color:var(--brass-l)}
+#bkd .bkd-sec-navy .bkd-label::before{background:var(--brass-l)}
+#bkd .bkd-sec-navy :focus-visible{outline-color:var(--brass-l)}
+#bkd .bkd-lede{margin-top:22px;max-width:620px;font-size:clamp(17px,1.5vw,19px);font-weight:300;line-height:1.65;color:var(--on-navy)}
 #bkd .bkd-split{display:grid;gap:40px}
 @media (min-width:1000px){#bkd .bkd-split{grid-template-columns:minmax(0,5fr) minmax(0,6fr);column-gap:80px;align-items:start}#bkd .bkd-split .bkd-sticky{position:sticky;top:calc(var(--top) + 112px)}}
 #bkd .bkd-sh{margin-bottom:clamp(40px,5.6vw,68px)}
@@ -2246,16 +2437,23 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-tbl td.bkd-a>*+*{margin-left:22px}
 #bkd .bkd-tbl-note{margin-top:22px}
 @media (max-width:719px){#bkd .bkd-tbl thead{display:none}#bkd .bkd-tbl,#bkd .bkd-tbl tbody,#bkd .bkd-tbl tr,#bkd .bkd-tbl td{display:block;width:100%}#bkd .bkd-tbl tr{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:22px 0;border-bottom:1px solid var(--line)}#bkd .bkd-tbl tr[hidden]{display:none}#bkd .bkd-tbl td{padding:0;border:0}#bkd .bkd-tbl td.bkd-s{grid-column:1;font-size:14px}#bkd .bkd-tbl td.bkd-p{grid-column:2;grid-row:1;text-align:right}#bkd .bkd-tbl td.bkd-a{grid-column:1/-1;margin-top:12px;text-align:left;white-space:normal}}
-/* Amenities */
-#bkd .bkd-am{display:grid;border-top:1px solid var(--line)}
-#bkd .bkd-am-i{padding:32px 0;border-bottom:1px solid var(--line)}
-#bkd .bkd-am-ic{display:grid;place-items:center;width:46px;height:46px;margin-bottom:20px;border:1px solid var(--line-2);border-radius:50%;color:var(--navy)}
-#bkd .bkd-am-ic .bkd-i{width:20px;height:20px}
-#bkd .bkd-am-i h3{margin-bottom:10px!important}
-#bkd .bkd-am-i ul{display:grid;gap:6px}
-#bkd .bkd-am-i li{font-size:15px;line-height:1.6;color:var(--slate)}
-@media (min-width:760px){#bkd .bkd-am{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:64px}}
-@media (min-width:1100px){#bkd .bkd-am{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Amenities: feature tiles + checklist (navy section) */
+#bkd .bkd-amt{display:grid;gap:1px;background:var(--navy-line);border:1px solid var(--navy-line)}
+#bkd .bkd-amt-i{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 16px;padding:24px 20px;background:var(--navy)}
+#bkd .bkd-amt-i .bkd-i{grid-row:span 2;width:28px;height:28px;margin-top:2px;color:var(--brass-l);stroke-width:1.4}
+#bkd .bkd-amt-i h3{margin:0!important;font-family:var(--display)!important;font-size:clamp(25px,2.3vw,32px)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;line-height:1.1!important}
+#bkd .bkd-amt-i p{font-size:15px;line-height:1.6;color:rgba(255,255,255,.68)}
+@media (min-width:640px){#bkd .bkd-amt{grid-template-columns:repeat(2,minmax(0,1fr))}#bkd .bkd-amt[data-n="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}#bkd .bkd-amt[data-n="1"]{grid-template-columns:1fr}#bkd .bkd-amt-i{display:block;padding:30px 26px}#bkd .bkd-amt-i h3{margin:22px 0 8px!important}}
+@media (min-width:1000px){#bkd .bkd-amt{grid-template-columns:repeat(3,minmax(0,1fr))}#bkd .bkd-amt[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}#bkd .bkd-amt[data-n="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}#bkd .bkd-amt[data-n="1"]{grid-template-columns:1fr}#bkd .bkd-amt-i{padding:40px 34px}}
+#bkd .bkd-ess{display:grid;gap:28px;margin-top:clamp(56px,7vw,88px)}
+#bkd .bkd-ess-solo{margin-top:0}
+#bkd .bkd-ess-h{font-family:var(--display)!important;font-size:clamp(30px,3vw,42px)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;line-height:1.08!important}
+#bkd .bkd-ess-h+p{margin-top:12px;max-width:340px;font-size:15px;line-height:1.6;color:rgba(255,255,255,.68)}
+#bkd .bkd-ess ul{display:grid;border-top:1px solid var(--navy-line)}
+#bkd .bkd-ess li{display:flex;align-items:flex-start;gap:14px;padding:15px 0;border-bottom:1px solid var(--navy-line);font-weight:500;line-height:1.5;color:rgba(255,255,255,.9)}
+#bkd .bkd-ess li .bkd-i{margin-top:3px;color:var(--brass-l);stroke-width:2}
+@media (min-width:640px){#bkd .bkd-ess ul{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px}}
+@media (min-width:1000px){#bkd .bkd-ess{grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:64px}}
 /* Payment */
 #bkd .bkd-steps{margin:40px 0 0!important;counter-reset:s}
 #bkd .bkd-steps li{position:relative;display:grid;grid-template-columns:44px 1fr;gap:2px 14px;padding:0 0 26px}
@@ -2266,6 +2464,8 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-steps p{font-size:15px;line-height:1.6;color:var(--slate)}
 #bkd .bkd-panel{padding:clamp(24px,4vw,48px);background:#fff}
 #bkd .bkd-panel-t{margin:0 0 24px;font-size:16px;font-weight:600;line-height:1.4;color:var(--navy)}
+#bkd #bkd-calc{--c-line:var(--line-2);--c-muted:var(--muted)}
+#bkd #bkd-calc .bkd-co-main strong{font-family:var(--display)!important;font-size:clamp(40px,4.4vw,54px);font-weight:var(--display-w);letter-spacing:0;line-height:1.05}
 /* Location */
 #bkd .bkd-map{position:relative;aspect-ratio:4/3;overflow:hidden;background:var(--mist)}
 #bkd .bkd-map iframe{position:absolute;inset:0;width:100%;height:100%;border:0;filter:grayscale(1) contrast(1.04)}
@@ -2275,11 +2475,11 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-places b{font-weight:500;color:var(--ink)}
 #bkd .bkd-places span{max-width:58%;font-size:14px;color:var(--slate);text-align:right}
 /* Why */
-#bkd .bkd-why{display:grid;border-top:1px solid var(--line)}
-#bkd .bkd-why>div{padding:32px 0;border-bottom:1px solid var(--line)}
-#bkd .bkd-why b{display:block;margin-bottom:16px;font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--brass-d)}
+#bkd .bkd-why{display:grid;border-top:1px solid var(--navy-line)}
+#bkd .bkd-why>div{padding:32px 0;border-bottom:1px solid var(--navy-line)}
+#bkd .bkd-why b{display:block;margin-bottom:14px;font-family:var(--display)!important;font-size:46px;font-style:italic;font-weight:var(--display-w);line-height:1;letter-spacing:0;color:var(--brass-l)}
 #bkd .bkd-why h3{margin-bottom:10px!important}
-#bkd .bkd-why p{font-size:15px;line-height:1.65;color:var(--slate)}
+#bkd .bkd-why p{font-size:15px;line-height:1.65;color:rgba(255,255,255,.7)}
 @media (min-width:900px){#bkd .bkd-why{grid-template-columns:repeat(3,minmax(0,1fr));column-gap:56px}}
 /* Cards */
 #bkd .bkd-cards{display:grid;gap:24px;grid-auto-flow:column;grid-auto-columns:minmax(240px,78%);overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:10px;scrollbar-width:thin}
@@ -2297,7 +2497,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-faq details{border-bottom:1px solid var(--line)}
 #bkd .bkd-faq summary{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding:22px 0;cursor:pointer;list-style:none;font-size:17px;font-weight:500;line-height:1.45;color:var(--navy)}
 #bkd .bkd-faq summary::-webkit-details-marker{display:none}
-#bkd .bkd-faq summary::after{content:"";flex:none;width:12px;height:12px;margin-top:7px;background:linear-gradient(var(--navy),var(--navy)) center/12px 1.5px no-repeat,linear-gradient(var(--navy),var(--navy)) center/1.5px 12px no-repeat;transition:transform .25s}
+#bkd .bkd-faq summary::after{content:"";flex:none;width:12px;height:12px;margin-top:7px;background:linear-gradient(var(--brass-d),var(--brass-d)) center/12px 1.5px no-repeat,linear-gradient(var(--brass-d),var(--brass-d)) center/1.5px 12px no-repeat;transition:transform .25s}
 #bkd .bkd-faq details[open] summary::after{transform:rotate(45deg)}
 #bkd .bkd-faq-a{padding:0 0 24px;max-width:640px;color:var(--slate)}
 #bkd .bkd-faq-a>*+*{margin-top:10px}
@@ -2332,7 +2532,7 @@ body.bkd-page{overflow-x:clip}
 @keyframes bkdPop{from{transform:translateY(12px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 #bkd .bkd-md-x{position:absolute;top:12px;right:12px;display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0!important;border:0!important;background:none!important;box-shadow:none!important;color:var(--navy)!important;cursor:pointer}
 #bkd .bkd-md-x .bkd-i{width:22px;height:22px}
-#bkd .bkd-md .bkd-h2{font-size:clamp(26px,3vw,32px)!important}
+#bkd .bkd-md .bkd-h2{font-size:clamp(32px,3.4vw,40px)!important}
 #bkd .bkd-md-sub{margin:10px 0 24px;color:var(--slate)}
 html.bkd-lock,html.bkd-lock body{overflow:hidden}
 html.bkd-lock #zsiq_float{display:none!important}
@@ -2352,7 +2552,7 @@ html.bkd-lock #zsiq_float{display:none!important}
 #bkd .bkd-lb-strip img{width:100%;height:100%;object-fit:cover}
 /* Placeholder */
 #bkd .bkd-ph{display:grid;place-items:center;align-content:center;width:100%;height:100%;padding:24px;background:linear-gradient(145deg,var(--navy) 0%,var(--navy-2) 100%);text-align:center}
-#bkd .bkd-ph b{display:block;font-size:clamp(22px,3vw,40px);font-weight:300;letter-spacing:-.02em;line-height:1.1;color:#fff}
+#bkd .bkd-ph b{display:block;font-family:var(--display)!important;font-size:clamp(26px,3.4vw,46px);font-weight:var(--display-w);letter-spacing:var(--display-ls);line-height:1.05;color:#fff}
 #bkd .bkd-ph span{display:block;margin-top:12px;font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--brass)}
 /* Reveal */
 #bkd.bkd-js .bkd-rv{opacity:0;transform:translateY(18px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
@@ -2640,7 +2840,15 @@ JS;
 			add_action(
 				'wp_head',
 				function () {
-					echo '<style id="bkd-css">' . blockke_dev_css() . blockke_dev_calc_css() . "</style>\n";
+					$font = trim( preg_replace( '/[^A-Za-z0-9 ]/', '', (string) blockke_dev_config()['display_font'] ) );
+					if ( '' !== $font ) {
+						echo '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+							. '<link id="bkd-font" rel="stylesheet" href="' . esc_url( 'https://fonts.googleapis.com/css2?family=' . str_replace( ' ', '+', $font ) . ':ital@0;1&display=swap' ) . "\">\n";
+						$display = '#bkd{--display:"' . $font . '",Georgia,"Times New Roman",serif}';
+					} else {
+						$display = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
+					}
+					echo '<style id="bkd-css">' . blockke_dev_css() . $display . blockke_dev_calc_css() . "</style>\n";
 				},
 				99
 			);
