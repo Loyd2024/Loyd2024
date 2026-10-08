@@ -60,7 +60,9 @@
  * v1.3 (2026-10-08): ad landing pages, and a "Who it suits best" section with the investor view, read from
  * the description's "Who ... suits" and "... for Investors" sections. Optional questions after a quick
  * enquiry, a timeline question, international phone examples for visitors abroad, and the visitor's
- * name in the thank-you heading kept in the heading font.
+ * name in the thank-you heading kept in the heading font. Photo captions from the Media Library: on the
+ * gallery and in the viewer, and photos captioned with an amenity ("Indoor heated pool") as a photo strip
+ * in Amenities (swipe on phones, full rows on desktop).
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -1566,6 +1568,26 @@ JS;
 		);
 	}
 
+	/** Photos whose caption names an amenity ("Indoor heated pool", "Sky Lounge"), in gallery order, for the Amenities photo strip. */
+	function blockke_dev_amenity_photos( $captions ) {
+		$lib = blockke_dev_amenity_lib();
+		$out = array();
+		foreach ( $captions as $aid => $cap ) {
+			$lc  = strtolower( $cap );
+			$hit = (bool) preg_match( '/lobby|reception|concierge|roof ?top|amenit/u', $lc );
+			foreach ( $lib as $l ) {
+				if ( $hit ) {
+					break;
+				}
+				$hit = (bool) preg_match( $l[0], $lc );
+			}
+			if ( $hit ) {
+				$out[] = $aid;
+			}
+		}
+		return array_slice( $out, 0, 8 );
+	}
+
 	/** The Amenities section's own introduction, if the description has one. */
 	function blockke_dev_amenity_intro( $sections ) {
 		$ai = blockke_dev_find( $sections, '/amenit|facilit|lifestyle/i', '/finish|spec/i' );
@@ -2033,6 +2055,13 @@ JS;
 				}
 			}
 		}
+		$captions = array(); // Media Library captions, e.g. "Indoor heated pool"
+		foreach ( $ids as $aid ) {
+			$cap = trim( blockke_dev_text( (string) wp_get_attachment_caption( $aid ) ) );
+			if ( '' !== $cap ) {
+				$captions[ $aid ] = mb_substr( $cap, 0, 80 );
+			}
+		}
 
 		// Text
 		$intro_p = array();
@@ -2170,6 +2199,7 @@ JS;
 			'units'      => $units,
 			'subs'       => $subs,
 			'images'     => $ids,
+			'captions'   => $captions,
 			'video'      => blockke_dev_video( $id ),
 			'facts'      => blockke_dev_facts( $id, $kv, $units, $completion ),
 			'overview'   => array(
@@ -2566,7 +2596,9 @@ JS;
 		if ( $n_img >= 3 ) {
 			$o[] = '<section class="bkd-sec bkd-sec-tight" id="bkd-gallery"><div class="bkd-wrap"><div class="bkd-gal bkd-rv">';
 			foreach ( array_slice( $imgs, 0, 5 ) as $i => $aid ) {
-				$o[] = '<button type="button" data-bkd-open="' . $i . '" aria-label="Open photo ' . ( $i + 1 ) . '">'
+				$cap = isset( $d['captions'][ $aid ] ) ? $d['captions'][ $aid ] : '';
+				$o[] = '<button type="button" data-bkd-open="' . $i . '" aria-label="Open photo ' . ( $i + 1 ) . ( $cap ? ': ' . esc_attr( $cap ) : '' ) . '">'
+					. ( $cap ? '<span class="bkd-gal-cap">' . $e( $cap ) . '</span>' : '' )
 					. blockke_dev_img( $aid, 'large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => 0 === $i ? '(min-width: 900px) 66vw, 100vw' : '(min-width: 900px) 33vw, 50vw', 'alt' => blockke_dev_alt( $aid, $d['short'] . ' photo ' . ( $i + 1 ) ), 'data-ph' => $d['short'] ) )
 					. '</button>';
 			}
@@ -2621,6 +2653,16 @@ JS;
 			$am  = $d['amen'];
 			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-amenities"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Amenities</p><h2 class="bkd-h2">What comes <em>with the keys.</em></h2>'
 				. ( $d['amen_intro'] ? '<p class="bkd-lede">' . $e( $d['amen_intro'] ) . '</p>' : '' ) . '</div>';
+			$amp = blockke_dev_amenity_photos( $d['captions'] );
+			if ( count( $amp ) >= 2 ) { // captioned amenity photos, swipeable on phones; each opens the gallery
+				$o[] = '<div class="bkd-amp bkd-rv" role="list" data-n="' . count( $amp ) . '">';
+				foreach ( $amp as $aid ) {
+					$o[] = '<figure class="bkd-amp-i" role="listitem"><button type="button" data-bkd-open="' . (int) array_search( $aid, $imgs, true ) . '" aria-label="' . esc_attr( 'Photo: ' . $d['captions'][ $aid ] ) . '">'
+						. blockke_dev_img( $aid, 'large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => '(min-width: 1000px) 30vw, 80vw', 'alt' => '' ) )
+						. '</button><figcaption>' . $e( $d['captions'][ $aid ] ) . '</figcaption></figure>';
+				}
+				$o[] = '</div>';
+			}
 			if ( $am['tiles'] ) {
 				$o[] = '<div class="bkd-amt bkd-rv" data-n="' . count( $am['tiles'] ) . '">';
 				foreach ( $am['tiles'] as $t ) {
@@ -2991,6 +3033,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-gal button:first-child{grid-column:1/-1;aspect-ratio:16/9}
 #bkd .bkd-gal img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover;transition:transform .8s ease}
 #bkd .bkd-gal button:hover img{transform:scale(1.03)}
+#bkd .bkd-gal-cap{position:absolute;left:0;right:0;bottom:0;z-index:1;padding:28px 14px 12px;background:linear-gradient(180deg,rgba(13,36,64,0),rgba(13,36,64,.72));color:#fff;font-size:13px;font-weight:500;line-height:1.35;text-align:left;pointer-events:none}
 #bkd .bkd-gal button:nth-child(n+4){display:none}
 @media (min-width:900px){#bkd .bkd-gal{grid-template-columns:repeat(6,minmax(0,1fr));gap:16px}#bkd .bkd-gal button:first-child{grid-column:span 4;grid-row:span 2;aspect-ratio:auto}#bkd .bkd-gal button:nth-child(2),#bkd .bkd-gal button:nth-child(3){grid-column:span 2}}
 #bkd .bkd-gal-foot{margin-top:22px;align-items:center}
@@ -3017,7 +3060,21 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-tbl td.bkd-a>*+*{margin-left:22px}
 #bkd .bkd-tbl-note{margin-top:22px}
 @media (max-width:719px){#bkd .bkd-tbl thead{display:none}#bkd .bkd-tbl,#bkd .bkd-tbl tbody,#bkd .bkd-tbl tr,#bkd .bkd-tbl td{display:block;width:100%}#bkd .bkd-tbl tr{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:22px 0;border-bottom:1px solid var(--line)}#bkd .bkd-tbl tr[hidden]{display:none}#bkd .bkd-tbl td{padding:0;border:0}#bkd .bkd-tbl td.bkd-s{grid-column:1;font-size:14px}#bkd .bkd-tbl td.bkd-p{grid-column:2;grid-row:1;text-align:right}#bkd .bkd-tbl td.bkd-a{grid-column:1/-1;margin-top:12px;text-align:left;white-space:normal}}
-/* Amenities: feature tiles + checklist (navy section) */
+/* Amenities: captioned photos, feature tiles + checklist (navy section) */
+#bkd .bkd-amp{display:grid;grid-auto-flow:column;grid-auto-columns:80%;gap:12px;margin:0 calc(var(--gutter) * -1) clamp(28px,3.4vw,40px);padding:0 var(--gutter);overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding:0 var(--gutter);overscroll-behavior-x:contain;scrollbar-width:none}
+#bkd .bkd-amp::-webkit-scrollbar{display:none}
+#bkd .bkd-amp-i{position:relative;margin:0;aspect-ratio:4/3;overflow:hidden;background:var(--navy-2);scroll-snap-align:start}
+#bkd .bkd-amp-i button{position:absolute;inset:0;display:block;width:100%;margin:0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;cursor:zoom-in}
+#bkd .bkd-amp-i img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover;transition:transform .8s ease}
+#bkd .bkd-amp-i button:hover img{transform:scale(1.03)}
+#bkd .bkd-amp-i figcaption{position:absolute;left:0;right:0;bottom:0;padding:44px 18px 16px;background:linear-gradient(180deg,rgba(13,36,64,0),rgba(13,36,64,.86));font-family:var(--display)!important;font-size:clamp(21px,2vw,25px);font-weight:var(--display-w);line-height:1.15;color:#fff;pointer-events:none}
+@media (min-width:700px){#bkd .bkd-amp{grid-auto-columns:calc((100% - 24px) / 2.4)}}
+@media (min-width:1000px){
+#bkd .bkd-amp{grid-auto-flow:row;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-left:0;margin-right:0;padding:0;overflow:visible}
+#bkd .bkd-amp[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+#bkd .bkd-amp[data-n="4"],#bkd .bkd-amp[data-n="5"],#bkd .bkd-amp[data-n="8"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+#bkd .bkd-amp[data-n="5"] .bkd-amp-i:nth-child(n+5),#bkd .bkd-amp[data-n="7"] .bkd-amp-i:nth-child(n+7){display:none}
+}
 #bkd .bkd-amt{display:grid;gap:1px;background:var(--navy-line);border:1px solid var(--navy-line)}
 #bkd .bkd-amt-i{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 16px;padding:24px 20px;background:var(--navy)}
 #bkd .bkd-amt-i .bkd-i{grid-row:span 2;width:28px;height:28px;margin-top:2px;color:var(--brass-l);stroke-width:1.4}
@@ -3378,7 +3435,7 @@ CSS;
   /* gallery viewer */
   var G=C.gallery||[],lb=document.getElementById('bkd-lb'),lbImg=document.getElementById('bkd-lb-img'),strip=document.getElementById('bkd-lb-strip'),cur=0,lbFocus=null,built=false;
   function build(){if(built){return;}built=true;G.forEach(function(p,i){var b=document.createElement('button');b.type='button';b.setAttribute('aria-label','Photo '+(i+1));b.innerHTML='<img loading="lazy" alt="" src="'+esc(p[2]||p[0])+'">';b.addEventListener('click',function(){show(i);});strip.appendChild(b);});}
-  function show(i){if(!G.length){return;}cur=(i+G.length)%G.length;lbImg.src=G[cur][0];lbImg.alt=G[cur][1]||'';document.getElementById('bkd-lb-n').textContent=(cur+1)+' / '+G.length;
+  function show(i){if(!G.length){return;}cur=(i+G.length)%G.length;lbImg.src=G[cur][0];lbImg.alt=G[cur][1]||'';document.getElementById('bkd-lb-n').textContent=(cur+1)+' / '+G.length+(G[cur][3]?'  ·  '+G[cur][3]:'');
     $$('button',strip).forEach(function(b,j){b.classList.toggle('on',j===cur);});if(strip.children[cur]){strip.children[cur].scrollIntoView({block:'nearest',inline:'center'});}}
   function openLb(i){if(!G.length){return;}build();lbFocus=document.activeElement;lb.hidden=false;lock(true);show(i);lb.querySelector('.bkd-lb-x').focus();track('gallery_open');}
   function closeLb(){lb.hidden=true;lock(false);if(lbFocus){lbFocus.focus();}}
@@ -3558,7 +3615,7 @@ JS;
 						if ( ! $full ) {
 							$full = wp_get_attachment_url( $aid );
 						}
-						$gallery[] = array( $full, blockke_dev_alt( $aid, $data['short'] ), wp_get_attachment_image_url( $aid, 'thumbnail' ) );
+						$gallery[] = array( $full, blockke_dev_alt( $aid, $data['short'] ), wp_get_attachment_image_url( $aid, 'thumbnail' ), isset( $data['captions'][ $aid ] ) ? $data['captions'][ $aid ] : '' );
 					}
 					$js = array(
 						'id'       => $data['id'],
