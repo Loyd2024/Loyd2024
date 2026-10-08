@@ -95,7 +95,7 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 
 To roll back, deactivate the snippet. Every page returns to the theme's own template and calculator.
 
-**Upgrading from v1.0.** The new version is staged as its own snippet, *… v1.2*, with priority 5, so it runs before v1.0 (priority 10). The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the other skips itself. To upgrade, switch v1.2 on, and it takes over at once. Then switch v1.0 off, or keep it as a fallback. To go back, switch v1.2 off.
+**Upgrading.** Each version is staged as its own snippet with a lower priority number than the one before, so it runs first: v1.2 at priority 4, v1.1 at 5, v1.0 at 10. The whole file is wrapped in `if ( ! function_exists( 'blockke_dev_config' ) )`, so whichever version runs first is the one used, and the others skip themselves. To upgrade, switch the new snippet on, and it takes over at once. Then switch the older ones off, or keep the newest of them as a fallback. To go back, switch the new one off.
 
 WPCode runs a cached copy of each active snippet, refreshed when a snippet is saved in WPCode. A snippet edited through the API stays as it was on the site until someone clicks **Update** on it, or on any other snippet.
 
