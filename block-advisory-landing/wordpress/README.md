@@ -59,7 +59,7 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 ## 4. Ad landing pages (for Google Ads and other campaigns)
 
-Every for-sale listing has a landing page for paid campaigns, with nothing to set up: its URL plus `?lp=1`, for example `https://block.ke/property/santorini-residences-westlands-1-4-bed-apartments-lofts/?lp=1`. For a tidier address, create a page (for example `lp/santorini-residences`) and add a custom field `bke_lp_listing` holding the listing's ID. The page itself can stay empty.
+Every for-sale listing has a landing page for paid campaigns, with nothing to set up: its URL plus `?lp=1`, for example `https://block.ke/property/santorini-residences-westlands-1-4-bed-apartments-lofts/?lp=1`. For a tidier address, create a page under the private page *Landing pages* (slug `lp`) and add a custom field `bke_lp_listing` holding the listing's ID. Santorini's is ready as a draft: `https://block.ke/lp/santorini-residences/` (page 42708, listing 40401); publish it once the v1.3 snippet is on. On these pages, tick Rank Math's *No Index* so they stay out of the sitemap, and set the listing's main photo as the featured image so WhatsApp and Facebook link previews show it. The page's own text appears only if the snippet is switched off, so a line linking to the listing is a good fallback.
 
 It shows the development layout's content, built for visitors arriving from an ad:
 
