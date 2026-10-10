@@ -4137,7 +4137,8 @@ html.bkd-lock #zsiq_float{display:none!important}
 #bkd .bkd-seg .bkd-chips{display:grid;grid-template-columns:1fr 1fr;gap:0}
 #bkd .bkd-seg .bkd-chip span{justify-content:center;width:100%;min-height:46px;font-size:14px;font-weight:600}
 #bkd .bkd-seg .bkd-chip+.bkd-chip span{border-left:0}
-#bkd .bkd-sf .bkd-chip span{min-width:52px;justify-content:center}
+#bkd .bkd-sf .bkd-chip span{min-width:44px;padding:0 10px;justify-content:center}
+#bkd .bkd-sf .bkd-chips{gap:6px}
 @media print{#bkd .bkd-subnav,#bkd .bkd-mb,#bkd .bkd-md,#bkd .bkd-lb,#bkd .bkd-quick,#bkd .bkd-formcard,#bkd .bkd-map,#bkd .bkd-un,#bkd .bkd-hero-tools,#bkd .bkd-sim-act,#bkd .bkd-card-all,#bkd .bkd-alt{display:none!important}#bkd .bkd-rv{opacity:1!important;transform:none!important}}
 CSS;
 	}
