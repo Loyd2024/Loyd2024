@@ -79,6 +79,7 @@
  * or links away: "Send me 3 alternatives" is an enquiry, and one link to similar homes appears only after
  * the visitor has enquired. Similar homes are cached per listing (bkd_sim_{id}) and refreshed whenever a
  * listing changes. Config: search, similar_*, neighbours, budget_bands, unit_switcher, auto_units and more.
+ * The headline price reads "Up to" for a ceiling price and "Price" for a ready home's own price, not "From".
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -1948,14 +1949,20 @@ JS;
 		if ( array_key_exists( $id, $cache ) ) {
 			return $cache[ $id ];
 		}
-		$t    = null;
-		$slug = sanitize_title( (string) get_post_meta( $id, 'bke_dev_area', true ) );
-		if ( '' !== $slug ) {
-			$t = get_term_by( 'slug', $slug, 'property_area' );
+		$t      = null;
+		$master = (int) blockke_dev_pm( $id, 'property_subunits_master' );
+		$master = $master && $master !== $id ? $master : 0;
+		foreach ( array_filter( array( $id, $master ) ) as $src ) { // the listing's own choice, else its development's
+			$slug = sanitize_title( (string) get_post_meta( $src, 'bke_dev_area', true ) );
+			if ( '' !== $slug ) {
+				$t = get_term_by( 'slug', $slug, 'property_area' );
+				if ( $t ) {
+					break;
+				}
+			}
 		}
 		if ( ! $t ) {
-			$master = (int) get_post_meta( $id, 'property_subunits_master', true );
-			$terms  = $master && $master !== $id ? get_the_terms( $master, 'property_area' ) : false;
+			$terms = $master ? get_the_terms( $master, 'property_area' ) : false;
 			if ( ! is_array( $terms ) || ! $terms ) {
 				$terms = get_the_terms( $id, 'property_area' );
 			}
@@ -1996,15 +2003,52 @@ JS;
 		return $out;
 	}
 
-	/** What a home is compared on: 'studio', '1', '2', '3' or '4' (4 and more); '' for ranges ("2–4 Bed Lofts"), developments and non-homes. */
+	/**
+	 * The few listing fields similar homes read, loaded for a whole pool in one query (not every listing's ~130
+	 * meta rows, view statistics included). Listings not primed fall back to get_post_meta().
+	 */
+	function blockke_dev_pm_keys() {
+		return array( 'property_bedrooms', 'property_size', 'property_price', 'property_label', 'property_label_before', 'property_subunits_master', 'property_has_subunits' );
+	}
+
+	function blockke_dev_pm_prime( $ids, $set = null ) {
+		static $map = array();
+		if ( null !== $set ) {
+			return isset( $map[ $set ] ) ? $map[ $set ] : null;
+		}
+		global $wpdb;
+		$ids = array_values( array_diff( array_map( 'intval', (array) $ids ), array_keys( $map ) ) );
+		if ( ! $ids ) {
+			return null;
+		}
+		$keys = blockke_dev_pm_keys();
+		$rows = $wpdb->get_results( 'SELECT post_id, meta_key, meta_value FROM ' . $wpdb->postmeta . ' WHERE post_id IN (' . implode( ',', $ids ) . ") AND meta_key IN ('" . implode( "','", array_map( 'esc_sql', $keys ) ) . "')" ); // phpcs:ignore WordPress.DB.PreparedSQL
+		foreach ( $ids as $id ) {
+			$map[ $id ] = array_fill_keys( $keys, '' );
+		}
+		foreach ( (array) $rows as $r ) {
+			if ( '' === $map[ (int) $r->post_id ][ $r->meta_key ] ) {
+				$map[ (int) $r->post_id ][ $r->meta_key ] = (string) $r->meta_value;
+			}
+		}
+		return null;
+	}
+
+	function blockke_dev_pm( $id, $key ) {
+		$m = blockke_dev_pm_prime( array(), (int) $id );
+		return is_array( $m ) && array_key_exists( $key, $m ) ? $m[ $key ] : get_post_meta( (int) $id, $key, true );
+	}
+
+	/** What a home is compared on: 'studio', '1', '2', '3' or '4' (4 and more); '' for ranges ("2–4 Bed Lofts", "Studio & 1 Bed"), developments and non-homes. */
 	function blockke_dev_sim_key( $id ) {
 		$title = strtolower( blockke_dev_text( get_the_title( $id ) ) );
-		if ( preg_match( '/\d+\s*(?:,|&|and|–|—|-|to)\s*\d+\s*(?:-\s*)?(?:bed|br\b)/u', $title ) ) {
+		if ( preg_match( '/(?:\d+|studios?)(?:\s*-?\s*bed(?:room)?s?)?\s*(?:,|&|and|–|—|-|to)\s*\d+\s*(?:-\s*)?(?:bed|br\b)/u', $title ) ) {
 			return '';
 		}
-		$beds = (int) get_post_meta( $id, 'property_bedrooms', true );
-		$sqft = (float) get_post_meta( $id, 'property_size', true );
-		if ( preg_match( '/\bstudio|bedsitter/', $title ) || has_term( 'studio-apartments', 'property_category', $id ) || ( $sqft > 0 && $sqft < 500 && $beds <= 1 ) ) {
+		$beds  = (int) blockke_dev_pm( $id, 'property_bedrooms' );
+		$sqft  = (float) blockke_dev_pm( $id, 'property_size' );
+		$named = preg_match( '/\b(?:[1-9]|one|two|three|four|five)\s*-?\s*(?:bed|br\b)/u', $title ); // "1 Bedroom" beats the size guess
+		if ( preg_match( '/\bstudio|bedsitter/', $title ) || has_term( 'studio-apartments', 'property_category', $id ) || ( ! $named && $sqft > 0 && $sqft < 500 && $beds <= 1 ) ) {
 			return 'studio';
 		}
 		return $beds > 0 ? (string) min( 4, $beds ) : '';
@@ -2012,7 +2056,7 @@ JS;
 
 	/** 'upto' when the price is a ceiling ("Up to"), 'unit' when it is per square foot or metre (offices); else ''. */
 	function blockke_dev_price_flag( $id ) {
-		$l = strtolower( (string) get_post_meta( $id, 'property_label', true ) . ' ' . (string) get_post_meta( $id, 'property_label_before', true ) );
+		$l = strtolower( (string) blockke_dev_pm( $id, 'property_label' ) . ' ' . (string) blockke_dev_pm( $id, 'property_label_before' ) );
 		if ( preg_match( '/sq\.?\s*f|sqft|sq\.?\s*m\b|sqm|m²|per\s+(?:sq|square)/u', $l ) ) {
 			return 'unit';
 		}
@@ -2045,11 +2089,11 @@ JS;
 
 	/** One key per development, so similar homes show one card per building: its master, else its project, else itself. */
 	function blockke_dev_dev_key( $id ) {
-		$m = (int) get_post_meta( $id, 'property_subunits_master', true );
+		$m = (int) blockke_dev_pm( $id, 'property_subunits_master' );
 		if ( $m && $m !== (int) $id ) {
 			return 'm' . $m;
 		}
-		if ( '1' === (string) get_post_meta( $id, 'property_has_subunits', true ) ) {
+		if ( '1' === (string) blockke_dev_pm( $id, 'property_has_subunits' ) ) {
 			return 'm' . (int) $id;
 		}
 		$p = blockke_dev_first_term( $id, 'property_project' );
@@ -2060,17 +2104,17 @@ JS;
 		$pid   = (int) $pid;
 		$areas = get_the_terms( $pid, 'property_area' );
 		$proj  = blockke_dev_first_term( $pid, 'property_project' );
-		$m     = (int) get_post_meta( $pid, 'property_subunits_master', true );
+		$m     = (int) blockke_dev_pm( $pid, 'property_subunits_master' );
 		return array(
 			'id'      => $pid,
 			'master'  => $m && $m !== $pid ? $m : 0,
-			'is_dev'  => '1' === (string) get_post_meta( $pid, 'property_has_subunits', true ),
+			'is_dev'  => '1' === (string) blockke_dev_pm( $pid, 'property_has_subunits' ),
 			'project' => $proj ? (int) $proj->term_id : 0,
 			'dkey'    => blockke_dev_dev_key( $pid ),
 			'key'     => blockke_dev_sim_key( $pid ),
-			'price'   => (float) get_post_meta( $pid, 'property_price', true ),
+			'price'   => (float) blockke_dev_pm( $pid, 'property_price' ),
 			'flag'    => blockke_dev_price_flag( $pid ),
-			'sqft'    => (float) get_post_meta( $pid, 'property_size', true ),
+			'sqft'    => (float) blockke_dev_pm( $pid, 'property_size' ),
 			'areas'   => is_array( $areas ) ? array_map( 'intval', wp_list_pluck( $areas, 'term_id' ) ) : array(),
 			'offplan' => blockke_dev_is_offplan( $pid ),
 			'date'    => (int) get_post_time( 'U', true, $pid ),
@@ -2088,7 +2132,7 @@ JS;
 		$tax = array(
 			'relation' => 'AND',
 			array( 'taxonomy' => 'property_action_category', 'field' => 'slug', 'terms' => array( 'rent' === $action ? 'for-rent' : 'for-sale' ) ),
-			array( 'taxonomy' => 'property_status', 'field' => 'slug', 'terms' => array( 'sold' ), 'operator' => 'NOT IN' ),
+			array( 'taxonomy' => 'property_status', 'field' => 'slug', 'terms' => array( 'sold', 'let' ), 'operator' => 'NOT IN' ),
 			array( 'taxonomy' => 'property_category', 'field' => 'slug', 'terms' => array( 'commercial', 'offices', 'warehouses', 'land', 'agricultural', 'industrial-land', 'residential-land' ), 'operator' => 'NOT IN' ),
 		);
 		if ( $area_ids ) {
@@ -2107,6 +2151,17 @@ JS;
 		} else {
 			$meta = array( array( 'key' => 'property_bedrooms', 'value' => (int) $key, 'compare' => '=', 'type' => 'NUMERIC' ) );
 		}
+		if ( 'dev' !== $key ) { // homes, not developments: keeps masters from using up the cap
+			$meta = array(
+				'relation' => 'AND',
+				$meta,
+				array(
+					'relation' => 'OR',
+					array( 'key' => 'property_has_subunits', 'compare' => 'NOT EXISTS' ),
+					array( 'key' => 'property_has_subunits', 'value' => '1', 'compare' => '!=' ),
+				),
+			);
+		}
 		$q   = new WP_Query(
 			array(
 				'post_type'           => 'estate_property',
@@ -2122,14 +2177,22 @@ JS;
 			)
 		);
 		$ids = array_map( 'intval', $q->posts );
-		if ( count( $ids ) >= $cap && $limit <= 0 ) {
+		if ( count( $ids ) >= $cap && $limit <= 0 && ! get_transient( 'bkd_sim_cap_warn' ) ) {
+			set_transient( 'bkd_sim_cap_warn', 1, DAY_IN_SECONDS );
 			error_log( 'BLOCK development page: similar homes pool reached ' . $cap . ' listings (' . $action . ', ' . $key . ', areas ' . implode( ',', (array) $area_ids ) . '); raise pool_cap if matches go missing.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
 		}
 		if ( $ids && function_exists( '_prime_post_caches' ) ) {
-			_prime_post_caches( $ids, true, true );
+			_prime_post_caches( $ids, true, false ); // posts and terms; the few meta fields come from blockke_dev_pm_prime()
 		}
+		blockke_dev_pm_prime( $ids );
 		$rows = array();
 		foreach ( $ids as $pid ) {
+			// listings tagged both for sale and for rent: keep each price with its own kind (monthly rents out of sales, sale prices out of rentals)
+			$price   = (float) blockke_dev_pm( $pid, 'property_price' );
+			$monthly = false !== stripos( (string) blockke_dev_pm( $pid, 'property_label' ), 'month' );
+			if ( 'rent' === $action ? ( $price > 2000000 || ( 'rent' !== blockke_dev_action( $pid ) && ! $monthly ) ) : ( $monthly || ( $price > 0 && $price < 1000000 && 'unit' !== blockke_dev_price_flag( $pid ) ) ) ) {
+				continue;
+			}
 			$rows[] = blockke_dev_sim_row( $pid );
 		}
 		return $rows;
@@ -2142,6 +2205,36 @@ JS;
 			$s += 0.5 * abs( log( $r['sqft'] / $s0 ) );
 		}
 		return $s + ( $r['offplan'] !== $off0 ? 0.1 : 0 );
+	}
+
+	/** The editor's "Similar listings (IDs)" for this page, in their order (tier 0): published, same Buy/Rent, not sold or let, one per development. */
+	function blockke_dev_sim_picks( $d, $n, &$seen ) {
+		$c      = $d['ctx'];
+		$picked = array();
+		$manual = array_values( array_filter( array_map( 'intval', preg_split( '/[\s,]+/', (string) get_post_meta( $d['id'], 'bke_dev_similar', true ) ) ) ) );
+		if ( ! $manual ) {
+			return $picked;
+		}
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $manual, true, false );
+		}
+		blockke_dev_pm_prime( $manual );
+		foreach ( $manual as $pid ) {
+			if ( count( $picked ) >= $n ) {
+				break;
+			}
+			if ( $pid === (int) $d['id'] || 'estate_property' !== get_post_type( $pid ) || 'publish' !== get_post_status( $pid ) || blockke_dev_action( $pid ) !== $c['action'] || has_term( array( 'sold', 'let' ), 'property_status', $pid ) ) {
+				continue;
+			}
+			$r = blockke_dev_sim_row( $pid );
+			if ( isset( $seen[ $r['dkey'] ] ) ) {
+				continue;
+			}
+			$seen[ $r['dkey'] ] = 1;
+			$r['tier']          = 0;
+			$picked[]           = $r;
+		}
+		return $picked;
 	}
 
 	/**
@@ -2189,26 +2282,7 @@ JS;
 			}
 		};
 
-		// 0: the editor's picks, in their order
-		$manual = array_values( array_filter( array_map( 'intval', preg_split( '/[\s,]+/', (string) get_post_meta( $d['id'], 'bke_dev_similar', true ) ) ) ) );
-		if ( $manual && function_exists( '_prime_post_caches' ) ) {
-			_prime_post_caches( $manual, true, true );
-		}
-		foreach ( $manual as $pid ) {
-			if ( count( $picked ) >= $n ) {
-				break;
-			}
-			if ( $pid === (int) $d['id'] || 'estate_property' !== get_post_type( $pid ) || 'publish' !== get_post_status( $pid ) || blockke_dev_action( $pid ) !== $c['action'] ) {
-				continue;
-			}
-			$r = blockke_dev_sim_row( $pid );
-			if ( isset( $seen[ $r['dkey'] ] ) ) {
-				continue;
-			}
-			$seen[ $r['dkey'] ] = 1;
-			$r['tier']          = 0;
-			$picked[]           = $r;
-		}
+		$picked = array_merge( $picked, blockke_dev_sim_picks( $d, $n, $seen ) ); // 0: the editor's picks, in their order
 
 		if ( $main ) {
 			$key  = $c['key'];
@@ -2261,8 +2335,8 @@ JS;
 		$p0     = (float) $d['price_from'];
 		$main   = (int) $c['area_id'];
 		$rings  = $main ? blockke_dev_neighbours( $c['area_slug'] ) : array( array(), array() );
-		$picked = array();
 		$seen   = array( $c['dkey'] => 1 );
+		$picked = blockke_dev_sim_picks( $d, $n, $seen );
 		$add    = function ( $rows, $tier, $banded, $by_date = false ) use ( &$picked, &$seen, $n, $c, $d, $band, $p0 ) {
 			usort(
 				$rows,
@@ -2322,13 +2396,23 @@ JS;
 		return ( '4' === (string) $key ? '4+ bedroom ' : $key . '-bedroom ' ) . ( $rent ? 'rentals' : 'homes' );
 	}
 
-	/** For links into the site search: "2-bed" (or "2+ bed" when the search reads bedrooms as a minimum), "4+ bed"; '' for studios. */
-	function blockke_dev_beds_label( $key ) {
+	/**
+	 * Bedrooms for links into the site search: '' for studios and ranges. With beds_mode 'exact' a 5-bed home links
+	 * to 5 bedrooms (similar homes still group 4 and more); with 'min' the search reads "at least", so 4 stays 4.
+	 */
+	function blockke_dev_link_beds( $c ) {
 		$cfg = blockke_dev_config();
-		if ( ! ctype_digit( (string) $key ) ) {
+		if ( ! ctype_digit( (string) $c['key'] ) ) {
 			return '';
 		}
-		return '4' === (string) $key || 'min' === $cfg['beds_mode'] ? $key . '+ bed' : $key . '-bed';
+		return '4' === (string) $c['key'] && 'min' !== $cfg['beds_mode'] ? (string) min( 6, max( 4, (int) $c['beds'] ) ) : (string) $c['key'];
+	}
+
+	/** "2-bed", or "2+ bed" when the site search reads bedrooms as a minimum; '' for studios and ranges. */
+	function blockke_dev_beds_label( $c ) {
+		$cfg = blockke_dev_config();
+		$b   = blockke_dev_link_beds( $c );
+		return '' === $b ? '' : ( 'min' === $cfg['beds_mode'] ? $b . '+ bed' : $b . '-bed' );
 	}
 
 	/** A link into the site's search results: area name, Buy/Rent, bedrooms and a price range. */
@@ -2392,36 +2476,49 @@ JS;
 		if ( $c['sim_off'] ) {
 			return null;
 		}
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v14|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'] ) ) );
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v14b|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'] ) ) );
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			return $hit['block'];
 		}
-		$rent = 'rent' === $c['action'];
-		$res  = null;
+		$rent  = 'rent' === $c['action'];
+		$res   = null;
+		$units = null;
+		$min   = (int) $cfg['similar_min'];
+		$picks = function ( $r ) {
+			return in_array( 0, array_map( 'intval', wp_list_pluck( $r['rows'], 'tier' ) ), true );
+		};
 		if ( 'master' !== $c['kind'] && '' !== $c['key'] && ! empty( $cfg['similar_units'] ) ) {
-			$res = blockke_dev_similar_units( $d );
-			if ( count( $res['rows'] ) < (int) $cfg['similar_min'] ) {
-				$res = null;
+			$units = blockke_dev_similar_units( $d );
+			if ( count( $units['rows'] ) >= $min || $picks( $units ) ) { // the editor's picks are never thrown away
+				$res = $units;
 			}
 		}
 		if ( ! $res ) {
 			$res = blockke_dev_similar_devs( $d );
-			if ( count( $res['rows'] ) < (int) $cfg['similar_min'] ) {
-				$res = array( 'mode' => 'empty', 'rows' => array() );
+			if ( count( $res['rows'] ) < $min && ! $picks( $res ) ) {
+				// developments are short too: show the one or two homes found rather than "none"
+				$res = $units && $units['rows'] ? $units : ( $res['rows'] ? $res : array( 'mode' => 'empty', 'rows' => array() ) );
 			}
 		}
 		$area   = $c['area_name'];
 		$em     = function ( $s ) {
 			return '<em>' . esc_html( $s ) . '</em>';
 		};
-		$tiers  = array_unique( wp_list_pluck( $res['rows'], 'tier' ) );
+		$tiers  = array_values( array_unique( array_map( 'intval', wp_list_pluck( $res['rows'], 'tier' ) ) ) );
 		$around = (bool) array_intersect( $tiers, array( 3, 5 ) );
+		$mixed  = false; // the editor's picks: a different kind of home, or outside the area
+		foreach ( $res['rows'] as $r ) {
+			if ( 0 === (int) $r['tier'] ) {
+				$mixed  = $mixed || ( 'units' === $res['mode'] && ( $r['is_dev'] || $r['key'] !== $c['key'] ) );
+				$around = $around || ! $c['area_id'] || ! in_array( $c['area_id'], $r['areas'], true );
+			}
+		}
 		$phrase = blockke_dev_key_phrase( 'units' === $res['mode'] ? $c['key'] : '', $rent );
-		$beds   = 'units' === $res['mode'] ? blockke_dev_beds_label( $c['key'] ) : '';
+		$beds   = 'units' === $res['mode'] ? blockke_dev_beds_label( $c ) : '';
 		if ( 'units' === $res['mode'] ) {
-			if ( in_array( 4, $tiers, true ) ) {
+			if ( $mixed || in_array( 4, $tiers, true ) ) {
 				$title = 'Similar ' . ( $rent ? 'rentals' : 'homes' ) . ( $area ? ( $around ? ' in and around ' : ' in ' ) . $em( $area ) : '' );
 			} elseif ( $around && $area ) {
 				$title = esc_html( ucfirst( $phrase ) ) . ' in and around ' . $em( $area );
@@ -2438,7 +2535,7 @@ JS;
 			$want  = blockke_dev_key_phrase( $c['key'], $rent );
 			$title = 'No other ' . esc_html( $want ) . ( $area ? ' in ' . esc_html( $area ) : '' ) . ' listed right now';
 		}
-		$all_url  = blockke_dev_search_url( array( 'area' => 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ? '' : $area, 'action' => $c['action'], 'beds' => 'units' === $res['mode'] && ctype_digit( (string) $c['key'] ) ? $c['key'] : '' ) );
+		$all_url  = blockke_dev_search_url( array( 'area' => 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ? '' : $area, 'action' => $c['action'], 'beds' => 'units' === $res['mode'] ? blockke_dev_link_beds( $c ) : '' ) );
 		$all_text = 'See all ' . ( $beds ? $beds . ' ' : '' ) . ( $rent ? 'rentals' : ( $beds ? 'homes' : 'homes for sale' ) ) . ( $area && ! ( 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ) ? ' in ' . $area : '' );
 		$cards    = array();
 		foreach ( $res['rows'] as $i => $r ) {
@@ -2547,7 +2644,8 @@ JS;
 			array_unshift( $areas, $c['area_name'] );
 		}
 		$rent  = 'rent' === $c['action'];
-		$beds  = ctype_digit( (string) $c['key'] ) ? (string) $c['key'] : '';
+		$beds  = blockke_dev_link_beds( $c );
+		$beds  = '' !== $beds && 'min' !== $cfg['beds_mode'] ? (string) min( 5, (int) $beds ) : $beds;
 		$bands = isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array();
 		$pick  = '';
 		if ( $c['price'] > 0 && ! $c['flag'] ) {
@@ -2579,8 +2677,9 @@ JS;
 		}
 		$h .= '</select></label><input type="hidden" name="price_low" disabled><input type="hidden" name="price_max" disabled>';
 		$h .= '<fieldset class="bkd-f bkd-sf-wide"><legend>Bedrooms</legend><div class="bkd-chips">';
-		foreach ( array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4+' ) as $v => $l ) {
-			$h .= '<label class="bkd-chip"><input type="radio" name="componentsbeds" value="' . esc_attr( $v ) . '"' . checked( (string) $v, $beds, false ) . '><span>' . esc_html( 'min' === $cfg['beds_mode'] && '' !== $v && '4' !== (string) $v ? $l . '+' : $l ) . '</span></label>';
+		$chips = 'min' === $cfg['beds_mode'] ? array( '' => 'Any', '1' => '1+', '2' => '2+', '3' => '3+', '4' => '4+' ) : array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5' );
+		foreach ( $chips as $v => $l ) {
+			$h .= '<label class="bkd-chip"><input type="radio" name="componentsbeds" value="' . esc_attr( $v ) . '"' . checked( (string) $v, $beds, false ) . '><span>' . esc_html( $l ) . '</span></label>';
 		}
 		$h .= '</div></fieldset>';
 		if ( $lists['years'] ) {
@@ -2837,6 +2936,7 @@ JS;
 			'project_id'  => $project ? (int) $project->term_id : 0,
 			'dkey'        => blockke_dev_dev_key( $id ),
 			'key'         => 'master' === $kind ? '' : blockke_dev_sim_key( $id ),
+			'beds'        => (int) get_post_meta( $id, 'property_bedrooms', true ),
 			'price'       => $meta_price,
 			'flag'        => blockke_dev_price_flag( $id ),
 			'sqft'        => (float) get_post_meta( $id, 'property_size', true ),
@@ -2847,6 +2947,11 @@ JS;
 			'area_name'   => $area,
 			'sim_off'     => '' !== (string) get_post_meta( $id, 'bke_dev_similar_off', true ),
 		);
+
+		// A unit without a project term is still named after its development (not "2 Bedroom Apartment...")
+		if ( ! $project && 'unit' === $kind && '' !== $ctx['master_name'] && '' === blockke_dev_text( get_post_meta( $id, 'bke_dev_name', true ) ) ) {
+			$short = $ctx['master_name'];
+		}
 
 		// Breadcrumb: Home / For Sale / Westlands / Golden Mansion / 2 Bedroom Apartment
 		$crumbs = array();
@@ -3163,13 +3268,28 @@ JS;
 		$hero  = $imgs ? $imgs[0] : 0;
 		$n_img = count( $imgs );
 		$plan  = $d['plan'];
-		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $d['price_from'] ? ' (from ' . blockke_dev_short( $d['price_from'] ) . ')' : '' ) . '. Please share the price list and floor plans. ' . $d['url'] );
+		// How the headline price reads: "From" for a development or an off-plan home; a single home's own price as
+		// it is labelled ("Up to KES 23.5M", per sq ft for offices), never a "From" it doesn't have.
+		$cx0   = $d['ctx'];
+		$p_lab = 'From';
+		$p_txt = $d['price_from'] ? blockke_dev_short( $d['price_from'] ) : '';
+		if ( $d['price_from'] && ! $d['units'] && (float) $d['price_from'] === (float) $cx0['price'] ) {
+			if ( 'upto' === $cx0['flag'] ) {
+				$p_lab = 'Up to';
+			} elseif ( 'unit' === $cx0['flag'] ) {
+				$p_lab = 'Price';
+				$p_txt = blockke_dev_money( $d['price_from'] ) . ' per sq ft';
+			} elseif ( ! $d['offplan'] ) {
+				$p_lab = 'Price';
+			}
+		}
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . '. Please share the price list and floor plans. ' . $d['url'] );
 		$o     = array();
 		$cx    = $d['ctx'];
 		// Landing pages stay a closed funnel: no search, no similar homes and none of their queries
 		$sim    = $lp ? null : blockke_dev_similar_block( $d );
 		$search = ! $lp && ! empty( $cfg['search'] );
-		$s_url  = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => ctype_digit( (string) $cx['key'] ) ? $cx['key'] : '' ) );
+		$s_url  = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => blockke_dev_link_beds( $cx ) ) );
 
 		$o[] = '<div id="bkd" class="bkd' . ( $lp ? ' bkd-lpm' : '' ) . '" data-listing="' . (int) $d['id'] . '">' . blockke_dev_sprite();
 		if ( $lp ) {
@@ -3197,7 +3317,7 @@ JS;
 			$un .= '<a class="bkd-un-all" href="' . esc_url( $cx['master_url'] ) . '">All homes' . blockke_dev_icon( 'arrow' ) . '</a></div></nav>';
 		}
 		$hfacts   = array();
-		$hfacts[] = $d['price_from'] ? array( 'From', blockke_dev_short( $d['price_from'] ) ) : array( 'Price', 'On request' );
+		$hfacts[] = $p_txt ? array( $p_lab, $p_txt ) : array( 'Price', 'On request' );
 		if ( $d['completion'] ) {
 			$hfacts[] = array( 'Completion', $d['completion'] );
 		} elseif ( ! $d['offplan'] ) {
@@ -3218,7 +3338,7 @@ JS;
 		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( blockke_dev_homes_label( $d['units'] ), $street ) ) ) ) : '';
 		$o[]    = '<section class="bkd-hero" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">'
 			. '<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav><div class="bkd-hero-tools">'
-			. ( $search ? '<a class="bkd-srch" data-bkd-search="hero" href="' . esc_url( $s_url ) . '">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> homes</span></span></a>' : '' )
+			. ( $search ? '<a class="bkd-srch" data-bkd-search="hero" href="' . esc_url( $s_url ) . '" aria-label="Search homes" aria-haspopup="dialog">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> homes</span></span></a>' : '' )
 			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div></div>' )
 			. '<p class="bkd-status">' . ( $d['chip'] ? '<b>' . $e( $d['chip'] ) . '</b>' : '' ) . '<span>' . $e( $d['area_line'] ) . '</span></p>'
 			. '<h1 class="bkd-h1">' . $e( $d['name'] ) . '</h1>' . $un
@@ -3349,7 +3469,7 @@ JS;
 				$gbeds = array();
 				foreach ( $d['units'] as $u ) {
 					if ( is_int( $u['key'] ) && $u['key'] > 0 ) {
-						$gbeds[ $u['group'] ] = min( 4, $u['key'] );
+						$gbeds[ $u['group'] ] = min( 6, $u['key'] );
 					}
 				}
 				$filters = '<div class="bkd-filters" role="group" aria-label="Filter residences"><button type="button" aria-pressed="true" data-g="*">All</button>';
@@ -3974,7 +4094,9 @@ html.bkd-lock #zsiq_float{display:none!important}
 #bkd .bkd-un-in{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
 #bkd .bkd-un-in::-webkit-scrollbar{display:none}
 #bkd .bkd-un-in{position:relative}
-#bkd .bkd-un-in.bkd-ovf{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
+#bkd .bkd-un-in.bkd-ovf,#bkd .bkd-subnav-links.bkd-ovf{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
+#bkd .bkd-un-in.bkd-ovl,#bkd .bkd-subnav-links.bkd-ovl{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px);mask-image:linear-gradient(90deg,transparent,#000 36px)}
+#bkd .bkd-un-in.bkd-ovf.bkd-ovl,#bkd .bkd-subnav-links.bkd-ovf.bkd-ovl{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
 #bkd .bkd-un-in>*{flex:none;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px;border:1px solid var(--line-2);background:#fff;font-size:13px;font-weight:600;line-height:1.2;color:var(--navy);white-space:nowrap;scroll-snap-align:start;transition:border-color .2s}
 #bkd .bkd-un-in>a:hover{border-color:var(--navy);color:var(--navy)!important}
 #bkd .bkd-un-in small{font-size:12px;font-weight:500;color:var(--slate)}
@@ -3984,7 +4106,6 @@ html.bkd-lock #zsiq_float{display:none!important}
 #bkd .bkd-un-all .bkd-i{width:14px;height:14px}
 #bkd .bkd-subnav-links{position:relative;overflow-x:auto;scrollbar-width:none}
 #bkd .bkd-subnav-links::-webkit-scrollbar{display:none}
-#bkd .bkd-subnav-links.bkd-ovf{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
 #bkd .bkd-subnav-links a{flex:none}
 #bkd .bkd-subnav-srch{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line-2);border-radius:999px;color:var(--navy);transition:border-color .2s}
 #bkd .bkd-subnav-srch:hover{border-color:var(--navy);color:var(--navy)!important}
@@ -4141,7 +4262,9 @@ CSS;
   function success(form,p,j){
     var ok=form.nextElementSibling,first=(p.name||'').trim().split(/\s+/)[0];
     ok.querySelector('[data-first]').textContent=first?', '+first:'';
-    ok.querySelector('[data-okmsg]').textContent='An advisor will be in touch shortly'+(j&&j.phone_display?' on '+j.phone_display:'')+' with the price list and floor plans for '+C.name+'.';
+    var it=form.getAttribute('data-intent')||'';
+    var tail={alternatives:'with 3 similar homes and their prices','search-shortlist':'with a shortlist of matching homes',compare:'to compare '+C.name+' with similar homes',find:'with matches as they come up',comparables:'with recent rents and resale prices near '+C.name,mortgage:'to talk through financing for '+C.name}[it]||'with the price list and floor plans for '+C.name;
+    ok.querySelector('[data-okmsg]').textContent='An advisor will be in touch shortly'+(j&&j.phone_display?' on '+j.phone_display:'')+' '+tail+'.';
     ok.querySelector('[data-wa-ok]').href=waUrl(leadText(p));
     var ab=ok.querySelector('[data-asset]');
     if(j&&j.asset){ab.href=j.asset;ab.hidden=false;ab.innerHTML='Download the brochure'+icon('arrow');ab.addEventListener('click',function(){track('asset_open');},{once:true});}else{ab.hidden=true;}
@@ -4235,7 +4358,7 @@ CSS;
   });
 
   /* search homes: a short search, filled in from this listing, into the site's search results */
-  var sf=document.getElementById('bkd-sf'),sfFocus=null,sfStart='',sfSending=false;
+  var sf=document.getElementById('bkd-sf'),sfFocus=null,sfStart='',sfSending=false,sfAt=0;
   function sfForm(){return sf.querySelector('form');}
   function sfMode(){var r=sf.querySelector('input[name="property_action_category[]"]:checked');return r&&r.value==='for-rent'?'rent':'sale';}
   function sfState(){var f=sfForm(),b=f.querySelector('input[name="componentsbeds"]:checked'),c=f.querySelector('[name="completion"]'),bud=f.querySelector('[data-sf-budget]');
@@ -4245,7 +4368,7 @@ CSS;
     var bands=(C.bands&&C.bands[mode])||[];sel.innerHTML='<option value="">Any budget</option>'+bands.map(function(b){return '<option value="'+(+b[0])+'-'+(+b[1])+'">'+esc(b[2])+'</option>';}).join('');sel.setAttribute('data-mode',mode);
     var comp=sf.querySelector('[data-sf-comp]');if(comp){comp.hidden=mode==='rent';}}
   function openSheet(source){
-    if(!sf){return;}sfFocus=document.activeElement;sf.hidden=false;lock(true);sf.setAttribute('data-source',source||'');
+    if(!sf){return;}sfBands();sfAt=Date.now();sfFocus=document.activeElement;sf.hidden=false;lock(true);sf.setAttribute('data-source',source||'');
     $$('[name]',sfForm()).forEach(function(x){if(x.type!=='hidden'){x.disabled=false;}});sfStart=JSON.stringify(sfState());
     try{history.pushState({bkdSheet:1},'');}catch(e){}
     setTimeout(function(){var f=sf.querySelector('input[name="property_action_category[]"]:checked')||sf.querySelector('select');if(f){f.focus();}},30);
@@ -4257,8 +4380,9 @@ CSS;
     if(sfFocus&&sfFocus.focus){try{sfFocus.focus({preventScroll:true});}catch(e){}}
   }
   if(sf){
-    root.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('[data-bkd-search]');if(t){e.preventDefault();openSheet(t.getAttribute('data-bkd-search'));}});
+    root.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('[data-bkd-search]');if(!t||e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey){return;}e.preventDefault();openSheet(t.getAttribute('data-bkd-search'));});
     sf.addEventListener('click',function(e){
+      if(e.target===sf&&(e.detail>1||Date.now()-sfAt<400)){return;} /* the second click of a double-click on the button */
       if(e.target===sf||(e.target.closest&&e.target.closest('[data-bkd-sfclose]'))){closeSheet();return;}
       if(e.target.closest&&e.target.closest('[data-sf-shortlist]')){var sum=sfSummary();closeSheet();track('search_shortlist');openModal('search-shortlist',sum);}
     });
@@ -4329,7 +4453,7 @@ CSS;
     track('units_filter',{group:b.getAttribute('data-g')});
     if(resAll){var bd=b.getAttribute('data-beds'),area=resAll.getAttribute('data-area'),noun=resAll.getAttribute('data-noun');
       resAll.href=resAll.getAttribute('data-base')+(bd?'&componentsbeds='+bd:'');
-      resAll.querySelector('span').textContent=bd?'Comparing? See other '+bd+(bd==='4'||C.bedsMode==='min'?'+ bed ':'-bed ')+noun+' in '+area:'See all '+(noun==='rentals'?'rentals':'homes for sale')+' in '+area;}
+      resAll.querySelector('span').textContent=bd?'Comparing? See other '+bd+(C.bedsMode==='min'?'+ bed ':'-bed ')+noun+' in '+area:'See all '+(noun==='rentals'?'rentals':'homes for sale')+' in '+area;}
   });});
   if(resAll){resAll.addEventListener('click',function(){var p=$('.bkd-filters [aria-pressed="true"]');track('residences_see_all',{group:p?p.getAttribute('data-g'):'*',transport_type:'beacon'});});}
 
@@ -4341,15 +4465,17 @@ CSS;
     var nav=$('.bkd-crumbs'),from='';if(!C.back||!nav){return;}
     try{var ref=document.referrer||'',u=ref?new URL(ref):null;
       if(u&&u.host===location.host){
-        if(/^\/(advanced-search|map-search|search|property_[a-z_]+|project|completion|new-developments|for-sale|for-rent)(\/|$)/.test(u.pathname)){from=ref;sessionStorage.setItem('bkd_from',ref);}
-        else if(/^\/property\//.test(u.pathname)){from=sessionStorage.getItem('bkd_from')||'';}
+        if(/^\/(advanced-search|map-search|search|property_[a-z_]+|project|completion|new-developments|for-sale|for-rent)(\/|$)/.test(u.pathname)){from=ref;}
+        else if(/^\/property\//.test(u.pathname)){var st=null;try{st=JSON.parse(sessionStorage.getItem('bkd_from')||'null');}catch(x){st=null;}
+          from=st&&st.p===u.pathname&&st.f?st.f:''; /* only when the visitor came from the page that last showed the link */}
       }
-      if(!from){sessionStorage.removeItem('bkd_from');}
+      if(from){sessionStorage.setItem('bkd_from',JSON.stringify({f:from,p:location.pathname}));}else{sessionStorage.removeItem('bkd_from');}
     }catch(e){from='';}
     if(!from){return;}
+    try{if(!history.state&&!location.hash){history.replaceState({bkdLand:1},'');}}catch(e){}
     var a=document.createElement('a'),sep=document.createElement('span');a.className='bkd-cr-back';a.href=from;a.textContent='Back to results';sep.setAttribute('aria-hidden','true');sep.textContent='/';
     nav.insertBefore(sep,nav.firstChild);nav.insertBefore(a,sep);nav.classList.add('bkd-has-back');
-    a.addEventListener('click',function(e){track('back_to_results',{transport_type:'beacon'});if(document.referrer===from&&history.length>1){e.preventDefault();history.back();}});
+    a.addEventListener('click',function(e){track('back_to_results',{transport_type:'beacon'});if(document.referrer===from&&history.length>1&&history.state&&history.state.bkdLand){e.preventDefault();history.back();}});
   })();
 
   /* similar homes: seen, clicked, "see all" */
@@ -4381,8 +4507,9 @@ CSS;
     if(on!==lastOn){lastOn=on;var box=links[0]&&links[0].parentNode;if(on>=0&&box&&box.scrollWidth>box.clientWidth+2){var a=links[on];box.scrollTo({left:Math.max(0,a.offsetLeft-box.clientWidth/2+a.offsetWidth/2),behavior:reduce?'auto':'smooth'});}}
   }
   var lastOn=-2;
-  function navOverflow(){$$('.bkd-subnav-links,.bkd-un-in').forEach(function(box){box.classList.toggle('bkd-ovf',box.scrollWidth>box.clientWidth+2);});}
-  var unCur=$('.bkd-un-in [aria-current]');if(unCur&&unCur.offsetLeft+unCur.offsetWidth>unCur.parentNode.clientWidth){unCur.parentNode.scrollLeft=unCur.offsetLeft-24;}
+  function navOverflow(){$$('.bkd-subnav-links,.bkd-un-in').forEach(function(box){var max=box.scrollWidth-box.clientWidth;box.classList.toggle('bkd-ovf',max>2&&box.scrollLeft<max-2);box.classList.toggle('bkd-ovl',max>2&&box.scrollLeft>2);});}
+  $$('.bkd-subnav-links,.bkd-un-in').forEach(function(box){box.addEventListener('scroll',navOverflow,{passive:true});});
+  var unCur=$('.bkd-un-in [aria-current]');if(unCur&&unCur.offsetLeft+unCur.offsetWidth>unCur.parentNode.clientWidth){unCur.parentNode.scrollLeft=unCur.offsetLeft-24;navOverflow();}
   navOverflow();window.addEventListener('resize',navOverflow);
   window.addEventListener('scroll',function(){if(!ticking){ticking=true;requestAnimationFrame(onScroll);}},{passive:true});
   window.addEventListener('resize',function(){lastProbe=0;onScroll();});
@@ -4555,9 +4682,9 @@ JS;
 					);
 					if ( $lp && ! empty( $cfg['lp_after_link'] ) && $data['ctx']['area_name'] ) {
 						$cx          = $data['ctx'];
-						$bl          = blockke_dev_beds_label( $cx['key'] );
+						$bl          = blockke_dev_beds_label( $cx );
 						$js['after'] = array(
-							'url'   => blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => ctype_digit( (string) $cx['key'] ) ? $cx['key'] : '' ) ),
+							'url'   => blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => blockke_dev_link_beds( $cx ) ) ),
 							'label' => 'While you wait: see other ' . ( $bl ? $bl . ' ' : '' ) . ( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . ' in ' . $cx['area_name'],
 						);
 					}
@@ -4948,7 +5075,7 @@ JS;
 		);
 	}
 
-	/* Similar homes and the search lists are cached; any change to a listing that matters to them starts a fresh round. */
+	/* Similar homes and the search lists are cached; any change to a published listing that matters to them starts a fresh round. */
 	function blockke_dev_sim_bump() {
 		static $done = false;
 		if ( $done ) {
@@ -4956,40 +5083,82 @@ JS;
 		}
 		$done = true;
 		update_option( 'bkd_sim_ver', (string) microtime( true ), false );
-	}
-	add_action(
-		'save_post_estate_property',
-		function ( $pid ) {
-			if ( ! wp_is_post_revision( $pid ) && ! wp_is_post_autosave( $pid ) ) {
-				blockke_dev_sim_bump();
-			}
-		}
-	);
-	foreach ( array( 'trashed_post', 'untrashed_post', 'deleted_post' ) as $bkd_hook ) {
+		// again once the request ends, so nothing rebuilt halfway through a save is kept under the new version
 		add_action(
-			$bkd_hook,
-			function ( $pid ) {
-				if ( 'estate_property' === get_post_type( $pid ) ) {
-					blockke_dev_sim_bump();
-				}
-			}
+			'shutdown',
+			function () {
+				update_option( 'bkd_sim_ver', (string) microtime( true ), false );
+			},
+			999
 		);
 	}
+
+	function blockke_dev_sim_live( $id ) {
+		return 'estate_property' === get_post_type( $id ) && 'publish' === get_post_status( $id );
+	}
+
+	function blockke_dev_sim_taxes() {
+		return array( 'property_area', 'property_action_category', 'property_status', 'property_category', 'property_project', 'property_completion' );
+	}
+
 	add_action(
-		'set_object_terms',
-		function ( $object_id, $terms, $tt_ids, $taxonomy ) {
-			if ( in_array( $taxonomy, array( 'property_area', 'property_action_category', 'property_status', 'property_category', 'property_project', 'property_completion' ), true ) && 'estate_property' === get_post_type( $object_id ) ) {
+		'save_post_estate_property',
+		function ( $pid, $post ) {
+			if ( ! wp_is_post_revision( $pid ) && ! wp_is_post_autosave( $pid ) && $post && 'publish' === $post->post_status ) {
 				blockke_dev_sim_bump();
 			}
 		},
 		10,
-		4
+		2
+	);
+	add_action(
+		'transition_post_status',
+		function ( $new, $old, $post ) {
+			if ( $post && 'estate_property' === $post->post_type && $new !== $old && ( 'publish' === $new || 'publish' === $old ) ) {
+				blockke_dev_sim_bump(); // published, unpublished, trashed or restored
+			}
+		},
+		10,
+		3
+	);
+	add_action(
+		'deleted_post',
+		function ( $pid, $post = null ) {
+			if ( $post && 'estate_property' === $post->post_type && 'publish' === $post->post_status ) {
+				blockke_dev_sim_bump();
+			}
+		},
+		10,
+		2
+	);
+	foreach ( array( 'set_object_terms', 'deleted_term_relationships' ) as $bkd_hook ) {
+		add_action(
+			$bkd_hook,
+			function ( $object_id, $a = null, $b = null, $taxonomy = null ) use ( $bkd_hook ) {
+				$tax = 'set_object_terms' === $bkd_hook ? $taxonomy : $b; // deleted_term_relationships: ( $object_id, $tt_ids, $taxonomy )
+				if ( in_array( $tax, blockke_dev_sim_taxes(), true ) && blockke_dev_sim_live( $object_id ) ) {
+					blockke_dev_sim_bump();
+				}
+			},
+			10,
+			4
+		);
+	}
+	add_action(
+		'edited_term',
+		function ( $term_id, $tt_id, $taxonomy ) {
+			if ( in_array( $taxonomy, blockke_dev_sim_taxes(), true ) ) {
+				blockke_dev_sim_bump(); // a renamed area or project
+			}
+		},
+		10,
+		3
 	);
 	foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $bkd_hook ) {
 		add_action(
 			$bkd_hook,
 			function ( $mid, $object_id, $meta_key ) {
-				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label' ), true ) && 'estate_property' === get_post_type( $object_id ) ) {
+				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label' ), true ) && blockke_dev_sim_live( $object_id ) ) {
 					blockke_dev_sim_bump();
 				}
 			},
