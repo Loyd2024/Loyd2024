@@ -140,3 +140,18 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.
+
+## Enquiries inbox (`block-enquiries-inbox.php`)
+
+A separate WPCode PHP snippet that keeps every website enquiry inside WordPress, whether or not the emails arrive. It adds an **Enquiries** page (administrators only) and a "Latest enquiries" box on the dashboard:
+
+- **Website enquiries:** the price-check popup's leads and the development and landing page leads, newest first, with WhatsApp, call and email links, and whether the email was handed over and what Zoho said.
+- **Emails the site sent:** every email WordPress tries to send, the theme's contact forms included, with its text and whether WordPress could hand it to the mail server. Password, login and code emails are listed without their text.
+- **Zoho CRM replies:** what Zoho answered for each lead, to find out why leads don't appear in the CRM.
+- **Download all as CSV**, and **Send a test email** to the enquiry addresses.
+
+Enquiries the theme's contact forms send to an agent are copied (Bcc) to the enquiry addresses. Those addresses are the price-check popup's `notify_emails` (option `blockke_buyer_popup`), also used by the development pages (option `blockke_dev_page`). On block.ke both are set to loyd@block.ke, sales@block.ke and loydmokaya@gmail.com.
+
+**Emails still need an email service.** WordPress hands email to the web server, and many inboxes reject or hide those messages. Install WP Mail SMTP, or a similar plugin, and connect Gmail, Google Workspace, Zoho Mail or Brevo; then use *Send a test email*. Until then, the Enquiries page shows a warning.
+
+Tested on the local WordPress copy: leads from both sources in date order, the agent copy, failed and sent emails, private subjects, Zoho replies, the page, the dashboard box, the CSV (formulas neutralised, phones kept as text, refused without its security token) and the test email.
