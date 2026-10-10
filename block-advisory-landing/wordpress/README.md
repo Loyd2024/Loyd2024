@@ -79,15 +79,17 @@ Rentals never become landing pages. Set `landing_pages` to `false` to switch the
 
 Every form posts to `/wp-json/block/v1/development-lead`, which:
 
-- emails the price-check popup's notify list (currently loyd@block.ke) and the listing's agent;
+- saves the enquiry in the option `blockke_dev_leads` (the last 200) before Zoho and the email, so a slow or failing step can't lose it;
+- emails the enquiry addresses (`notify_emails`; on block.ke loyd@block.ke, sales@block.ke and loydmokaya@gmail.com) and the listing's agent;
 - forwards the lead to Zoho through the popup snippet's Web-to-Lead connection, once its tokens are set;
 - tags the source (Google Ads, Meta, organic and so on) using the same rules as the popup;
-- keeps the last 200 enquiries in the option `blockke_dev_leads`;
 - fires the Google Ads lead conversion (`window.blockkeLeadConversion`), GA4 `generate_lead` and Meta `Lead`.
 
 If the listing has a brochure, either a PDF link in the box or a PDF attached to the listing, it opens straight after the visitor sends their details.
 
 **Optional questions after a quick enquiry.** The hero and pop-up forms ask only for a name and phone number. Once the lead is in, the thank-you panel offers three one-tap questions: which home, when they would like to buy (within 3 months, 3–12 months, just exploring) and whether they are buying to live in or invest. Answers are added to the same lead in `blockke_dev_leads` and emailed as "[Block] More details: …"; add them to the Zoho lead by hand, as Web-to-Lead can't update a lead. Skipping them loses nothing. The full enquiry form asks the timeline as well. The questions are not a separate form, so GA4 and Meta form tracking don't count the lead twice.
+
+**Spam and AutoFill.** Each form has a hidden field that people never see and bots fill in. A send that fills it is answered as if it worked, but nothing is emailed or saved as a lead; the last 30 are kept in `blockke_dev_spam` in case one was a person. Before v1.3.1 the field was called `company`, which browsers' AutoFill fills in, so enquiries from visitors using AutoFill were dropped without a trace. It now has a name AutoFill leaves alone and isn't drawn at all. When a send fails, the form shows the error code (for example "error 403") before the WhatsApp link, so the cause can be traced.
 
 **Visitors abroad.** When the browser's time zone isn't Nairobi, the phone fields show an international example for that country (for example `+44 7700 900123` in the UK), so diaspora buyers include their country code.
 
@@ -137,6 +139,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - the calculator swap on classic off-plan and complete pages;
 - v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback;
 - v1.3: landing pages at `?lp=1` and on a page, for an off-plan development, a unit and a completed development: no theme header or footer, no links off the page but the privacy policy, `noindex, follow`, lead submission with gclid and the Google Ads conversion call, the contact bar, rentals refused, the `landing_pages` switch, and no sideways scrolling from 320px to 1440px. Also at real phone viewports with browser bars (390×664, 360×640, 412×780, 430×740): the whole form on the first screen and the cover copy on the photo. The optional questions were checked end to end: saved on the same lead, emailed, accepted once, unknown references refused, no extra form submit event, the contact bar never covering them, and no "Which home?" after a unit's own enquiry. Also tested: the timeline on the full form, the phone examples for six time zones, and captioned photos (the amenity strip swiping on phones and in one full row on desktop, non-amenity captions kept out of it, captions on the gallery and in the viewer, and no strip without captions);
+- v1.3.1: the landing page's "Speak to an advisor" form at phone and desktop widths: sent, saved and emailed, with the Zoho and email results written onto the saved lead; no field called `company` and the anti-spam field not drawn; an AutoFilled `company` from a cached older page accepted; bot sends caught and kept aside; error codes for a firewall page, a crash and a non-JSON answer, the site's own refusal message, and the plain message with no connection; and the enquiry kept when the mail server crashes mid-send;
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.

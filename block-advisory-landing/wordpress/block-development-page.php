@@ -63,6 +63,11 @@
  * name in the thank-you heading kept in the heading font. Photo captions from the Media Library: on the
  * gallery and in the viewer, and photos captioned with an amenity ("Indoor heated pool") as a photo strip
  * in Amenities (swipe on phones, full rows on desktop).
+ * v1.3.1 (2026-10-10): enquiries from visitors who use their browser's AutoFill are no longer dropped (the
+ * hidden anti-spam field was called "company", which AutoFill fills in; it now has a name AutoFill leaves
+ * alone and is not drawn at all). Each enquiry is saved before Zoho and the email, so a slow or failing
+ * step can't lose it. Anti-spam catches are kept in option blockke_dev_spam (last 30), and a failed send
+ * shows its error code.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -2443,14 +2448,14 @@ JS;
 	}
 
 	function blockke_dev_quick_form( $source, $cta, $d ) {
-		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '" novalidate><input class="bkd-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">'
+		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
 			. '<div class="bkd-qgrid">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>'
 			. '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">' . esc_html( $cta ) . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok( blockke_dev_more( $d, $source ) );
 	}
 
 	function blockke_dev_full_form( $d ) {
 		$groups = blockke_dev_unit_groups( $d['units'] );
-		$h      = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$h      = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
 		$h .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
 		if ( count( $groups ) > 1 ) {
@@ -2935,7 +2940,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-f.bkd-bad>input{border-color:var(--err)!important}
 #bkd .bkd-err{font-size:12px;font-style:normal;font-weight:600;color:var(--err)}
 #bkd .bkd-err:empty{display:none}
-#bkd .bkd-hp{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important}
+#bkd .bkd-hp{display:none!important}
 #bkd .bkd-consent{font-size:12px;line-height:1.55;color:var(--muted)}
 #bkd .bkd-consent a{text-decoration:underline}
 #bkd .bkd-chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -3357,11 +3362,11 @@ CSS;
       .then(function(){track('lead_details',{lead_unit:q.unit,timeline:q.timeline,purpose:q.purpose});done('Thank you, noted. Your advisor will have this before they get in touch.');})
       .catch(function(){done('Those answers did not go through, but your enquiry is with us.');});
   }
-  function fail(form,p,msg){
+  function fail(form,p,msg,code){
     var btn=form.querySelector('[type=submit]');btn.disabled=false;
     var al=form.querySelector('.bkd-alert')||document.createElement('div');
     al.className='bkd-alert';al.setAttribute('role','alert');
-    al.innerHTML=(msg?esc(msg)+' ':"Sorry, that didn't go through. ")+'<a target="_blank" rel="noopener" href="'+esc(waUrl(leadText(p)))+'">Send it on WhatsApp instead</a>.';
+    al.innerHTML=(msg?esc(msg)+' ':"Sorry, that didn't go through"+(code?' (error '+esc(code)+')':'')+'. ')+'<a target="_blank" rel="noopener" href="'+esc(waUrl(leadText(p)))+'">Send it on WhatsApp instead</a>.';
     if(!al.parentNode){btn.insertAdjacentElement('beforebegin',al);}
   }
   root.addEventListener('click',function(e){var s=e.target.closest&&e.target.closest('[data-more-send]');if(s){sendMore(s.closest('[data-more]'));}});
@@ -3376,19 +3381,19 @@ CSS;
     $$('[data-f]',form).forEach(function(w){var k=w.getAttribute('data-f');w.classList.toggle('bkd-bad',!!errs[k]);var er=w.querySelector('.bkd-err');if(er){er.textContent=errs[k]||'';}});
     var firstErr=Object.keys(errs)[0];if(firstErr){form.querySelector('[name="'+firstErr+'"]').focus();return;}
     var p={listing:C.id,name:d.name,phone:d.phone,email:d.email||'',unit:d.unit&&d.unit!=='Not sure yet'?d.unit:(form.getAttribute('data-unit')||''),purpose:d.purpose||'',timeline:d.timeline||'',contact:d.contact||'',message:d.message||'',
-      source:form.getAttribute('data-bkd-lead'),intent:form.getAttribute('data-intent')||'',page:location.href.slice(0,300),attr:attr(),company:d.company||''};
+      source:form.getAttribute('data-bkd-lead'),intent:form.getAttribute('data-intent')||'',page:location.href.slice(0,300),attr:attr(),hp:d.bkd_hp||''};
     remembered={name:d.name,phone:d.phone,email:d.email||remembered.email||''};try{sessionStorage.setItem('bkd_lead',JSON.stringify(remembered));}catch(er){}
     var btn=form.querySelector('[type=submit]');btn.disabled=true;
     var al=form.querySelector('.bkd-alert');if(al){al.remove();}
     fetch(C.endpoint,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(p),credentials:'same-origin'})
-      .then(function(r){return r.json().catch(function(){return {};}).then(function(j){if(!r.ok||!j||!j.ok){var x=new Error('fail');x.msg=j&&j.message;throw x;}return j;});})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(j){if(!r.ok||!j||!j.ok){var x=new Error('fail');x.msg=j&&j.ok===false&&j.message;x.code=r.status;throw x;}return j;});})
       .then(function(j){
         track('generate_lead',{lead_source:p.source,lead_unit:p.unit});
         try{if(typeof window.blockkeLeadConversion==='function'){window.blockkeLeadConversion('lead_form');}}catch(x){}
         try{if(typeof window.fbq==='function'){window.fbq('track','Lead',{content_name:C.name});}}catch(x){}
         success(form,p,j);
       })
-      .catch(function(err){fail(form,p,err&&err.msg);});
+      .catch(function(err){fail(form,p,err&&err.msg,err&&err.code);});
   });
   $$('form[data-bkd-lead] input').forEach(function(i){i.addEventListener('input',function(){var w=i.closest('[data-f]');if(w){w.classList.remove('bkd-bad');var er=w.querySelector('.bkd-err');if(er){er.textContent='';}}});});
   /* visitors abroad see an international example in the phone fields */
@@ -3681,6 +3686,45 @@ JS;
 		return array_values( array_unique( array_filter( array_map( 'sanitize_email', $to ) ) ) );
 	}
 
+	/** Adds a lead to the top of the log (the last 200 are kept), or with $ref, updates that lead's fields. */
+	function blockke_dev_save_lead( $fields, $ref = '' ) {
+		$log = get_option( 'blockke_dev_leads', array() );
+		if ( ! is_array( $log ) ) {
+			$log = array();
+		}
+		if ( '' === $ref ) {
+			array_unshift( $log, $fields );
+		} else {
+			foreach ( $log as $k => $row ) {
+				if ( is_array( $row ) && isset( $row['ref'] ) && $row['ref'] === $ref ) {
+					$log[ $k ] = array_merge( $row, $fields );
+					break;
+				}
+			}
+		}
+		update_option( 'blockke_dev_leads', array_slice( $log, 0, 200 ), false );
+	}
+
+	/** Sends caught by the hidden anti-spam field: not emailed or sent to Zoho, but the last 30 are kept in case one was a person. */
+	function blockke_dev_note_spam( $get ) {
+		$log = get_option( 'blockke_dev_spam', array() );
+		if ( ! is_array( $log ) ) {
+			$log = array();
+		}
+		array_unshift(
+			$log,
+			array(
+				'time'  => current_time( 'mysql' ),
+				'name'  => $get( 'name', 80 ),
+				'phone' => $get( 'phone', 40 ),
+				'email' => $get( 'email', 120 ),
+				'trap'  => mb_substr( $get( 'hp', 80 ) . $get( 'website', 80 ), 0, 80 ),
+				'page'  => esc_url_raw( $get( 'page', 300 ) ),
+			)
+		);
+		update_option( 'blockke_dev_spam', array_slice( $log, 0, 30 ), false );
+	}
+
 	/** The optional answers given after a quick enquiry: added to the stored lead (once, within a day) and emailed. */
 	function blockke_dev_lead_more( $ref, $get ) {
 		$log = get_option( 'blockke_dev_leads', array() );
@@ -3737,9 +3781,6 @@ JS;
 		$get = function ( $k, $max = 200 ) use ( $p ) {
 			return ( isset( $p[ $k ] ) && is_scalar( $p[ $k ] ) ) ? mb_substr( sanitize_text_field( (string) $p[ $k ] ), 0, $max ) : '';
 		};
-		if ( '' !== $get( 'company' ) || '' !== $get( 'website' ) ) {
-			return new WP_REST_Response( array( 'ok' => true ), 200 ); // honeypot: pretend and drop
-		}
 		$ip = '';
 		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR' ) as $h ) {
 			if ( ! empty( $_SERVER[ $h ] ) ) {
@@ -3753,6 +3794,13 @@ JS;
 			return new WP_REST_Response( array( 'ok' => false, 'message' => 'Too many requests from this connection. Please WhatsApp us directly.' ), 429 );
 		}
 		set_transient( $rk, $n + 1, HOUR_IN_SECONDS );
+
+		// The hidden anti-spam field. Pages from before v1.3.1 named it "company", which browsers' AutoFill
+		// fills in for real visitors, so that name is no longer treated as spam.
+		if ( '' !== $get( 'hp' ) || '' !== $get( 'website' ) ) {
+			blockke_dev_note_spam( $get );
+			return new WP_REST_Response( array( 'ok' => true ), 200 ); // pretend, so bots learn nothing
+		}
 
 		$more = preg_replace( '/[^A-Za-z0-9]/', '', $get( 'more', 40 ) );
 		if ( '' !== $more ) {
@@ -3856,6 +3904,29 @@ JS;
 		$lines[]     = 'Received: ' . wp_date( 'D j M Y, H:i' ) . ' EAT';
 		$description = implode( "\n", $lines );
 
+		// Saved before Zoho and the email, so a slow or failing step can't lose the enquiry.
+		$ref = wp_generate_password( 20, false, false ); // lets the visitor add the optional answers to this lead
+		blockke_dev_save_lead(
+			array(
+				'time'     => current_time( 'mysql' ),
+				'listing'  => $lid,
+				'dev'      => $dev_name,
+				'unit'     => $unit,
+				'name'     => $name,
+				'phone'    => $phone,
+				'email'    => $email,
+				'purpose'  => $purpose,
+				'timeline' => $timeline,
+				'form'     => $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
+				'channel'  => $channel,
+				'source'   => $lead_source,
+				'page'     => $page,
+				'zoho'     => 'not sent',
+				'mail'     => false,
+				'ref'      => $ref,
+			)
+		);
+
 		$zoho = 'skipped (price-check popup snippet not active)';
 		if ( function_exists( 'blockke_bp_send_zoho' ) ) {
 			$submarkets = array( 'Westlands', 'Kilimani', 'Kileleshwa', 'Lavington', 'Parklands', 'Karen', 'Upperhill', 'Riverside', 'Runda', 'Muthaiga', 'Spring Valley', 'Loresho', 'Kitisuru', 'Ruaka', 'Syokimau', 'Athi River', 'Ngong Road', 'Langata', 'South B / South C', 'Nairobi CBD', 'Thika Road', 'Kiambu Road', 'Mombasa Road' );
@@ -3889,34 +3960,13 @@ JS;
 		}
 		$body    = $description . "\n\nReply on WhatsApp: https://wa.me/" . $phone . "\nZoho: " . $zoho . "\n\nSLA: first reply within 15 minutes; log the lead in Zoho under your name.";
 		$mail_ok = $to ? (bool) wp_mail( $to, $subject, $body, $headers ) : false;
-
-		$log = get_option( 'blockke_dev_leads', array() );
-		if ( ! is_array( $log ) ) {
-			$log = array();
-		}
-		$ref = wp_generate_password( 20, false, false ); // lets the visitor add the optional answers to this lead
-		array_unshift(
-			$log,
+		blockke_dev_save_lead(
 			array(
-				'time'     => current_time( 'mysql' ),
-				'listing'  => $lid,
-				'dev'      => $dev_name,
-				'unit'     => $unit,
-				'name'     => $name,
-				'phone'    => $phone,
-				'email'    => $email,
-				'purpose'  => $purpose,
-				'timeline' => $timeline,
-				'form'     => $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
-				'channel'  => $channel,
-				'source'   => $lead_source,
-				'page'     => $page,
-				'zoho'     => $zoho,
-				'mail'     => $mail_ok,
-				'ref'      => $ref,
-			)
+				'zoho' => $zoho,
+				'mail' => $mail_ok,
+			),
+			$ref
 		);
-		update_option( 'blockke_dev_leads', array_slice( $log, 0, 200 ), false );
 
 		$out = array(
 			'ok'            => true,
