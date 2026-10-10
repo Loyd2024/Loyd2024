@@ -91,6 +91,39 @@ If the listing has a brochure, either a PDF link in the box or a PDF attached to
 
 **Spam and AutoFill.** Each form has a hidden field that people never see and bots fill in. A send that fills it is answered as if it worked, but nothing is emailed or saved as a lead; the last 30 are kept in `blockke_dev_spam` in case one was a person. Before v1.3.1 the field was called `company`, which browsers' AutoFill fills in, so enquiries from visitors using AutoFill were dropped without a trace. It now has a name AutoFill leaves alone and isn't drawn at all. When a send fails, the form shows the error code (for example "error 403") before the WhatsApp link, so the cause can be traced.
 
+## Getting around: search, similar homes and the unit switcher (v1.4)
+
+**Search homes.** A "Search" button sits next to Share at the top of every development page, and a search icon sits in the desktop section bar. It opens a short search already filled in from the listing, for example Buy · Westlands · 2 bed · KES 12M–18M. "Show homes" opens the site's own search results (`/advanced-search/?location=Westlands&property_action_category[]=for-sale&componentsbeds=2&price_low=…&price_max=…`, plus `completion` for sales). "Or ask an advisor to shortlist for me" turns the same search into an enquiry. On phones the browser's back button closes the search. Without JavaScript the button is a plain link to the filled-in search.
+
+**Also consider.** On a home's page (a unit or a single listing), this shows up to 6 homes with the same number of bedrooms. It picks them in this order:
+1. Homes in the same area within 25% of the price, closest in price and size first.
+2. Homes in the same area at any price.
+3. Homes in the nearest neighbouring areas (config `neighbours`).
+4. Homes with one bedroom more or fewer in the area.
+5. The next ring of areas, only while fewer than 3 have been found.
+
+It shows one home per development, and never this development or sold, commercial, office or per-sq-ft-priced listings. Rentals are compared with rentals. A studio stored as a 1-bedroom is recognised from its title or a size under 500 sq ft, and listings for a range of homes ("2–4 Bed Lofts") are left out. Under the cards are "See all 2-bed homes in Westlands" (the site search), "Refine search" and "Compare these with an advisor". Development pages show similar developments instead. If fewer than 3 matches turn up, the block shows developments in the area. If there are none of those either, it says so and offers "Ask an advisor to find one". `bke_dev_similar` (listing IDs) still puts chosen listings first, and "Hide Also consider" turns the block off for one listing. The block is cached for each listing and rebuilt whenever any listing's price, bedrooms, area, status or photo changes.
+
+**Unit switcher and breadcrumb.** A unit's page shows a row of the development's homes (1 Bed 6.5M · 2 Bed 13.5M · 3 Bed 18M · All homes). The breadcrumb reads Home / For Sale / Westlands / Golden Mansion / 2 Bedroom Apartment; on phones it shortens to "‹ Golden Mansion". A visitor who came from the site's search or a listings page sees "‹ Back to results" instead, which survives hops between the development's homes. Under the residences table, "See all homes for sale in Westlands" follows the bedroom filter ("Comparing? See other 2-bed homes in Westlands").
+
+**Main area.** A listing tagged with several areas uses its development's area, else the one with the most listings. The Golden Mansion 2-bed, tagged Industrial Area and Westlands, therefore reads Westlands everywhere: the hero, breadcrumb, similar homes and the enquiry email. Set "Main area (slug)" on a listing to choose it by hand.
+
+**Ad landing pages** stay a closed funnel: no search, no similar homes and none of their database queries. They show "Not sure Golden Mansion is the one? Send me 3 alternatives", which opens the enquiry form ("Alternatives request" in the email). Only after the visitor has enquired does the thank-you panel add one link: "While you wait: see other 2-bed homes in Westlands".
+
+**Rolling it out.** `auto_units` (default off) switches the layout on for unit listings for sale without ticking each one. Set it to `true` for all of them, or to a list of area slugs, e.g. `array( 'westlands' )`, to go area by area.
+
+**Tracking.** GA4 / dataLayer events:
+- `search_open`, `search_submit` (with the fields and how many the visitor changed), `search_shortlist`;
+- `similar_view` (once), `similar_click` (with position and tier), `similar_see_all`;
+- `unit_switch`, `units_filter`, `residences_see_all`, `back_to_results`, `lp_after_click`.
+
+The new enquiry sources `alternatives`, `search-shortlist`, `compare` and `find` are named in the lead email.
+
+**Settings** (option `blockke_dev_page`):
+- similar homes: `similar_count` (6), `similar_min` (3), `price_band` (0.25), `dev_price_band` (0.35), `neighbours`, `pool_cap` (200), `sim_ttl` (12 hours), `similar_units`;
+- search: `search`, `search_url`, `search_min_area_count` (5), `budget_bands`, `beds_mode` (`exact`; set `min` if the site search treats bedrooms as "at least", so labels read "2+ bed");
+- navigation and landing pages: `unit_switcher`, `back_to_results`, `lp_alternatives`, `lp_after_link`, `auto_units`.
+
 **Visitors abroad.** When the browser's time zone isn't Nairobi, the phone fields show an international example for that country (for example `+44 7700 900123` in the UK), so diaspora buyers include their country code.
 
 ## Settings
@@ -139,6 +172,7 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - the calculator swap on classic off-plan and complete pages;
 - v1.1: the amenity tiles and checklist on three listings at desktop and mobile widths (full tile rows, no clipped text), the fonts and colours, and the `display_font = ''` fallback;
 - v1.3: landing pages at `?lp=1` and on a page, for an off-plan development, a unit and a completed development: no theme header or footer, no links off the page but the privacy policy, `noindex, follow`, lead submission with gclid and the Google Ads conversion call, the contact bar, rentals refused, the `landing_pages` switch, and no sideways scrolling from 320px to 1440px. Also at real phone viewports with browser bars (390×664, 360×640, 412×780, 430×740): the whole form on the first screen and the cover copy on the photo. The optional questions were checked end to end: saved on the same lead, emailed, accepted once, unknown references refused, no extra form submit event, the contact bar never covering them, and no "Which home?" after a unit's own enquiry. Also tested: the timeline on the full form, the phone examples for six time zones, and captioned photos (the amenity strip swiping on phones and in one full row on desktop, non-amenity captions kept out of it, captions on the gallery and in the viewer, and no strip without captions);
+- v1.4: on a copy seeded from block.ke's Westlands inventory (Golden Mansion and its units, 15 two-beds from other developments, Peponi, Parklands and Kilimani, rentals, and the data traps: a studio stored as a 1-bed, a range listing, a per-sq-ft price, an office, a rental with no Buy/Rent tag, a sold unit), 67 checks. They covered the breadcrumb and main area (no "Industrial Area"), similar homes (3–6, none from Golden Mansion, one per development, the first within 25%, no traps), rentals, a thin area widening to its neighbours, similar developments on a development page, the residences link following the filter, landing pages staying closed with one link after an enquiry, the search sheet (filled in, Tab, Escape, back button, Rent, the exact search parameters, shortlist, no-JavaScript link), no sideways scroll from 320px with 40px targets, the desktop section bar from 1000px to 1440px, back to results across the switcher, the cache following price, sold and status changes, the tracking events and print;
 - v1.3.1: the landing page's "Speak to an advisor" form at phone and desktop widths: sent, saved and emailed, with the Zoho and email results written onto the saved lead; no field called `company` and the anti-spam field not drawn; an AutoFilled `company` from a cached older page accepted; bot sends caught and kept aside; error codes for a firewall page, a crash and a non-JSON answer, the site's own refusal message, and the plain message with no connection; and the enquiry kept when the mail server crashes mid-send;
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
