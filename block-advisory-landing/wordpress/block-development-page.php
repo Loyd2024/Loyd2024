@@ -71,7 +71,7 @@
  * v1.3.2 (2026-10-11): photo labels. Off-plan pages no longer say "Artist's impression": the main photo is
  * labelled "Project render" and the gallery note reads "Project renders.", unless the listing sets its own
  * in the custom fields bke_dev_hero_label and bke_dev_gallery_note (e.g. "Show apartment" and "Photos of
- * the show apartment."); "none" hides either.
+ * the show apartment."); "none" hides either. The disclaimer says "Images may include project renders."
  * v1.4 (2026-10-10): getting around. "Search homes" next to Share (and in the desktop section bar) opens a
  * short search filled in from the listing (Buy, area, bedrooms, budget, completion) into the site's search
  * results. "Also consider" now shows homes with the same bedrooms in the same area close in price and size
@@ -171,7 +171,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				array( 'Checks before you commit', 'We help you review the developer, approvals and sale documents before you reserve or pay a deposit.' ),
 				array( 'One advisor to handover', 'From reservation and payments to construction updates and handover, the same advisor stays with you.' ),
 			),
-			'disclaimer'         => "All information is provided in good faith from the developer's published material and is subject to change without notice. Prices, sizes, availability, payment terms and completion dates should be confirmed before you commit. Images may be artist's impressions. Block Real Estate does not provide financial or legal advice.",
+			'disclaimer'         => "All information is provided in good faith from the developer's published material and is subject to change without notice. Prices, sizes, availability, payment terms and completion dates should be confirmed before you commit. Images may include project renders. Block Real Estate does not provide financial or legal advice.",
 		);
 		$saved = get_option( 'blockke_dev_page', array() );
 		if ( ! is_array( $saved ) ) {
