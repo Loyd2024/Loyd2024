@@ -68,6 +68,10 @@
  * alone and is not drawn at all). Each enquiry is saved before Zoho and the email, so a slow or failing
  * step can't lose it. Anti-spam catches are kept in option blockke_dev_spam (last 30), and a failed send
  * shows its error code.
+ * v1.3.2 (2026-10-11): photo labels. Off-plan pages no longer say "Artist's impression": the main photo is
+ * labelled "Project render" and the gallery note reads "Project renders.", unless the listing sets its own
+ * in the custom fields bke_dev_hero_label and bke_dev_gallery_note (e.g. "Show apartment" and "Photos of
+ * the show apartment."); "none" hides either.
  * v1.4 (2026-10-10): getting around. "Search homes" next to Share (and in the desktop section bar) opens a
  * short search filled in from the listing (Buy, area, bedrooms, budget, completion) into the site's search
  * results. "Also consider" now shows homes with the same bedrooms in the same area close in price and size
@@ -85,8 +89,8 @@
  * and Rank Math and Yoast FAQ blocks are read; the payment plan is read from an H3 under "Pricing"; a plan
  * with a fixed share per instalment ("then 10% every 3 months") is calculated that way, with the balance on
  * completion; with no plan stated and completion three months away or less, a note replaces the estimate;
- * the Location heading drops asides ("(off Waiyaki Way), directly opposite ..."); and a "Photos" setting
- * stops show-house photographs being labelled artist's impressions.
+ * and the Location heading drops asides ("(off Waiyaki Way), directly opposite ..."). Includes v1.3.2's photo
+ * labels, which can also be set in the Development page box ("Main photo label", "Gallery note").
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -3067,6 +3071,20 @@ JS;
 			$here = '' !== $here ? $here : blockke_dev_unit_label_from_title( $title );
 		}
 
+		// Photo labels: the caption on the main photo and the note under the gallery. Off-plan pages say
+		// "Project render" / "Project renders." unless the listing sets its own in bke_dev_hero_label and
+		// bke_dev_gallery_note (e.g. "Show apartment" / "Photos of the show apartment."); "none" hides one.
+		$hero_label   = blockke_dev_text( (string) get_post_meta( $id, 'bke_dev_hero_label', true ) );
+		$gallery_note = blockke_dev_text( (string) get_post_meta( $id, 'bke_dev_gallery_note', true ) );
+		if ( '' === $hero_label ) {
+			$hero_label = $offplan ? 'Project render' : '';
+		}
+		if ( '' === $gallery_note ) {
+			$gallery_note = $offplan ? 'Project renders.' : 'Photos of ' . $short . '.';
+		}
+		$hero_label   = 'none' === strtolower( $hero_label ) ? '' : $hero_label;
+		$gallery_note = 'none' === strtolower( $gallery_note ) ? '' : $gallery_note;
+
 		$agent     = blockke_dev_agent( (int) get_post_meta( $id, 'property_agent', true ) );
 		$amenities = blockke_dev_amenities( $id, $secs );
 		$data      = array(
@@ -3081,7 +3099,6 @@ JS;
 			'area_line'  => $area_line,
 			'address'    => $address ? $address : $area_line,
 			'offplan'    => $offplan,
-			'photos'     => blockke_dev_photos_kind( $id, $offplan ),
 			'tagline'    => $tagline,
 			'price_from' => $price_from,
 			'completion' => $completion,
@@ -3089,6 +3106,8 @@ JS;
 			'subs'       => $subs,
 			'images'     => $ids,
 			'captions'   => $captions,
+			'hero_label' => $hero_label,
+			'gallery_note' => $gallery_note,
 			'video'      => blockke_dev_video( $id ),
 			'facts'      => blockke_dev_facts( $id, $kv, $units, $completion ),
 			'overview'   => array(
@@ -3455,7 +3474,7 @@ JS;
 					'data-ph'       => $d['short'],
 				)
 			)
-			. ( $hero && 'renders' === $d['photos'] ? '<figcaption>Artist\'s impression</figcaption>' : '' )
+			. ( $hero && '' !== $d['hero_label'] ? '<figcaption>' . $e( $d['hero_label'] ) . '</figcaption>' : '' )
 			. ( $n_img > 1 ? '<button class="bkd-btn bkd-btn-white bkd-btn-sm bkd-all" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View ' . $n_img . ' photos</button>' : '' )
 			. '</figure><div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
 		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">Get the price list and floor plans</div>'
@@ -3535,7 +3554,7 @@ JS;
 					. blockke_dev_img( $aid, 'large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => 0 === $i ? '(min-width: 900px) 66vw, 100vw' : '(min-width: 900px) 33vw, 50vw', 'alt' => blockke_dev_alt( $aid, $d['short'] . ' photo ' . ( $i + 1 ) ), 'data-ph' => $d['short'] ) )
 					. '</button>';
 			}
-			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . ( 'renders' === $d['photos'] ? 'Images are artist\'s impressions.' : ( 'mixed' === $d['photos'] ? 'Some images are artist\'s impressions.' : 'Photos of ' . $e( $d['short'] ) . '.' ) ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
+			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . $e( $d['gallery_note'] ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
 		}
 
 		// Video or virtual tour
@@ -5159,12 +5178,6 @@ JS;
 	   Editor: "Development page" box on Properties, and admin-bar previews
 	   ===================================================================== */
 
-	/** 'photos', 'renders' or 'mixed': the listing's "Photos" setting, else artist's impressions when off-plan. */
-	function blockke_dev_photos_kind( $id, $offplan ) {
-		$k = (string) get_post_meta( $id, 'bke_dev_photos', true );
-		return in_array( $k, array( 'photos', 'renders', 'mixed' ), true ) ? $k : ( $offplan ? 'renders' : 'photos' );
-	}
-
 	function blockke_dev_fields() {
 		return array(
 			'bke_dev_layout'           => array( 'Layout', 'select' ),
@@ -5176,7 +5189,8 @@ JS;
 			'bke_dev_plan_until'       => array( 'Instalments until (YYYY-MM)', 'text', 'Empty: the completion date.' ),
 			'bke_dev_plan_text'        => array( 'Payment plan text', 'textarea', 'Empty: the first paragraph of the Payment Plan section.' ),
 			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Shown under Address and in Location. Empty: the description\'s Location section, else straight-line distances from the map pin.' ),
-			'bke_dev_photos'           => array( 'Photos', 'choice', 'How the gallery is labelled.', array( '' => 'Automatic: artist\'s impressions on off-plan listings', 'photos' => 'Photographs (show house, site or finished building)', 'renders' => 'Artist\'s impressions', 'mixed' => 'Some photographs, some artist\'s impressions' ) ),
+			'bke_dev_hero_label'       => array( 'Main photo label', 'text', 'Shown on the main photo, e.g. Show apartment. Empty: "Project render" on off-plan listings, nothing otherwise. "none" hides it.' ),
+			'bke_dev_gallery_note'     => array( 'Gallery note', 'text', 'Under the photos, e.g. Photos of the show apartment. Empty: "Project renders." on off-plan listings, else "Photos of {development}." "none" hides it.' ),
 			'bke_dev_brochure'         => array( 'Brochure (PDF link)', 'url', 'Opens for the visitor right after they send their details. Empty: the first PDF attached to the listing.' ),
 			'bke_dev_video'            => array( 'Video (YouTube or Vimeo link)', 'url', 'Empty: the listing\'s video, else its virtual tour.' ),
 			'bke_dev_similar'          => array( 'Similar listings (IDs)', 'text', 'Comma-separated listing IDs, shown first under "Also consider". The rest are picked automatically: homes with the same bedrooms in the same area at a similar price.' ),
@@ -5303,12 +5317,6 @@ JS;
 								. '<option value=""' . selected( $mode, '', false ) . '>Automatic (currently ' . ( $auto ? 'on' : 'off' ) . ')</option>'
 								. '<option value="on"' . selected( $mode, 'on', false ) . '>On: development layout</option>'
 								. '<option value="off"' . selected( $mode, 'off', false ) . '>Off: classic property page</option></select>';
-						} elseif ( 'choice' === $f[1] ) {
-							echo '<select id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '">';
-							foreach ( $f[3] as $ov => $ol ) {
-								echo '<option value="' . esc_attr( $ov ) . '"' . selected( $val, (string) $ov, false ) . '>' . esc_html( $ol ) . '</option>';
-							}
-							echo '</select>';
 						} elseif ( 'checkbox' === $f[1] ) {
 							echo '<input type="hidden" name="' . esc_attr( $key ) . '" value=""><label><input type="checkbox" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="1"' . checked( '' !== $val, true, false ) . '> Yes</label>';
 						} elseif ( 'textarea' === $f[1] ) {
@@ -5346,8 +5354,6 @@ JS;
 				$raw = wp_unslash( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 				if ( 'select' === $f[1] ) {
 					$v = in_array( $raw, array( 'on', 'off' ), true ) ? $raw : '';
-				} elseif ( 'choice' === $f[1] ) {
-					$v = is_string( $raw ) && isset( $f[3][ $raw ] ) ? $raw : '';
 				} elseif ( 'checkbox' === $f[1] ) {
 					$v = '1' === (string) $raw ? '1' : '';
 				} elseif ( 'textarea' === $f[1] ) {
