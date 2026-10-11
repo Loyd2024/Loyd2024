@@ -80,6 +80,13 @@
  * the visitor has enquired. Similar homes are cached per listing (bkd_sim_{id}) and refreshed whenever a
  * listing changes. Config: search, similar_*, neighbours, budget_bands, unit_switcher, auto_units and more.
  * The headline price reads "Up to" for a ceiling price and "Price" for a ready home's own price, not "From".
+ * v1.4.1 (2026-10-11): sizes written in both units ("43 sqm (463 sq ft)") read as square metres, not "4 – 43 m²";
+ * "1-Bedroom" and "2-Bedroom" count as bedrooms; the FAQ is found when it is an H3 inside another section,
+ * and Rank Math and Yoast FAQ blocks are read; the payment plan is read from an H3 under "Pricing"; a plan
+ * with a fixed share per instalment ("then 10% every 3 months") is calculated that way, with the balance on
+ * completion; with no plan stated and completion three months away or less, a note replaces the estimate;
+ * the Location heading drops asides ("(off Waiyaki Way), directly opposite ..."); and a "Photos" setting
+ * stops show-house photographs being labelled artist's impressions.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -247,6 +254,14 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			return '';
 		}
 		$is_ft = $assume_ft || preg_match( '/sq\.?\s*ft|sqft|ft²|square f/i', $t );
+		if ( $is_ft && preg_match( '/\d\s*(?:sq\.?\s*m\b|sqm|m²|m2\b|square met)/i', $t ) ) {
+			// "43 sqm (463 sq ft)": both units given, so read only the square metres
+			$t     = preg_replace( '/\([^)]*(?:sq\.?\s*ft|sqft|ft²|square f)[^)]*\)|\d[\d,.]*(?:\s*(?:-|–|to)\s*\d[\d,.]*)?\s*(?:sq\.?\s*ft|sqft|ft²|square f\w*)/i', ' ', $t );
+			$is_ft = false;
+			if ( ! preg_match_all( '/\d+(?:\.\d+)?/', str_replace( ',', '', $t ), $m ) ) {
+				return '';
+			}
+		}
 		$vals  = array();
 		foreach ( array_slice( $m[0], 0, 2 ) as $n ) {
 			$n      = (float) $n;
@@ -589,8 +604,16 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$steps  = array();
 		$text   = '';
 		$all    = '';
+		$ptoks  = $i >= 0 ? $parsed['sections'][ $i ]['tokens'] : array();
+		if ( $i < 0 ) { // "Payment Plan" as an H3 under "Pricing"
+			$sub = blockke_dev_sub_section( $parsed, '/payment (plan|terms|schedule)/i' );
+			if ( $sub ) {
+				$ptoks = $sub['tokens'];
+				$i     = 0;
+			}
+		}
 		if ( $i >= 0 ) {
-			foreach ( $parsed['sections'][ $i ]['tokens'] as $t ) {
+			foreach ( $ptoks as $t ) {
 				if ( 'ul' === $t['tag'] ) {
 					foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
 						$p       = blockke_dev_split_kv( $it );
@@ -633,6 +656,14 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		if ( preg_match( '/(\d{1,2})\s*%[^.]{0,30}?(?:on|at|upon)\s+(?:completion|handover|hand-over)/i', $all, $m ) ) {
 			$on_completion = (int) $m[1];
 		}
+		// A fixed share per instalment ("then 10% every 3 months", "5% monthly"): the rest falls due on completion
+		$inst_pct   = 0;
+		$inst_every = 0;
+		if ( preg_match( '/(\d{1,2}(?:\.\d+)?)\s*%\s*(?:of the (?:purchase )?price\s+)?(?:(?:every|each|per|a)\s+(month|quarter|(?:3|three)\s*months|(?:6|six)\s*months)\b|(monthly|quarterly)\b)/i', $all, $m ) && (float) $m[1] > 0 && (float) $m[1] <= 25 ) {
+			$w          = strtolower( isset( $m[3] ) && '' !== $m[3] ? $m[3] : $m[2] );
+			$inst_pct   = (float) $m[1];
+			$inst_every = ( 'month' === $w || 'monthly' === $w ) ? 1 : ( preg_match( '/6|six/', $w ) ? 6 : 3 );
+		}
 		$completion = blockke_dev_completion( $post );
 		$until      = trim( (string) get_post_meta( $id, 'bke_dev_plan_until', true ) );
 		if ( '' === $until ) {
@@ -649,6 +680,8 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'deposit'       => $dep,
 			'reservation'   => $res,
 			'on_completion' => $on_completion,
+			'inst_pct'      => $inst_pct,
+			'inst_every'    => $inst_every,
 			'completion'    => $completion,
 			'until'         => $until,
 			'months'        => blockke_dev_months_until( $until ),
@@ -666,15 +699,19 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$cur    = $cfg['currency'];
 		$dep    = $plan['deposit'] > 0 ? $plan['deposit'] : (float) $cfg['default_deposit'];
 		$months = (int) $plan['months'];
+		$ip     = isset( $plan['inst_pct'] ) ? (float) $plan['inst_pct'] : 0;
+		$ie     = $ip > 0 ? (int) $plan['inst_every'] : 0;
+		$freq   = 3 === $ie ? 3 : 1; // quarterly first only when the plan fixes a share every 3 months
 		$h      = '<div class="bkd-calc" id="bkd-calc" data-bkd-calc="instalment" data-cur="' . esc_attr( $cur ) . '" data-deposit="' . esc_attr( $dep ) . '"'
 			. ' data-reservation="' . esc_attr( (float) $plan['reservation'] ) . '" data-until="' . esc_attr( $plan['until'] ) . '" data-months="' . esc_attr( $months ) . '"'
-			. ' data-completion="' . esc_attr( $plan['completion'] ) . '" data-oncompletion="' . esc_attr( (int) $plan['on_completion'] ) . '">';
+			. ' data-completion="' . esc_attr( $plan['completion'] ) . '" data-oncompletion="' . esc_attr( (int) $plan['on_completion'] ) . '"'
+			. ( $ip > 0 ? ' data-instpct="' . esc_attr( $ip ) . '" data-instevery="' . esc_attr( $ie ) . '"' : '' ) . '>';
 		$h     .= '<div class="bkd-calc-grid"><div class="bkd-calc-fields">';
 		$h     .= '<label class="bkd-cf"><span class="bkd-cl">Price (' . esc_html( $cur ) . ')</span><input class="bkd-ci" data-c="price" inputmode="numeric" autocomplete="off" value="' . esc_attr( $price > 0 ? number_format( $price ) : '' ) . '" aria-label="Price"></label>';
 		$h     .= '<label class="bkd-cf"><span class="bkd-cl">Deposit <output data-c="dep-out">' . esc_html( blockke_dev_num( $dep ) ) . '%</output></span>'
 			. '<input class="bkd-range" type="range" data-c="dep" min="0" max="60" step="5" value="' . esc_attr( round( $dep / 5 ) * 5 ) . '" aria-label="Deposit percentage"></label>';
 		$h     .= '<div class="bkd-cf" role="group" aria-label="Pay the balance"><span class="bkd-cl">Pay the balance</span><div class="bkd-seg">'
-			. '<button type="button" data-c="freq" data-v="1" aria-pressed="true">Monthly</button><button type="button" data-c="freq" data-v="3" aria-pressed="false">Quarterly</button></div></div>';
+			. '<button type="button" data-c="freq" data-v="1" aria-pressed="' . ( 1 === $freq ? 'true' : 'false' ) . '">Monthly</button><button type="button" data-c="freq" data-v="3" aria-pressed="' . ( 3 === $freq ? 'true' : 'false' ) . '">Quarterly</button></div></div>';
 		if ( $months < 1 ) {
 			$h .= '<label class="bkd-cf"><span class="bkd-cl">Over</span><select class="bkd-ci" data-c="months" aria-label="Number of months">';
 			foreach ( array( 6, 12, 18, 24, 30, 36, 48, 60 ) as $mo ) {
@@ -690,6 +727,9 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$h .= '<div class="bkd-co-row bkd-co-total"><span>Total price</span><strong data-c="total">—</strong></div>';
 		$h .= '</div></div>';
 		$note = 'Illustrative only: equal instalments from next month' . ( $months > 0 ? ' until completion' . ( $plan['completion'] ? ' in ' . $plan['completion'] : '' ) : '' ) . '.';
+		if ( $ip > 0 ) {
+			$note = 'Illustrative only: ' . blockke_dev_num( $ip ) . '% of the price every ' . ( 1 === $ie ? 'month' : $ie . ' months' ) . ' from next month, and the balance on completion' . ( $plan['completion'] ? ' in ' . $plan['completion'] : '' ) . '.';
+		}
 		if ( $plan['deposit'] <= 0 ) {
 			$note .= ' The deposit shown is typical; this listing has not stated one.';
 		}
@@ -784,7 +824,7 @@ CSS;
   function num(el){return el?(parseFloat(dg(el.value))||0):0;}
   function setP(r){r.style.setProperty('--p',((r.value-r.min)/(r.max-r.min)*100)+'%');}
   var price=q('price'),dep=q('dep');
-  var freq=1;
+  var fb=box.querySelector('[data-c="freq"][aria-pressed="true"]'),freq=fb?(+fb.getAttribute('data-v')||1):1;
   function monthsLeft(){
     var m=/^(\d{4})-(\d{1,2})$/.exec(box.getAttribute('data-until')||'');
     if(m){var d=new Date(),n=(+m[1])*12+(+m[2])-(d.getFullYear()*12+d.getMonth()+1);if(n>0){return n;}}
@@ -804,8 +844,10 @@ CSS;
       return;
     }
     var res=+box.getAttribute('data-reservation')||0,oc=+box.getAttribute('data-oncompletion')||0;
+    var ip=+box.getAttribute('data-instpct')||0,ie=+box.getAttribute('data-instevery')||3;
     var months=monthsLeft(),count=Math.max(1,Math.floor(months/freq)||1);
     var depAmt=p*d/100,compAmt=p*oc/100,inst=Math.max(0,p-depAmt-compAmt),per=inst/count;
+    if(ip>0&&p){per=Math.min(p*ip/100*freq/ie,inst);if(per>0){count=Math.max(1,Math.min(count,Math.floor(inst/per+1e-6)));}compAmt=Math.max(0,p-depAmt-per*count);}
     var unit=freq===3?'quarter':'month',comp=box.getAttribute('data-completion')||'';
     var until=box.getAttribute('data-until')&&monthsLeft()>0&&!q('months');
     q('per-label').textContent='Per '+unit+(until?', until completion'+(comp?' in '+comp:''):', over '+months+' months');
@@ -813,7 +855,7 @@ CSS;
     q('deposit').textContent=p?fmt(depAmt):'—';
     q('dep-note').textContent=res&&p&&depAmt>=res?'Includes the '+fmt(res)+' reservation':'';
     q('count').textContent=p?count+' × '+fmt(per):'—';
-    var cr=q('comp-row');if(cr){cr.hidden=!oc;q('comp').textContent=p?fmt(compAmt):'—';}
+    var cr=q('comp-row');if(cr){cr.hidden=!(oc||(ip&&compAmt>=1));q('comp').textContent=p?fmt(compAmt):'—';}
     q('total').textContent=p?fmt(p):'—';
   }
   box.addEventListener('input',function(e){if(e.target.matches('input,select')){calc();}});
@@ -1152,7 +1194,7 @@ JS;
 		if ( false !== strpos( $l, 'loft' ) ) {
 			return 'loft';
 		}
-		if ( preg_match( '/(\d+)\s*(?:(?:-|–|to|&|and)\s*\d+\s*)?(?:bed|br\b)/u', $l, $m ) ) {
+		if ( preg_match( '/(\d+)\s*-?\s*(?:(?:-|–|to|&|and)\s*\d+\s*-?\s*)?(?:bed|br\b)/u', $l, $m ) ) { // "2 Bed", "1-Bedroom", "2-3 bed"
 			return (int) $m[1];
 		}
 		$words = array( 'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5, 'six' => 6 );
@@ -1855,7 +1897,34 @@ JS;
 		return blockke_dev_trim_words( implode( ' ', $keep ), 640 );
 	}
 
-	function blockke_dev_faqs( $tokens ) {
+	/** A heading below the top level ("Frequently Asked Questions" as an H3) and what follows it up to the next heading as high. */
+	function blockke_dev_sub_section( $parsed, $re ) {
+		$toks = $parsed['tokens'];
+		$n    = count( $toks );
+		foreach ( $toks as $i => $t ) {
+			$ht = blockke_dev_text( $t['inner'] );
+			if ( 'h' !== $t['tag'] || $t['level'] <= $parsed['level'] || ! preg_match( $re, $ht ) || '?' === substr( $ht, -1 ) || preg_match( '/faq-question|rank-math-question/', $t['html'] ) ) {
+				continue; // not a question such as "What is the payment plan?"
+			}
+			$out = array();
+			$end = strlen( $parsed['html'] );
+			for ( $j = $i + 1; $j < $n; $j++ ) {
+				$h = $toks[ $j ];
+				if ( 'h' === $h['tag'] && $h['level'] <= $t['level'] && ! preg_match( '/faq-question|rank-math-question/', $h['html'] ) ) {
+					$end = $h['pos'];
+					break;
+				}
+				$out[] = $h;
+			}
+			return array(
+				'tokens' => $out,
+				'html'   => substr( $parsed['html'], $t['pos'], $end - $t['pos'] ),
+			);
+		}
+		return null;
+	}
+
+	function blockke_dev_faqs( $tokens, $html = '' ) {
 		$faqs  = array();
 		$q     = '';
 		$a     = array();
@@ -1871,6 +1940,19 @@ JS;
 			'ol'     => array(),
 			'li'     => array(),
 		);
+		// Rank Math and Yoast FAQ blocks: the answer is a <div>, which the token reader skips
+		if ( preg_match_all( '#<(h[2-6]|strong|p|div)\b[^>]*class="[^"]*(?:rank-math-question|schema-faq-question)[^"]*"[^>]*>(.*?)</\1>.*?<(div|p)\b[^>]*class="[^"]*(?:rank-math-answer|schema-faq-answer)[^"]*"[^>]*>(.*?)</\3>#is', $html, $fm, PREG_SET_ORDER ) ) {
+			foreach ( $fm as $x ) {
+				$fq = rtrim( blockke_dev_text( $x[2] ), ':' );
+				$fa = trim( wp_kses( $x[4], $allow ) );
+				if ( '' !== $fq && '' !== $fa ) {
+					$faqs[] = array( $fq, false === stripos( $fa, '<p' ) && false === stripos( $fa, '<ul' ) && false === stripos( $fa, '<ol' ) ? '<p>' . $fa . '</p>' : $fa );
+				}
+			}
+			if ( $faqs ) {
+				return $faqs;
+			}
+		}
 		foreach ( $tokens as $t ) {
 			if ( 'h' === $t['tag'] ) {
 				if ( '' !== $q && $a ) {
@@ -2769,7 +2851,12 @@ JS;
 		$area_line = implode( ', ', array_unique( array_filter( array( $area, $city_t ? blockke_dev_text( $city_t->name ) : '' ) ) ) );
 		$address   = blockke_dev_text( get_post_meta( $id, 'property_address', true ) );
 		if ( '' === $address ) {
-			$address = preg_replace( '/(,\s*(Nairobi|Kenya))+$/i', '', blockke_dev_kv_get( $kv, '/^location|^address/i' ) );
+			// "Muthithi Road, Westlands, Nairobi (off Waiyaki Way), directly opposite ..." -> "Muthithi Road, Westlands"
+			$address = preg_replace( '/\s*\(.*$|\s+[—–]\s.*$/u', '', blockke_dev_kv_get( $kv, '/^location|^address/i' ) );
+			$address = preg_replace( '/(,\s*(Nairobi|Kenya))+$/i', '', $address );
+			if ( mb_strlen( $address ) > 60 ) {
+				$address = implode( ',', array_slice( explode( ',', $address ), 0, 2 ) );
+			}
 		}
 		$offplan = blockke_dev_is_offplan( $id );
 		$status  = $offplan ? 'Off-plan' : ( has_term( 'complete', 'property_status', $id ) || has_term( 'ready-now', 'property_completion', $id ) ? 'Ready to move in' : '' );
@@ -2914,11 +3001,19 @@ JS;
 		// FAQ, description, everything else
 		$fi   = blockke_dev_find( $secs, '/faq|frequently asked|questions/i' );
 		$ci   = blockke_dev_find( $secs, '/enquir|call to action|contact|get in touch|book a viewing|next step/i' );
+		$faqs = $fi >= 0 ? blockke_dev_faqs( $secs[ $fi ]['tokens'], $secs[ $fi ]['html'] ) : array();
+		$fsub = $fi < 0 ? blockke_dev_sub_section( $parsed, '/faq|frequently asked/i' ) : null; // an H3 "Frequently Asked Questions" inside an H2 section
+		if ( $fsub ) {
+			$faqs = blockke_dev_faqs( $fsub['tokens'], $fsub['html'] );
+		}
 		$desc = $rest;
 		foreach ( $secs as $i => $s ) {
 			if ( $i !== $fi && $i !== $ci ) {
 				$desc .= $s['html'];
 			}
+		}
+		if ( $fsub && $faqs ) {
+			$desc = str_replace( $fsub['html'], '', $desc );
 		}
 		$desc = preg_replace( array( '#<(/?)h5\b#i', '#<(/?)h4\b#i', '#<(/?)h3\b#i', '#<(/?)h2\b#i' ), array( '<$1h6', '<$1h5', '<$1h4', '<$1h3' ), $desc );
 
@@ -2986,6 +3081,7 @@ JS;
 			'area_line'  => $area_line,
 			'address'    => $address ? $address : $area_line,
 			'offplan'    => $offplan,
+			'photos'     => blockke_dev_photos_kind( $id, $offplan ),
 			'tagline'    => $tagline,
 			'price_from' => $price_from,
 			'completion' => $completion,
@@ -3010,7 +3106,7 @@ JS;
 			'lat'        => $lat,
 			'lng'        => $lng,
 			'location'   => $loc,
-			'faqs'       => $fi >= 0 ? blockke_dev_faqs( $secs[ $fi ]['tokens'] ) : array(),
+			'faqs'       => $faqs,
 			'ctx'        => $ctx,
 			'agent'      => $agent,
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
@@ -3359,7 +3455,7 @@ JS;
 					'data-ph'       => $d['short'],
 				)
 			)
-			. ( $hero && $d['offplan'] ? '<figcaption>Artist\'s impression</figcaption>' : '' )
+			. ( $hero && 'renders' === $d['photos'] ? '<figcaption>Artist\'s impression</figcaption>' : '' )
 			. ( $n_img > 1 ? '<button class="bkd-btn bkd-btn-white bkd-btn-sm bkd-all" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View ' . $n_img . ' photos</button>' : '' )
 			. '</figure><div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
 		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">Get the price list and floor plans</div>'
@@ -3439,7 +3535,7 @@ JS;
 					. blockke_dev_img( $aid, 'large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => 0 === $i ? '(min-width: 900px) 66vw, 100vw' : '(min-width: 900px) 33vw, 50vw', 'alt' => blockke_dev_alt( $aid, $d['short'] . ' photo ' . ( $i + 1 ) ), 'data-ph' => $d['short'] ) )
 					. '</button>';
 			}
-			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . ( $d['offplan'] ? 'Images are artist\'s impressions.' : 'Photos of ' . $e( $d['short'] ) . '.' ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
+			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . ( 'renders' === $d['photos'] ? 'Images are artist\'s impressions.' : ( 'mixed' === $d['photos'] ? 'Some images are artist\'s impressions.' : 'Photos of ' . $e( $d['short'] ) . '.' ) ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
 		}
 
 		// Video or virtual tour
@@ -3553,7 +3649,13 @@ JS;
 				$o[] = '</ol>';
 			}
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="payment-plan">Get the official payment plan</button></div>';
-			$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['price_from'], $plan, $cta ) . '</div></div></section>';
+			if ( $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3 ) {
+				// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
+				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Completion is close</p><p class="bkd-body">' . $e( 'Completion is scheduled for ' . $d['completion'] . ', so an instalment plan would be short. Ask for the developer\'s current payment terms, and whether a mortgage can cover the balance.' ) . '</p>'
+					. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
+			} else {
+				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['price_from'], $plan, $cta ) . '</div></div></section>';
+			}
 		} else {
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="mortgage">Talk to us about financing</button></div>';
 			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Mortgage</p><h2 class="bkd-h2">Ready to move in. <em>Finance it your way.</em></h2>'
@@ -5057,6 +5159,12 @@ JS;
 	   Editor: "Development page" box on Properties, and admin-bar previews
 	   ===================================================================== */
 
+	/** 'photos', 'renders' or 'mixed': the listing's "Photos" setting, else artist's impressions when off-plan. */
+	function blockke_dev_photos_kind( $id, $offplan ) {
+		$k = (string) get_post_meta( $id, 'bke_dev_photos', true );
+		return in_array( $k, array( 'photos', 'renders', 'mixed' ), true ) ? $k : ( $offplan ? 'renders' : 'photos' );
+	}
+
 	function blockke_dev_fields() {
 		return array(
 			'bke_dev_layout'           => array( 'Layout', 'select' ),
@@ -5068,6 +5176,7 @@ JS;
 			'bke_dev_plan_until'       => array( 'Instalments until (YYYY-MM)', 'text', 'Empty: the completion date.' ),
 			'bke_dev_plan_text'        => array( 'Payment plan text', 'textarea', 'Empty: the first paragraph of the Payment Plan section.' ),
 			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Shown under Address and in Location. Empty: the description\'s Location section, else straight-line distances from the map pin.' ),
+			'bke_dev_photos'           => array( 'Photos', 'choice', 'How the gallery is labelled.', array( '' => 'Automatic: artist\'s impressions on off-plan listings', 'photos' => 'Photographs (show house, site or finished building)', 'renders' => 'Artist\'s impressions', 'mixed' => 'Some photographs, some artist\'s impressions' ) ),
 			'bke_dev_brochure'         => array( 'Brochure (PDF link)', 'url', 'Opens for the visitor right after they send their details. Empty: the first PDF attached to the listing.' ),
 			'bke_dev_video'            => array( 'Video (YouTube or Vimeo link)', 'url', 'Empty: the listing\'s video, else its virtual tour.' ),
 			'bke_dev_similar'          => array( 'Similar listings (IDs)', 'text', 'Comma-separated listing IDs, shown first under "Also consider". The rest are picked automatically: homes with the same bedrooms in the same area at a similar price.' ),
@@ -5194,6 +5303,12 @@ JS;
 								. '<option value=""' . selected( $mode, '', false ) . '>Automatic (currently ' . ( $auto ? 'on' : 'off' ) . ')</option>'
 								. '<option value="on"' . selected( $mode, 'on', false ) . '>On: development layout</option>'
 								. '<option value="off"' . selected( $mode, 'off', false ) . '>Off: classic property page</option></select>';
+						} elseif ( 'choice' === $f[1] ) {
+							echo '<select id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '">';
+							foreach ( $f[3] as $ov => $ol ) {
+								echo '<option value="' . esc_attr( $ov ) . '"' . selected( $val, (string) $ov, false ) . '>' . esc_html( $ol ) . '</option>';
+							}
+							echo '</select>';
 						} elseif ( 'checkbox' === $f[1] ) {
 							echo '<input type="hidden" name="' . esc_attr( $key ) . '" value=""><label><input type="checkbox" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="1"' . checked( '' !== $val, true, false ) . '> Yes</label>';
 						} elseif ( 'textarea' === $f[1] ) {
@@ -5231,6 +5346,8 @@ JS;
 				$raw = wp_unslash( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 				if ( 'select' === $f[1] ) {
 					$v = in_array( $raw, array( 'on', 'off' ), true ) ? $raw : '';
+				} elseif ( 'choice' === $f[1] ) {
+					$v = is_string( $raw ) && isset( $f[3][ $raw ] ) ? $raw : '';
 				} elseif ( 'checkbox' === $f[1] ) {
 					$v = '1' === (string) $raw ? '1' : '';
 				} elseif ( 'textarea' === $f[1] ) {
