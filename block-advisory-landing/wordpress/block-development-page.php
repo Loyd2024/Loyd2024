@@ -1773,7 +1773,7 @@ JS;
 			array( 'The Karen Hospital', 'health', -1.33611, 36.72615 ),
 			array( 'Gertrude’s Children’s Hospital', 'health', -1.25606, 36.83167 ),
 			array( 'Karura Forest', 'park', -1.23700, 36.83033 ),
-			array( 'Nairobi Arboretum', 'park', -1.27430, 36.81310 ),
+			array( 'Nairobi Arboretum', 'park', -1.27859, 36.80308 ), // entrance on Arboretum Drive (was -1.27430, 36.81310, which is Museum Hill)
 			array( 'City Park', 'park', -1.26330, 36.83060 ),
 			array( 'Jomo Kenyatta International Airport', 'air', -1.31920, 36.92780 ),
 			array( 'Wilson Airport', 'air', -1.32172, 36.81483, 10 ),
