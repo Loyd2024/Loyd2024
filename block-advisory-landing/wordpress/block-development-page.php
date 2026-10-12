@@ -91,6 +91,9 @@
  * completion; with no plan stated and completion three months away or less, a note replaces the estimate;
  * and the Location heading drops asides ("(off Waiyaki Way), directly opposite ..."). Includes v1.3.2's photo
  * labels, which can also be set in the Development page box ("Main photo label", "Gallery note").
+ * v1.4.2 (2026-10-12): studios are searchable. The search sheet's bedrooms start at "Studio", and links for a
+ * studio ("See all studio homes in Westlands", the residences filter) search the site's Studio category
+ * (config studio_cat) instead of a bedroom count, since the site search does not filter on 0 bedrooms.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -161,6 +164,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				'rent' => array( array( 0, 80000, 'Under KES 80K a month' ), array( 80000, 150000, 'KES 80K – 150K a month' ), array( 150000, 300000, 'KES 150K – 300K a month' ), array( 300000, 0, 'KES 300K a month and above' ) ),
 			),
 			'beds_mode'          => 'exact', // 'min' if the site search reads bedrooms as "at least": labels then say "2+ bed"
+			'studio_cat'         => 'studio-apartments', // property category slug that studio searches use; '' = no Studio option
 			'unit_switcher'      => true,  // unit pages: a row to switch between the development's homes (1 Bed, 2 Bed...)
 			'back_to_results'    => true,  // "Back to results" when the visitor came from a search or listings page
 			'lp_alternatives'    => true,  // landing pages: "Not sure? Send me 3 alternatives" (an enquiry, not a link)
@@ -2488,6 +2492,9 @@ JS;
 	 */
 	function blockke_dev_link_beds( $c ) {
 		$cfg = blockke_dev_config();
+		if ( 'studio' === $c['key'] && '' !== (string) $cfg['studio_cat'] ) {
+			return 'studio';
+		}
 		if ( ! ctype_digit( (string) $c['key'] ) ) {
 			return '';
 		}
@@ -2498,6 +2505,9 @@ JS;
 	function blockke_dev_beds_label( $c ) {
 		$cfg = blockke_dev_config();
 		$b   = blockke_dev_link_beds( $c );
+		if ( 'studio' === $b ) {
+			return 'studio';
+		}
 		return '' === $b ? '' : ( 'min' === $cfg['beds_mode'] ? $b . '+ bed' : $b . '-bed' );
 	}
 
@@ -2510,7 +2520,9 @@ JS;
 			$p[] = 'location=' . rawurlencode( $q['area'] );
 		}
 		$p[] = rawurlencode( 'property_action_category[]' ) . '=' . ( isset( $q['action'] ) && 'rent' === $q['action'] ? 'for-rent' : 'for-sale' );
-		if ( ! empty( $q['beds'] ) && ctype_digit( (string) $q['beds'] ) ) {
+		if ( ! empty( $q['beds'] ) && 'studio' === $q['beds'] && '' !== (string) $cfg['studio_cat'] ) {
+			$p[] = rawurlencode( 'property_category[]' ) . '=' . rawurlencode( (string) $cfg['studio_cat'] );
+		} elseif ( ! empty( $q['beds'] ) && ctype_digit( (string) $q['beds'] ) ) {
 			$p[] = 'componentsbeds=' . (int) $q['beds'];
 		}
 		return $base . ( false === strpos( $base, '?' ) ? '?' : '&' ) . implode( '&', $p );
@@ -2562,7 +2574,7 @@ JS;
 		if ( $c['sim_off'] ) {
 			return null;
 		}
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v14b|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'] ) ) );
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v142|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'] ) ) );
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -2731,7 +2743,7 @@ JS;
 		}
 		$rent  = 'rent' === $c['action'];
 		$beds  = blockke_dev_link_beds( $c );
-		$beds  = '' !== $beds && 'min' !== $cfg['beds_mode'] ? (string) min( 5, (int) $beds ) : $beds;
+		$beds  = ctype_digit( $beds ) && 'min' !== $cfg['beds_mode'] ? (string) min( 5, (int) $beds ) : $beds;
 		$bands = isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array();
 		$pick  = '';
 		if ( $c['price'] > 0 && ! $c['flag'] ) {
@@ -2764,10 +2776,16 @@ JS;
 		$h .= '</select></label><input type="hidden" name="price_low" disabled><input type="hidden" name="price_max" disabled>';
 		$h .= '<fieldset class="bkd-f bkd-sf-wide"><legend>Bedrooms</legend><div class="bkd-chips">';
 		$chips = 'min' === $cfg['beds_mode'] ? array( '' => 'Any', '1' => '1+', '2' => '2+', '3' => '3+', '4' => '4+' ) : array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5' );
+		if ( '' !== (string) $cfg['studio_cat'] ) {
+			$chips = array_slice( $chips, 0, 1, true ) + array( 'studio' => 'Studio' ) + array_slice( $chips, 1, null, true );
+		}
 		foreach ( $chips as $v => $l ) {
 			$h .= '<label class="bkd-chip"><input type="radio" name="componentsbeds" value="' . esc_attr( $v ) . '"' . checked( (string) $v, $beds, false ) . '><span>' . esc_html( $l ) . '</span></label>';
 		}
 		$h .= '</div></fieldset>';
+		if ( '' !== (string) $cfg['studio_cat'] ) { // sent instead of componentsbeds when Studio is picked
+			$h .= '<input type="hidden" name="property_category[]" value="' . esc_attr( $cfg['studio_cat'] ) . '" data-sf-studio disabled>';
+		}
 		if ( $lists['years'] ) {
 			$h .= '<label class="bkd-f bkd-sf-wide" data-sf-comp' . ( $rent ? ' hidden' : '' ) . '><span>Completion</span><select name="completion"><option value="">Any time</option>';
 			foreach ( $lists['years'] as $slug => $label ) {
@@ -3585,11 +3603,13 @@ JS;
 				foreach ( $d['units'] as $u ) {
 					if ( is_int( $u['key'] ) && $u['key'] > 0 ) {
 						$gbeds[ $u['group'] ] = min( 6, $u['key'] );
+					} elseif ( 'studio' === $u['key'] && '' !== (string) $cfg['studio_cat'] ) {
+						$gbeds[ $u['group'] ] = 'studio';
 					}
 				}
 				$filters = '<div class="bkd-filters" role="group" aria-label="Filter residences"><button type="button" aria-pressed="true" data-g="*">All</button>';
 				foreach ( $groups as $g ) {
-					$filters .= '<button type="button" aria-pressed="false" data-g="' . esc_attr( $g ) . '"' . ( isset( $gbeds[ $g ] ) ? ' data-beds="' . (int) $gbeds[ $g ] . '"' : '' ) . '>' . $e( $g ) . '</button>';
+					$filters .= '<button type="button" aria-pressed="false" data-g="' . esc_attr( $g ) . '"' . ( isset( $gbeds[ $g ] ) ? ' data-beds="' . esc_attr( $gbeds[ $g ] ) . '"' : '' ) . '>' . $e( $g ) . '</button>';
 				}
 				$filters .= '</div>';
 			}
@@ -4485,7 +4505,7 @@ CSS;
   function sfMode(){var r=sf.querySelector('input[name="property_action_category[]"]:checked');return r&&r.value==='for-rent'?'rent':'sale';}
   function sfState(){var f=sfForm(),b=f.querySelector('input[name="componentsbeds"]:checked'),c=f.querySelector('[name="completion"]'),bud=f.querySelector('[data-sf-budget]');
     return {action:sfMode(),area:f.querySelector('[name="location"]').value,beds:b?b.value:'',budget:bud.value,budgetText:bud.value?bud.options[bud.selectedIndex].text:'',completion:c&&sfMode()==='sale'?c.value:''};}
-  function sfSummary(){var s=sfState();return [s.beds?s.beds+(s.beds==='4'?'+':'')+' bed':'',s.area||'Any area',s.budgetText,s.action==='rent'?'Rent':'Buy'].filter(Boolean).join(' · ');}
+  function sfSummary(){var s=sfState();return [s.beds==='studio'?'Studio':s.beds?s.beds+(s.beds==='4'?'+':'')+' bed':'',s.area||'Any area',s.budgetText,s.action==='rent'?'Rent':'Buy'].filter(Boolean).join(' · ');}
   function sfBands(){var sel=sf.querySelector('[data-sf-budget]'),mode=sfMode();if(sel.getAttribute('data-mode')===mode){return;}
     var bands=(C.bands&&C.bands[mode])||[];sel.innerHTML='<option value="">Any budget</option>'+bands.map(function(b){return '<option value="'+(+b[0])+'-'+(+b[1])+'">'+esc(b[2])+'</option>';}).join('');sel.setAttribute('data-mode',mode);
     var comp=sf.querySelector('[data-sf-comp]');if(comp){comp.hidden=mode==='rent';}}
@@ -4514,7 +4534,8 @@ CSS;
     sfForm().addEventListener('submit',function(e){
       var f=sfForm(),st=sfState(),lo=f.querySelector('[name="price_low"]'),hi=f.querySelector('[name="price_max"]');
       if(st.budget){var pr=st.budget.split('-');lo.value=pr[0];hi.value=+pr[1]>0?pr[1]:'500000000';lo.disabled=hi.disabled=false;}else{lo.disabled=hi.disabled=true;}
-      $$('select[name],input[type="radio"][name]',f).forEach(function(x){if(x.value===''){x.disabled=true;}});
+      $$('select[name],input[type="radio"][name]',f).forEach(function(x){if(x.value===''||(x.name==='componentsbeds'&&x.value==='studio')){x.disabled=true;}});
+      var stu=f.querySelector('[data-sf-studio]');if(stu){stu.disabled=st.beds!=='studio';}
       var c=f.querySelector('[name="completion"]');if(c&&st.action==='rent'){c.disabled=true;}
       var a=JSON.parse(sfStart||'{}'),changed=0;['action','area','beds','budget','completion'].forEach(function(k){if(a[k]!==st[k]){changed++;}});
       track('search_submit',{action:st.action,area:st.area,beds:st.beds,budget:st.budget,completion:st.completion,changed:changed,source:sf.getAttribute('data-source')||'',transport_type:'beacon'});
@@ -4574,8 +4595,8 @@ CSS;
     rows.forEach(function(r){r.hidden=b.getAttribute('data-g')!=='*'&&r.getAttribute('data-g')!==b.getAttribute('data-g');});
     track('units_filter',{group:b.getAttribute('data-g')});
     if(resAll){var bd=b.getAttribute('data-beds'),area=resAll.getAttribute('data-area'),noun=resAll.getAttribute('data-noun');
-      resAll.href=resAll.getAttribute('data-base')+(bd?'&componentsbeds='+bd:'');
-      resAll.querySelector('span').textContent=bd?'Comparing? See other '+bd+(C.bedsMode==='min'?'+ bed ':'-bed ')+noun+' in '+area:'See all '+(noun==='rentals'?'rentals':'homes for sale')+' in '+area;}
+      resAll.href=resAll.getAttribute('data-base')+(bd==='studio'?(C.studioCat?'&property_category%5B%5D='+encodeURIComponent(C.studioCat):''):bd?'&componentsbeds='+bd:'');
+      resAll.querySelector('span').textContent=bd==='studio'?'Comparing? See other studio '+noun+' in '+area:bd?'Comparing? See other '+bd+(C.bedsMode==='min'?'+ bed ':'-bed ')+noun+' in '+area:'See all '+(noun==='rentals'?'rentals':'homes for sale')+' in '+area;}
   });});
   if(resAll){resAll.addEventListener('click',function(){var p=$('.bkd-filters [aria-pressed="true"]');track('residences_see_all',{group:p?p.getAttribute('data-g'):'*',transport_type:'beacon'});});}
 
@@ -4801,6 +4822,7 @@ JS;
 						'bands'    => $cfg['budget_bands'],
 						'back'     => ! $lp && ! empty( $cfg['back_to_results'] ) ? 1 : 0,
 						'bedsMode' => $cfg['beds_mode'],
+						'studioCat' => (string) $cfg['studio_cat'],
 					);
 					if ( $lp && ! empty( $cfg['lp_after_link'] ) && $data['ctx']['area_name'] ) {
 						$cx          = $data['ctx'];
