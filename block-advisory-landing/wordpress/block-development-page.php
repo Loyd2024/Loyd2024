@@ -1781,6 +1781,27 @@ JS;
 		return array_slice( $out, 0, 8 );
 	}
 
+	/** Drops intro sentences that only repeat a place row: "… 30 km (about 30 minutes) from Nairobi CBD …" over "Nairobi CBD | 30 km". */
+	function blockke_dev_loc_intro_dedup( $intro, $places ) {
+		if ( '' === $intro || ! $places ) {
+			return $intro;
+		}
+		$keep = array();
+		foreach ( preg_split( '/(?<=[.!?])\s+(?=[A-Z0-9“"])/u', $intro ) as $x ) {
+			$dup = false;
+			foreach ( $places as $p ) {
+				if ( '' !== $p[0] && false !== stripos( $x, $p[0] ) && preg_match_all( '/(\d+(?:\.\d+)?)\s*(?:km|min)/i', $x, $nx ) && preg_match_all( '/(\d+(?:\.\d+)?)\s*(?:km|min)/i', $p[0] . ' ' . $p[1], $np ) && ! array_diff( $nx[1], $np[1] ) ) {
+					$dup = true;
+					break;
+				}
+			}
+			if ( ! $dup ) {
+				$keep[] = $x;
+			}
+		}
+		return implode( ' ', $keep );
+	}
+
 	/** The Amenities section's own introduction (the whole paragraph), if the description has one. */
 	function blockke_dev_amenity_intro( $sections ) {
 		$ai = blockke_dev_find( $sections, '/amenit|facilit|lifestyle/i', '/finish|spec/i' );
@@ -2742,7 +2763,8 @@ JS;
 			}
 		} else {
 			$want  = blockke_dev_key_phrase( $c['key'], $rent );
-			$title = 'No other ' . esc_html( $want ) . ( $area ? ' in ' . esc_html( $area ) : '' ) . ' listed right now';
+			$dev   = $c['master_id'] ? $c['master_name'] : ( 'master' === $c['kind'] || $c['project_id'] ? $d['short'] : '' );
+			$title = 'No other ' . esc_html( $want ) . ( $area ? ' in ' . esc_html( $area ) : '' ) . ( '' !== $dev ? ' outside ' . esc_html( $dev ) : '' ) . ' listed right now'; // its own homes are left out on purpose
 		}
 		$all_url  = blockke_dev_search_url( array( 'area' => 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ? '' : $area, 'action' => $c['action'], 'beds' => 'units' === $res['mode'] ? blockke_dev_link_beds( $c ) : '' ) );
 		$all_text = 'See all ' . ( $beds ? $beds . ' ' : '' ) . ( $rent ? 'rentals' : ( $beds ? 'homes' : 'homes for sale' ) ) . ( $area && ! ( 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ) ? ' in ' . $area : '' );
@@ -3239,6 +3261,7 @@ JS;
 			$amen_src     = implode( ' ', $others );
 			$loc['intro'] = $go ? blockke_dev_fit_sentences( implode( ' ', $go ), 520 ) : '';
 		}
+		$loc['intro'] = blockke_dev_loc_intro_dedup( $loc['intro'], $loc['places'] );
 		$data      = array(
 			'id'         => $id,
 			'slug'       => $post->post_name,
@@ -4174,10 +4197,10 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-prose a{color:var(--navy);text-decoration:underline;text-underline-offset:3px}
 #bkd .bkd-prose strong{color:var(--ink);font-weight:600}
 #bkd .bkd-prose figure{margin:20px 0 0;overflow-x:auto}
-@media (max-width:719px){#bkd .bkd-prose table{font-size:13px}#bkd .bkd-prose :is(th,td){padding-right:8px}#bkd .bkd-prose th{letter-spacing:.06em}#bkd .bkd-prose figure{background:linear-gradient(90deg,var(--paper) 30%,rgba(251,249,246,0)) 0 0/28px 100% no-repeat local,linear-gradient(270deg,var(--paper) 30%,rgba(251,249,246,0)) 100% 0/28px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 0 0/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 100% 0/12px 100% no-repeat scroll}} /* wide tables swipe, with a shadow on the side that has more */
 #bkd .bkd-prose table{width:100%;border-collapse:collapse;font-size:14px}
 #bkd .bkd-prose :is(th,td){padding:11px 12px 11px 0;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 #bkd .bkd-prose th{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--navy)}
+@media (max-width:719px){#bkd .bkd-prose table{font-size:13px}#bkd .bkd-prose :is(th,td){padding-right:8px}#bkd .bkd-prose th{letter-spacing:.06em}#bkd .bkd-prose figure{background:linear-gradient(90deg,var(--paper) 30%,rgba(251,249,246,0)) 0 0/28px 100% no-repeat local,linear-gradient(270deg,var(--paper) 30%,rgba(251,249,246,0)) 100% 0/28px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 0 0/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 100% 0/12px 100% no-repeat scroll}} /* wide tables swipe, with a shadow on the side that has more */
 #bkd .bkd-prose img{height:auto;margin-top:16px}
 /* Gallery */
 #bkd .bkd-gal{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
