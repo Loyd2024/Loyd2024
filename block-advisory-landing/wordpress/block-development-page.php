@@ -94,7 +94,8 @@
  * v1.4.2 (2026-10-12): studios are searchable. The search sheet's bedrooms start at "Studio", and links for a
  * studio ("See all studio homes in Westlands", the residences filter) search the site's Studio category
  * (config studio_cat) instead of a bedroom count, since the site search does not filter on 0 bedrooms.
- * v1.4.3 (2026-10-13): FAQs written as "<strong>Question?</strong> Answer" in one paragraph are read too.
+ * v1.4.3 (2026-10-13): FAQs written as "<strong>Question?</strong> Answer" in one paragraph are read too, and a
+ * unit page with no places of its own shows its development's "Places nearby" box before straight-line distances.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -1005,6 +1006,9 @@ JS;
 		if ( ! empty( $cfg['classic_nearby'] ) ) {
 			$x['own'] = blockke_dev_places_override( $id );
 			if ( ! $x['own'] ) {
+				$x['own'] = blockke_dev_master_places( $id );
+			}
+			if ( ! $x['own'] ) {
 				$x['near'] = blockke_dev_nearby( get_post_meta( $id, 'property_latitude', true ), get_post_meta( $id, 'property_longitude', true ) );
 			}
 		}
@@ -1856,6 +1860,15 @@ JS;
 			}
 		}
 		return $places;
+	}
+
+	/** A unit's development's "Places nearby" box, for a unit that has none of its own. */
+	function blockke_dev_master_places( $id ) {
+		$m = (int) get_post_meta( $id, 'property_subunits_master', true );
+		if ( ! $m || $m === (int) $id || 'publish' !== get_post_status( $m ) ) {
+			return array();
+		}
+		return blockke_dev_places_override( $m );
 	}
 
 	/** "Who it suits" from the description: its list, and the closing note on who it suits less well. */
@@ -3016,6 +3029,8 @@ JS;
 		$own = blockke_dev_places_override( $id );
 		if ( $own ) {
 			$loc['places'] = $own;
+		} elseif ( ! $loc['places'] ) { // a unit page: its development's box before straight-line distances
+			$loc['places'] = blockke_dev_master_places( $id );
 		}
 		$lat = (float) get_post_meta( $id, 'property_latitude', true );
 		$lng = (float) get_post_meta( $id, 'property_longitude', true );
