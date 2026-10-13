@@ -798,7 +798,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$cur = $cfg['currency'];
 		$h   = '<div class="bkd-calc" id="bkd-calc" data-bkd-calc="mortgage" data-cur="' . esc_attr( $cur ) . '">';
 		$h  .= '<div class="bkd-calc-grid"><div class="bkd-calc-fields">';
-		$h  .= '<label class="bkd-cf"><span class="bkd-cl">' . ( $own_price ? 'Mortgage price' : 'Price' ) . ' (' . esc_html( $cur ) . ')</span><input class="bkd-ci" data-c="price" inputmode="numeric" autocomplete="off" value="' . esc_attr( $price > 0 ? number_format( $price ) : '' ) . '" aria-label="Price"></label>';
+		$h  .= '<label class="bkd-cf"><span class="bkd-cl">' . ( $own_price ? 'Mortgage price' : 'Price' ) . ' (' . esc_html( $cur ) . ')</span><input class="bkd-ci" data-c="price" inputmode="numeric" autocomplete="off" value="' . esc_attr( $price > 0 ? number_format( $price ) : '' ) . '" aria-label="' . ( $own_price ? 'Mortgage price' : 'Price' ) . '"></label>';
 		$h  .= '<label class="bkd-cf"><span class="bkd-cl">Deposit <output data-c="dep-out">' . (int) $cfg['mortgage_deposit'] . '%</output></span>'
 			. '<input class="bkd-range" type="range" data-c="dep" min="10" max="60" step="5" value="' . (int) $cfg['mortgage_deposit'] . '" aria-label="Deposit percentage"></label>';
 		$h  .= '<div class="bkd-calc-two"><label class="bkd-cf"><span class="bkd-cl">Interest (% a year)</span><input class="bkd-ci" data-c="rate" inputmode="decimal" autocomplete="off" value="' . esc_attr( $cfg['mortgage_rate'] ) . '" aria-label="Interest rate"></label>';
@@ -1545,9 +1545,12 @@ JS;
 			$facts[] = array( 'Parking', ucfirst( $park ) );
 		}
 		$land = blockke_dev_kv_get( $kv, '/land size|plot|acre/i' );
-		if ( $land && mb_strlen( $land ) > 24 ) { // "Approx. 375–531 sqm (eighth-acre)" -> "375–531 sqm"
+		$land = preg_replace( '/\s*(?:sq\.?\s*m\b|sqm\b|square met(?:er|re)s?\b|m2\b)/i', ' m²', $land ); // the same unit as Size
+		if ( mb_strlen( $land ) > 24 ) { // "Approx. 375–531 m² (eighth-acre)" -> "Approx. 375–531 m²"
+			$land = trim( preg_replace( '/\s*(?:\(|[,;]\s).*$/u', '', $land ) );
+		}
+		if ( mb_strlen( $land ) > 24 ) {
 			$land = preg_replace( '/\bapprox(?:imately|\.)?\s*/i', '', $land );
-			$land = mb_strlen( $land ) > 24 ? trim( preg_replace( '/\s*(?:\(|[,;]\s).*$/u', '', $land ) ) : $land;
 		}
 		if ( $land && mb_strlen( $land ) <= 24 ) {
 			$facts[] = array( preg_match( '/plot/i', blockke_dev_kv_key( $kv, '/land size|plot|acre/i' ) ) ? 'Plot' : 'Land', ucfirst( $land ) );
@@ -3038,7 +3041,10 @@ JS;
 		$rest    = '';
 		foreach ( $parsed['intro'] as $t ) {
 			$tx = 'p' === $t['tag'] ? blockke_dev_text( $t['inner'] ) : '';
-			if ( 'p' === $t['tag'] && mb_strlen( $tx ) > 30 && count( $intro_p ) < 3 && ( $intro_p || mb_strlen( $tx ) > 110 || preg_match( '/[.!?…:;"”)]$/u', $tx ) ) ) {
+			if ( 'p' === $t['tag'] && ! $intro_p && '' === $rest && '' !== $tx && mb_strlen( $tx ) <= 110 && ! preg_match( '/[.!?…:;"”)]$/u', $tx ) && ! preg_match( '/<(?:a|img)\b/i', $t['inner'] ) ) {
+				continue; // a title-like first line ("3 Bedroom Villa at Tilisi Views, Limuru"): the H1 already says it
+			}
+			if ( 'p' === $t['tag'] && mb_strlen( $tx ) > 30 && count( $intro_p ) < 3 ) {
 				$intro_p[] = $tx;
 			} else {
 				$rest .= $t['html'];
@@ -4125,6 +4131,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-facts dl>div{padding:24px 0;min-width:0}
 #bkd .bkd-facts dl>div:nth-child(even){padding-left:20px;border-left:1px solid var(--navy-line)}
 #bkd .bkd-facts dl>div:nth-child(n+3){border-top:1px solid var(--navy-line)}
+@media (max-width:899px){#bkd .bkd-facts dl>div:last-child:nth-child(odd):not(:first-child){grid-column:1/-1}}
 #bkd .bkd-facts dt{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-l)}
 #bkd .bkd-facts dd{margin:6px 0 0;font-family:var(--display);font-size:clamp(23px,2.2vw,30px);font-weight:var(--display-w);line-height:1.15;letter-spacing:0;color:#fff}
 @media (min-width:900px){#bkd .bkd-facts dl{grid-template-columns:repeat(var(--n,4),minmax(0,1fr))}#bkd .bkd-facts dl>div{padding:32px 0;border-top:0!important}#bkd .bkd-facts dl>div:nth-child(even){padding-left:0;border-left:0}#bkd .bkd-facts dl>div+div{padding-left:28px!important;border-left:1px solid var(--navy-line)!important}}
@@ -4167,6 +4174,7 @@ body.bkd-page{overflow-x:clip}
 #bkd .bkd-prose a{color:var(--navy);text-decoration:underline;text-underline-offset:3px}
 #bkd .bkd-prose strong{color:var(--ink);font-weight:600}
 #bkd .bkd-prose figure{margin:20px 0 0;overflow-x:auto}
+@media (max-width:719px){#bkd .bkd-prose table{font-size:13px}#bkd .bkd-prose :is(th,td){padding-right:8px}#bkd .bkd-prose th{letter-spacing:.06em}#bkd .bkd-prose figure{background:linear-gradient(90deg,var(--paper) 30%,rgba(251,249,246,0)) 0 0/28px 100% no-repeat local,linear-gradient(270deg,var(--paper) 30%,rgba(251,249,246,0)) 100% 0/28px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 0 0/12px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(13,36,64,.18),rgba(13,36,64,0)) 100% 0/12px 100% no-repeat scroll}} /* wide tables swipe, with a shadow on the side that has more */
 #bkd .bkd-prose table{width:100%;border-collapse:collapse;font-size:14px}
 #bkd .bkd-prose :is(th,td){padding:11px 12px 11px 0;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 #bkd .bkd-prose th{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--navy)}
