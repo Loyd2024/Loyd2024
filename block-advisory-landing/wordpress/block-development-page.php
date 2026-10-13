@@ -94,6 +94,7 @@
  * v1.4.2 (2026-10-12): studios are searchable. The search sheet's bedrooms start at "Studio", and links for a
  * studio ("See all studio homes in Westlands", the residences filter) search the site's Studio category
  * (config studio_cat) instead of a bedroom count, since the site search does not filter on 0 bedrooms.
+ * v1.4.3 (2026-10-13): FAQs written as "<strong>Question?</strong> Answer" in one paragraph are read too.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -1982,6 +1983,16 @@ JS;
 					$q      = '';
 					$a      = array();
 					$faqs[] = array( rtrim( blockke_dev_text( $s[2] ), ':' ), wp_kses( '<p>' . $s[3] . '</p>', $allow ) );
+					continue;
+				}
+				// "<strong>Question?</strong> Answer" in one paragraph
+				if ( preg_match( '#^\s*<(strong|b)\b[^>]*>(.*?)</\1>\s*(?:[:\x{2013}\x{2014}-]\s*)?(\S.*)$#isu', $t['inner'], $s ) && preg_match( '/\?\s*$/u', blockke_dev_text( $s[2] ) ) && '' !== blockke_dev_text( $s[3] ) ) {
+					if ( '' !== $q && $a ) {
+						$faqs[] = array( $q, implode( '', $a ) );
+					}
+					$q      = '';
+					$a      = array();
+					$faqs[] = array( blockke_dev_text( $s[2] ), wp_kses( '<p>' . $s[3] . '</p>', $allow ) );
 					continue;
 				}
 				if ( preg_match( '#^\s*<(strong|b)\b[^>]*>(.*?)</\1>\s*$#is', $t['inner'], $s ) && preg_match( '/\?\s*$/', blockke_dev_text( $s[2] ) ) ) {
