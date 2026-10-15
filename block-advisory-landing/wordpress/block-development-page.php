@@ -10620,6 +10620,7 @@ JS;
 						'studioCat' => (string) $cfg['studio_cat'],
 						'search'    => 1,
 						'bkn'       => array( 'src' => 'search', 'label' => 'your search' ),
+						'listLabel' => 'your search', // what the card context and "Back to …" read
 					);
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
 					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_search_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
