@@ -102,6 +102,24 @@ A segment page lists every match, 24 at a time with "Show more" (`area_page_size
 
 **Tracking.** `area_filter`, `area_sort`, `area_more`, `area_card_click` (with position and section), plus the usual enquiry events with `area_page` set to the segment.
 
+## 6. New developments, search results and one card family (v1.6, every part switched off)
+
+One card for a development everywhere a list of them appears (the new developments page, area and segment pages, search results), one set of filters with the same words and the same address parameters, and a calmer way from a card to the development and back. Each part has its own switch and an editor preview, so it can be checked on block.ke before anyone else sees it.
+
+**The card.** A 3:2 photo, the name in the display serif, a place line ("Brookside, Westlands · Studio to 3 bed") and a data line ("From KES 6.18M · Completion Apr 2028"). No badges, ribbons, icons or "Images on request" tiles. A development without a cover photo is never drawn as a placeholder: it is listed by name under the grid instead. Prices are rounded up to three figures (KES 6.06M, KES 25.3M, KES 180K a month). A development is one card: a main listing and its units, else listings sharing a Project, else one listing; two groups for the same building (same Project, or the same name in the same main area) are merged.
+
+**New developments page** (`dev_index`, preview `?bke_index=1`; page `dev_index_page`, default 30752 at `/new-developments/`). Every development selling off-plan, by completion year: a lead development and two picks (`index_picks`, else chosen from those with the most photos and a large cover, rotating weekly), a filter bar (area, bedrooms, price, completion, sort), groups for this year, the next two and "{year} and later", each showing 8 and then "Show N more completing in 2027", then "Completion date to be confirmed" for dates that have passed or were never given. Then *Ready to move into* (up to 8), the one navy band with the shortlist form and WhatsApp, and an A–Z of every development by neighbourhood, so each one is a plain link in the page. A development reaches the groups when it is homes for sale, off-plan, has a cover, at least 3 photos (`index_min_photos`), a price and an area; anything else is in the A–Z only. An editor can add one sentence to a development (post meta `bke_index_line`, up to 90 characters). The page's title, description, canonical and JSON-LD (ItemList and BreadcrumbList, no prices) are its own; any filter, sort or paging in the address is `noindex, follow` with the canonical on the plain page. While the page is on, snippet 41011's list of completion pages leaves it out (through the `blockke_completion` option filter; 41011 itself is not edited).
+
+**Area and segment pages on the new card** (`card_v16`). The v1.5 pages keep their routes, titles and canonicals and change look: the area page opens with three photos from its leading developments (one large, two stacked), then one section per kind with up to 6 cards (on phones one card, then the next three as rows), a short "Looking for something specific in Westlands?" form after the first section, nearby areas as a list with counts, the area's description and the navy band. A segment page has type tabs with counts ("All 117 · Apartments 104 · Villas 2 · Studios 19") and a bar for bedrooms (homes), price (sale or rent bands), completion (homes for sale) and sort. The bar works without JavaScript too: the server applies the filters and sort from the address, so a shared or reloaded link is right before any script runs, and the script then keeps the address up to date. Filtered or sorted views are `noindex, follow` with the canonical on the plain segment page. Switching `card_v16` off brings back the v1.5 pages unchanged.
+
+**Search results** (`search_layout`, preview `?bke_search=1`; page `search_page`, default 9). `/advanced-search/` on the same cards when the theme's search form sends only what the new page understands (Buy or Rent, category, area, bedrooms, price, completion); anything else, such as a keyword, falls back to the theme's results. Results are grouped by development, with the matching homes listed under each card ("2 homes match: 2 bed"), one section per kind and never mixed, an H1 that says what was searched ("2 bed homes for sale in Westlands"), and the count once ("112 homes in 94 developments"). On phones the filters open in a sheet. `search_redirect` sends simple searches (one area, one kind) to the matching segment page, or to the new developments page for off-plan searches by completion year; it stays off until the search form's real parameter names are confirmed on block.ke (`search_params` holds the aliases).
+
+**From a card to the development and back.** A click on a card remembers the list, the place on it and the bedrooms chosen (sessionStorage, never the address). On the development page the residences table opens on those bedrooms ("Showing 2 bed homes from your search. Show all") and the back link reads "Back to new developments", "Back to homes for sale in Westlands" or "Back to your search". Coming back puts the same card in view. With `view_transitions` on, Chromium browsers move the card's photo into the development's hero and back (280 ms; skipped for reduced motion, Save-Data, 2G and low-memory phones; other browsers load normally), and the development hero becomes photo-first at 3:2 to match. `prefetch` fetches a development while the pointer rests on its card (never prerendered, and not counted as a view).
+
+**Turning it on**, in this order, purging Cloudflare for the pages concerned after each: `card_v16`, then `view_transitions` and `prefetch`, then `dev_index`, then `search_layout`, then `search_redirect`. The rows behind every list are read once into the transient `bkn_rows` (developments in `bkn_devs`, the index in `bkn_index`) and rebuilt when a listing changes, as similar homes are.
+
+**Tracking.** `index_filter`, `index_sort`, `index_more`, `area_filter`, `area_sort`, `area_more`, `area_card_click`, search's own filter and card events, `context_beds`, and `back_to_results` with where the visitor came from.
+
 ## Enquiries
 
 Every form posts to `/wp-json/block/v1/development-lead`, which:
@@ -179,6 +197,16 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `area_index_min`, `area_type_index_min` | `3`, `5` | Segment pages (and type pages such as apartments or offices) with fewer listings are `noindex, follow` |
 | `area_cards`, `area_page_size`, `area_cap` | `6`, `24`, `400` | Cards per section on an area page; cards before "Show more" on a segment page; most listings read per area |
 | `area_why`, `area_disclaimer` | | *Why Block* and the disclaimer on area pages |
+| `card_v16` | `false` | Area and segment pages on the v1.6 card, bar and address state |
+| `dev_index`, `dev_index_page` | `false`, `30752` | The new developments page and which page it takes over |
+| `index_picks` | `array()` | Lead then up to 2 picks (post IDs); empty chooses automatically |
+| `index_group_size`, `index_page_size` | `8`, `18` | Cards per completion group before "Show more"; cards per step in a flat sort |
+| `index_min_photos`, `index_ready_max`, `index_ready_singles` | `3`, `8`, `false` | Photos needed for the grid; cards in *Ready to move into*; whether single ready listings count |
+| `index_new_days` | `30` | "New on Block" on developments added in the last N days |
+| `index_advisor` | empty | Name, photo, one line and number for the ask band; hidden until filled |
+| `search_layout`, `search_redirect` | `false`, `false` | Search results on the new layout; send simple searches to segment pages |
+| `search_params`, `search_ignore` | | The search form's parameter aliases; parameters ignored (utm, gclid…) |
+| `view_transitions`, `prefetch` | `false`, `false` | The card-to-development photo transition (and photo-first hero); prefetch on cards |
 
 ## Install and roll back
 
