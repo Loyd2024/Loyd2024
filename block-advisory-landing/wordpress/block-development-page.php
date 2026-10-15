@@ -7423,6 +7423,1507 @@ CSS;
 	   @v16-search: search results on the new layout (/advanced-search/)
 	   --------------------------------------------------------------------- */
 
+	/** The results page (page 9, /advanced-search/, on block.ke); config search_page overrides it. */
+	function blockke_search_page_id() {
+		$cfg = blockke_dev_config();
+		return (int) ( isset( $cfg['search_page'] ) ? $cfg['search_page'] : 9 );
+	}
+
+	/** Our type words (?type= and the tabs): slug => array( kind, type ('' = the whole kind), noun ). */
+	function blockke_search_types() {
+		return array(
+			'homes'      => array( 'home', '', 'homes' ),
+			'apartments' => array( 'home', 'apartment', 'apartments' ),
+			'villas'     => array( 'home', 'villa', 'villas' ),
+			'houses'     => array( 'home', 'house', 'houses' ),
+			'studios'    => array( 'home', 'studio', 'studios' ),
+			'commercial' => array( 'commercial', '', 'commercial property' ),
+			'offices'    => array( 'commercial', 'office', 'offices' ),
+			'warehouses' => array( 'commercial', 'warehouse', 'warehouses' ),
+			'shops'      => array( 'commercial', 'shop', 'shops' ),
+			'land'       => array( 'land', '', 'land' ),
+		);
+	}
+
+	/** The site's categories (property_category[] from the theme's forms) that mean one of our types; the rest filter as categories. */
+	function blockke_search_cat_types() {
+		$cfg = blockke_dev_config();
+		$map = array(
+			'residential'        => 'homes',
+			'apartments'         => 'apartments',
+			'villas-residential' => 'villas',
+			'houses-residential' => 'houses',
+			'studio-apartments'  => 'studios',
+			'commercial'         => 'commercial',
+			'offices'            => 'offices',
+			'warehouses'         => 'warehouses',
+			'shop'               => 'shops',
+			'land'               => 'land',
+		);
+		if ( '' !== (string) $cfg['studio_cat'] ) {
+			$map[ (string) $cfg['studio_cat'] ] = 'studios';
+		}
+		return $map;
+	}
+
+	/** 8, 12.5: a band end for URLs and labels. */
+	function blockke_search_num( $v ) {
+		return rtrim( rtrim( number_format( (float) $v, 2, '.', '' ), '0' ), '.' );
+	}
+
+	/** "Under KES 8M", "KES 8–12M", "KES 60M and above"; rents "KES 80–150K a month". Built from the numbers, not the config labels. */
+	function blockke_search_band_label( $lo, $hi, $rent ) {
+		$cur  = blockke_dev_config()['currency'];
+		$unit = $rent ? 1000 : 1000000;
+		$sfx  = ( $rent ? 'K' : 'M' );
+		$m    = $rent ? ' a month' : '';
+		if ( $lo <= 0 && $hi > 0 ) {
+			return 'Under ' . $cur . ' ' . blockke_search_num( $hi / $unit ) . $sfx . $m;
+		}
+		if ( $hi <= 0 ) {
+			return $cur . ' ' . blockke_search_num( $lo / $unit ) . $sfx . ' and above' . $m;
+		}
+		return $cur . ' ' . blockke_search_num( $lo / $unit ) . '–' . blockke_search_num( $hi / $unit ) . $sfx . $m;
+	}
+
+	/** Price bands from config budget_bands: "lo-hi" (KES millions; thousands for rents) => label. */
+	function blockke_search_bands( $rent ) {
+		$cfg  = blockke_dev_config();
+		$unit = $rent ? 1000 : 1000000;
+		$list = isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array();
+		$out  = array();
+		foreach ( $list as $b ) {
+			if ( is_array( $b ) && count( $b ) >= 2 ) {
+				$key         = blockke_search_num( $b[0] / $unit ) . '-' . ( (float) $b[1] > 0 ? blockke_search_num( $b[1] / $unit ) : '' );
+				$out[ $key ] = blockke_search_band_label( (float) $b[0], (float) $b[1], $rent );
+			}
+		}
+		return $out;
+	}
+
+	/** "Studio", "2 bed", "4+ bed" ("2+ bed" when the site reads bedrooms as a minimum, config beds_mode). */
+	function blockke_search_beds_label( $b ) {
+		if ( 'studio' === $b ) {
+			return 'Studio';
+		}
+		return $b . ( '4' === (string) $b || 'min' === blockke_dev_config()['beds_mode'] ? '+' : '' ) . ' bed';
+	}
+
+	/** "2027", "2029 and later", "Ready now" for 41011's completion slugs. */
+	function blockke_search_done_label( $slug ) {
+		if ( 'ready-now' === $slug ) {
+			return 'Ready now';
+		}
+		return preg_match( '/^(\d{4})-plus$/', $slug, $m ) ? $m[1] . ' and later' : $slug;
+	}
+
+	/** Whether an editor is previewing (?bke_search=1): links and the bar keep the preview. */
+	function blockke_search_preview() {
+		return ! empty( $GLOBALS['blockke_search_preview'] );
+	}
+
+	/** The development a listing belongs to, or null. */
+	function blockke_search_dev_of( $id ) {
+		$d = blockke_bkn_devs();
+		return isset( $d['of'][ $id ], $d['devs'][ $d['of'][ $id ] ] ) ? $d['devs'][ $d['of'][ $id ] ] : null;
+	}
+
+	/** Areas offered in the bar: main areas of at least 3 developments, busiest first (slug => name). The rest are "Other areas". */
+	function blockke_search_areas() {
+		static $out = null;
+		if ( null !== $out ) {
+			return $out;
+		}
+		$n = array();
+		foreach ( blockke_bkn_devs()['devs'] as $d ) {
+			if ( '' !== $d['area'] ) {
+				$n[ $d['area'] ] = ( isset( $n[ $d['area'] ] ) ? $n[ $d['area'] ] : 0 ) + 1;
+			}
+		}
+		arsort( $n );
+		$out = array();
+		foreach ( $n as $slug => $c ) {
+			$t = $c >= 3 ? get_term_by( 'slug', $slug, 'property_area' ) : null;
+			if ( $t instanceof WP_Term ) {
+				$out[ $slug ] = blockke_dev_text( $t->name );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Reads a results-page query: the theme's fields (property_action_category[], property_category[], completion), the aliases in
+	 * config search_params, and our clean ones (for, type, area, beds, price, completion, sort, n). Returns null for anything it
+	 * cannot read (a keyword, an MLS number, a saved search, an unknown area or value): the theme then renders the page as today.
+	 * The key that stopped it is kept in $GLOBALS['blockke_search_why'] for the admin bar.
+	 */
+	function blockke_search_parse( $get = null ) {
+		$cfg = blockke_dev_config();
+		$get = null === $get ? wp_unslash( $_GET ) : $get; // phpcs:ignore WordPress.Security.NonceVerification
+		$GLOBALS['blockke_search_why'] = '';
+		$q    = array( 'for' => array(), 'types' => array(), 'cats' => array(), 'area' => array(), 'beds' => '', 'price' => '', 'lo' => 0, 'hi' => 0, 'completion' => '', 'sort' => '', 'n' => 0 );
+		$role = array( 'area' => 'area', 'beds' => 'beds' );
+		$al   = isset( $cfg['search_params'] ) && is_array( $cfg['search_params'] ) ? $cfg['search_params'] : array();
+		foreach ( array( 'area', 'beds', 'min', 'max' ) as $r ) {
+			foreach ( isset( $al[ $r ] ) ? (array) $al[ $r ] : array() as $k ) {
+				$role[ (string) $k ] = $r;
+			}
+		}
+		$ignore   = array_map( 'strval', isset( $cfg['search_ignore'] ) ? (array) $cfg['search_ignore'] : array() );
+		$ignore[] = 'bke_search'; // the editor preview
+		$cats     = blockke_search_cat_types();
+		$types    = blockke_search_types();
+		$min      = 0;
+		$max      = 0;
+		foreach ( is_array( $get ) ? $get : array() as $k => $v ) {
+			$k = (string) $k;
+			if ( in_array( $k, $ignore, true ) ) {
+				continue;
+			}
+			$vals = array();
+			foreach ( is_array( $v ) ? $v : array( $v ) as $x ) {
+				if ( is_array( $x ) || strlen( (string) $x ) > 100 ) {
+					$GLOBALS['blockke_search_why'] = $k;
+					return null;
+				}
+				$x = trim( (string) $x );
+				if ( '' !== $x && ! in_array( strtolower( $x ), array( 'all', 'any' ), true ) ) {
+					$vals[] = $x;
+				}
+			}
+			if ( ! $vals ) {
+				continue; // empty fields, "all" and "any" ask for nothing
+			}
+			if ( in_array( $k, array( 'area', 'type' ), true ) ) { // our own lists are comma-separated
+				$vals = array_values( array_filter( array_map( 'trim', explode( ',', implode( ',', $vals ) ) ), 'strlen' ) );
+			}
+			$ok = true;
+			$rk = isset( $role[ $k ] ) ? $role[ $k ] : $k;
+			switch ( $rk ) {
+				case 'property_action_category':
+				case 'for':
+					foreach ( $vals as $x ) {
+						$x = strtolower( $x );
+						if ( in_array( $x, array( 'for-sale', 'sale', 'buy' ), true ) ) {
+							$q['for'][] = 'sale';
+						} elseif ( in_array( $x, array( 'for-rent', 'rent', 'to-rent' ), true ) ) {
+							$q['for'][] = 'rent';
+						} else {
+							$ok = false;
+						}
+					}
+					break;
+				case 'property_category':
+					foreach ( $vals as $x ) {
+						$x = sanitize_title( $x );
+						if ( isset( $cats[ $x ] ) ) {
+							$q['types'][] = $cats[ $x ];
+						} elseif ( '' !== $x && term_exists( $x, 'property_category' ) ) {
+							$q['cats'][] = $x;
+						} else {
+							$ok = false;
+						}
+					}
+					break;
+				case 'type':
+					foreach ( $vals as $x ) {
+						$x = sanitize_title( $x );
+						if ( preg_match( '/^([a-z]+)-for-(sale|rent)$/', $x, $m ) ) { // a segment slug: apartments-for-sale
+							$x          = $m[1];
+							$q['for'][] = $m[2];
+						}
+						if ( isset( $types[ $x ] ) ) {
+							$q['types'][] = $x;
+						} else {
+							$ok = false;
+						}
+					}
+					break;
+				case 'area':
+					foreach ( $vals as $x ) {
+						if ( 'other' === strtolower( $x ) ) {
+							$q['area'][] = 'other';
+							continue;
+						}
+						$t = get_term_by( 'slug', sanitize_title( $x ), 'property_area' ); // slug first, then the name the theme's forms send
+						$t = $t instanceof WP_Term ? $t : get_term_by( 'name', $x, 'property_area' );
+						if ( $t instanceof WP_Term ) {
+							$q['area'][] = $t->slug;
+						} else {
+							$ok = false;
+						}
+					}
+					break;
+				case 'beds':
+					$x = strtolower( $vals[0] );
+					if ( 'studio' === $x || '0' === $x ) {
+						$q['beds'] = 'studio';
+					} elseif ( preg_match( '/^([1-9]\d?)\+?$/', $x, $m ) ) {
+						$q['beds'] = (string) min( 4, (int) $m[1] ); // 4 = four and more
+					} else {
+						$ok = false;
+					}
+					break;
+				case 'min':
+				case 'max':
+					$x = preg_replace( '/^kes|[\s,]/i', '', $vals[0] );
+					if ( ! is_numeric( $x ) || (float) $x < 0 ) {
+						$ok = false;
+					} elseif ( 'min' === $rk ) {
+						$min = (float) $x;
+					} else {
+						$max = 500000000 === (int) $x ? 0 : (float) $x; // the theme's slider end means no limit
+					}
+					break;
+				case 'price':
+					if ( preg_match( '/^\d{1,6}(?:\.\d{1,2})?-(?:\d{1,6}(?:\.\d{1,2})?)?$/', $vals[0] ) ) {
+						$q['price'] = $vals[0];
+					} else {
+						$ok = false;
+					}
+					break;
+				case 'completion':
+					$x = strtolower( $vals[0] );
+					if ( preg_match( '/^(?:20\d\d(?:-plus)?|ready-now)$/', $x ) ) {
+						$q['completion'] = $x;
+					} else {
+						$ok = false;
+					}
+					break;
+				case 'sort':
+					$q['sort'] = in_array( $vals[0], array( 'soonest', 'price-asc', 'price-desc', 'newest' ), true ) ? $vals[0] : '';
+					break;
+				case 'n':
+					$q['n'] = ctype_digit( $vals[0] ) ? (int) $vals[0] : 0;
+					break;
+				default:
+					$ok = false;
+			}
+			if ( ! $ok ) {
+				$GLOBALS['blockke_search_why'] = $k;
+				return null;
+			}
+		}
+		$q['for'] = array_values( array_intersect( array( 'sale', 'rent' ), $q['for'] ) );
+		if ( 2 === count( $q['for'] ) ) {
+			$q['for'] = array(); // both is either
+		}
+		$q['types'] = array_values( array_unique( $q['types'] ) );
+		if ( in_array( 'homes', $q['types'], true ) ) { // "homes" already holds apartments, villas, houses and studios
+			$q['types'] = array_values( array_diff( $q['types'], array( 'apartments', 'villas', 'houses', 'studios' ) ) );
+		}
+		$q['cats'] = array_values( array_unique( $q['cats'] ) );
+		$q['area'] = array_values( array_unique( $q['area'] ) );
+		// Price: ours ("8-12": KES millions, thousands for rents), else the theme's slider ends in KES
+		$unit = array( 'rent' ) === $q['for'] ? 1000 : 1000000;
+		if ( '' !== $q['price'] ) {
+			$pp      = explode( '-', $q['price'] );
+			$q['lo'] = (float) $pp[0] * $unit;
+			$q['hi'] = '' !== $pp[1] ? (float) $pp[1] * $unit : 0;
+		} elseif ( $min > 0 || $max > 0 ) {
+			$q['lo']    = $min;
+			$q['hi']    = $max;
+			$q['price'] = blockke_search_num( $min / $unit ) . '-' . ( $max > 0 ? blockke_search_num( $max / $unit ) : '' );
+		}
+		if ( $q['hi'] > 0 && $q['hi'] <= $q['lo'] ) {
+			$GLOBALS['blockke_search_why'] = 'price';
+			return null;
+		}
+		if ( $q['lo'] <= 0 && $q['hi'] <= 0 ) {
+			$q['price'] = '';
+		}
+		// n: cards shown per section, in steps of index_page_size (18), at most 240
+		$step   = max( 6, (int) $cfg['index_page_size'] );
+		$q['n'] = $q['n'] > $step ? (int) min( 240, ceil( $q['n'] / $step ) * $step ) : 0;
+		return $q;
+	}
+
+	/** A results URL for a query, with some fields changed. Our clean parameters only, so the theme's are translated on the first refinement. */
+	function blockke_search_url( $q, $set = array(), $preview = true ) {
+		$q = array_merge( $q, $set );
+		$a = array();
+		if ( 1 === count( $q['for'] ) ) {
+			$a['for'] = $q['for'][0];
+		}
+		if ( $q['types'] ) {
+			$a['type'] = implode( ',', $q['types'] );
+		}
+		if ( $q['area'] ) {
+			$a['area'] = implode( ',', $q['area'] );
+		}
+		foreach ( array( 'beds', 'price', 'completion', 'sort' ) as $k ) {
+			if ( '' !== (string) $q[ $k ] ) {
+				$a[ $k ] = (string) $q[ $k ];
+			}
+		}
+		if ( $q['n'] ) {
+			$a['n'] = (int) $q['n'];
+		}
+		if ( $preview && blockke_search_preview() ) {
+			$a['bke_search'] = '1';
+		}
+		$url = add_query_arg( array_map( 'rawurlencode', $a ), get_permalink( blockke_search_page_id() ) );
+		foreach ( $q['cats'] as $i => $c ) {
+			$url .= ( false === strpos( $url, '?' ) ? '?' : '&' ) . rawurlencode( 'property_category[' . $i . ']' ) . '=' . rawurlencode( $c );
+		}
+		return $url;
+	}
+
+	/** The bedroom keys a listing offers ('studio', '1' … '4' for four and more): its own, a range in its title, or its development's. */
+	function blockke_search_row_beds( $r ) {
+		static $memo = array();
+		if ( isset( $memo[ $r['id'] ] ) ) {
+			return $memo[ $r['id'] ];
+		}
+		$k = array();
+		if ( 'home' === $r['kind'] ) {
+			if ( ! $r['dev'] && '' !== $r['k'] ) {
+				$k = array( $r['k'] );
+			} else {
+				$tb = $r['dev'] ? array( '', array() ) : blockke_area_title_beds( $r['id'], true ); // "2 & 3 Bedroom Apartments"
+				$k  = $tb[1];
+				$d  = $k ? null : blockke_search_dev_of( $r['id'] );
+				foreach ( $d ? $d['beds'] : array() as $b ) {
+					$k[] = 0 === (int) $b ? 'studio' : (string) min( 4, (int) $b );
+				}
+			}
+		}
+		$memo[ $r['id'] ] = array_values( array_unique( array_map( 'strval', $k ) ) );
+		return $memo[ $r['id'] ];
+	}
+
+	/** Whether a listing row answers the query. $skip: one filter to leave out ('type', 'area', 'beds', 'price', 'completion'). */
+	function blockke_search_ok( $r, $q, $skip = '' ) {
+		if ( '' === $r['act'] || ( $q['for'] && ! in_array( $r['act'], $q['for'], true ) ) ) {
+			return false;
+		}
+		if ( 'type' !== $skip && ( $q['types'] || $q['cats'] ) ) {
+			$tt = blockke_search_types();
+			$ok = (bool) array_intersect( $r['cats'], $q['cats'] );
+			foreach ( $q['types'] as $t ) {
+				$ok = $ok || ( $r['kind'] === $tt[ $t ][0] && ( '' === $tt[ $t ][1] || $r['type'] === $tt[ $t ][1] ) );
+			}
+			if ( ! $ok ) {
+				return false;
+			}
+		}
+		if ( 'area' !== $skip && $q['area'] ) {
+			$ok  = false;
+			$top = blockke_search_areas();
+			foreach ( $q['area'] as $a ) {
+				if ( 'other' === $a ) {
+					$ok = $ok || ( '' !== $r['ma'] && ! isset( $top[ $r['ma'] ] ) );
+				} else {
+					$ok = $ok || $a === $r['ma'] || in_array( $a, $r['areas'], true );
+				}
+			}
+			if ( ! $ok ) {
+				return false;
+			}
+		}
+		if ( 'beds' !== $skip && '' !== $q['beds'] ) {
+			if ( 'home' !== $r['kind'] ) {
+				return false;
+			}
+			$want = 'studio' === $q['beds'] ? 0 : (int) $q['beds'];
+			$min  = 4 === $want || 'min' === blockke_dev_config()['beds_mode'];
+			$ok   = false;
+			foreach ( blockke_search_row_beds( $r ) as $k ) {
+				$have = 'studio' === $k ? 0 : (int) $k;
+				$ok   = $ok || ( 0 === $want ? 0 === $have : ( $min ? $have >= $want : $have === $want ) );
+			}
+			if ( ! $ok ) {
+				return false;
+			}
+		}
+		if ( 'price' !== $skip && ( $q['lo'] > 0 || $q['hi'] > 0 ) ) {
+			if ( 'unit' === $r['f'] ) {
+				return false; // a price per square foot can't be compared with a band
+			}
+			$lo = $r['p'];
+			$hi = $r['p'];
+			if ( $r['dev'] ) { // a development's main listing: its from-to range overlaps the band
+				$d  = blockke_search_dev_of( $r['id'] );
+				$lo = $d ? ( 'rent' === $r['act'] ? $d['rfrom'] : $d['from'] ) : 0;
+				$hi = $d ? ( 'rent' === $r['act'] ? $d['rto'] : $d['to'] ) : 0;
+			}
+			if ( $lo <= 0 || ( $q['hi'] > 0 && $lo >= $q['hi'] ) || $hi < $q['lo'] ) {
+				return false;
+			}
+		}
+		if ( 'completion' !== $skip && '' !== $q['completion'] ) {
+			$c = $q['completion'];
+			if ( 'ready-now' === $c ) {
+				if ( 'ready' !== $r['st'] && 'ready-now' !== $r['ct'] ) {
+					return false;
+				}
+			} else {
+				$y = preg_match( '/^(20\d\d)/', $r['ct'], $m ) ? (int) $m[1] : 0;
+				if ( ! $y && '' === $r['ct'] && 'ready' !== $r['st'] ) { // no Completion term: its development's stated date
+					$d = blockke_search_dev_of( $r['id'] );
+					$y = $d && ! $d['done'][4] ? (int) $d['done'][0] : 0;
+				}
+				$cy = (int) substr( $c, 0, 4 );
+				if ( ! $y || ( '-plus' === substr( $c, 4 ) ? $y < $cy : $y !== $cy ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/** A listing for several sizes ("Studio, 1-Bed & 2-Bed Apartments"): it stands for its development, not for one home. */
+	function blockke_search_is_range( $r ) {
+		return 'home' === $r['kind'] && ! $r['dev'] && '' === $r['k'];
+	}
+
+	/** Bedroom ranges are read from titles: load those listings in one query, once. */
+	function blockke_search_prime_titles() {
+		static $done = false;
+		if ( $done || ! function_exists( '_prime_post_caches' ) ) {
+			return;
+		}
+		$done = true;
+		$ids  = array();
+		foreach ( blockke_bkn_rows() as $id => $r ) {
+			if ( blockke_search_is_range( $r ) ) {
+				$ids[] = $id;
+			}
+		}
+		_prime_post_caches( $ids, false, false );
+	}
+
+	/** Matching listings grouped: section ("home|sale") => development group key => listing IDs. Homes, commercial, land; sale before rent. */
+	function blockke_search_match( $q, $skip = '' ) {
+		$rows = blockke_bkn_rows();
+		$of   = blockke_bkn_devs()['of'];
+		if ( '' !== $q['beds'] && 'beds' !== $skip ) {
+			blockke_search_prime_titles();
+		}
+		$out = array();
+		foreach ( array( 'home', 'commercial', 'land' ) as $kind ) {
+			foreach ( array( 'sale', 'rent' ) as $act ) {
+				$out[ $kind . '|' . $act ] = array();
+			}
+		}
+		foreach ( $rows as $id => $r ) {
+			$key = $r['kind'] . '|' . $r['act'];
+			if ( isset( $of[ $id ], $out[ $key ] ) && blockke_search_ok( $r, $q, $skip ) ) {
+				$out[ $key ][ $of[ $id ] ][] = $id;
+			}
+		}
+		return array_filter( $out );
+	}
+
+	/** How many cards (developments, or single homes) a query finds. */
+	function blockke_search_count( $q, $skip = '' ) {
+		$n = 0;
+		foreach ( blockke_search_match( $q, $skip ) as $groups ) {
+			$n += count( $groups );
+		}
+		return $n;
+	}
+
+	/** One section's cards, sorted: what each shows and how it sorts. Recommended is the theme's order: featured, then newest. */
+	function blockke_search_cards( $groups, $act, $q ) {
+		$rows = blockke_bkn_rows();
+		$devs = blockke_bkn_devs()['devs'];
+		$out  = array();
+		foreach ( $groups as $g => $ids ) {
+			if ( ! isset( $devs[ $g ] ) ) {
+				continue;
+			}
+			$d     = $devs[ $g ];
+			$units = array();
+			$ft    = (bool) $d['ft'];
+			$dt    = 0;
+			$lo    = 0;
+			$hi    = 0;
+			foreach ( $ids as $id ) {
+				$r  = $rows[ $id ];
+				$ft = $ft || $r['ft'];
+				$dt = max( $dt, (int) $r['d'] );
+				if ( $r['dev'] ) {
+					$a = 'rent' === $act ? $d['rfrom'] : $d['from'];
+					$b = 'rent' === $act ? $d['rto'] : $d['to'];
+				} elseif ( blockke_search_is_range( $r ) ) { // the development matches, with no single home to list
+					$a = 'unit' === $r['f'] ? 0 : $r['p'];
+					$b = $a;
+				} else {
+					$units[] = $r;
+					$a       = 'unit' === $r['f'] ? 0 : $r['p'];
+					$b       = $a;
+				}
+				if ( $a > 0 ) {
+					$lo = $lo > 0 ? min( $lo, $a ) : $a;
+					$hi = max( $hi, $b );
+				}
+			}
+			usort(
+				$units,
+				function ( $x, $y ) {
+					$px = $x['p'] > 0 && 'unit' !== $x['f'] ? $x['p'] : PHP_INT_MAX;
+					$py = $y['p'] > 0 && 'unit' !== $y['f'] ? $y['p'] : PHP_INT_MAX;
+					return $px === $py ? $x['id'] - $y['id'] : ( $px < $py ? -1 : 1 );
+				}
+			);
+			// A single home gets the price-first card; a listing for a whole development (a range of sizes) keeps the development card
+			$unit  = 1 === (int) $d['n'] && 1 === count( $units ) && ( 'home' !== $units[0]['kind'] || '' !== $units[0]['k'] );
+			$out[] = array(
+				'g'     => $g,
+				'units' => $units,
+				'v'     => $unit ? 'unit' : 'group',
+				'aid'   => $unit ? (int) $units[0]['id'] : (int) $d['id'],
+				'pub'   => $unit ? (int) $units[0]['d'] : ( isset( $rows[ $d['id'] ] ) ? (int) $rows[ $d['id'] ]['d'] : (int) $d['d'] ),
+				'ft'    => $ft,
+				'd'     => $dt,
+				'lo'    => $lo,
+				'hi'    => $hi,
+				'done'  => blockke_bkn_done_key( $d ),
+				'homes' => max( 1, count( $units ) ),
+			);
+		}
+		$sort = $q['sort'];
+		usort(
+			$out,
+			function ( $a, $b ) use ( $sort ) {
+				if ( 'price-asc' === $sort ) {
+					$x = $a['lo'] > 0 ? $a['lo'] : PHP_INT_MAX;
+					$y = $b['lo'] > 0 ? $b['lo'] : PHP_INT_MAX;
+					if ( $x !== $y ) {
+						return $x < $y ? -1 : 1;
+					}
+				} elseif ( 'price-desc' === $sort ) {
+					if ( $a['hi'] !== $b['hi'] ) {
+						return $a['hi'] > $b['hi'] ? -1 : 1;
+					}
+				} elseif ( 'soonest' === $sort ) {
+					if ( $a['done'] !== $b['done'] ) {
+						return $a['done'] - $b['done'];
+					}
+				} elseif ( 'newest' !== $sort && $a['ft'] !== $b['ft'] ) {
+					return $a['ft'] ? -1 : 1;
+				}
+				return $b['d'] !== $a['d'] ? $b['d'] - $a['d'] : strcmp( $a['g'], $b['g'] );
+			}
+		);
+		return $out;
+	}
+
+	/** One card: 'unit' for a single home (price first), else 'group' with the development's homes that match. */
+	function blockke_search_card_html( $card, $sec, $q, $pos, $tag, $lazy ) {
+		$d    = blockke_bkn_devs()['devs'][ $card['g'] ];
+		$rent = 'rent' === $sec['act'];
+		$home = 'home' === $sec['kind'];
+		$ctx  = array( 'src' => 'search', 'pos' => $pos, 'rent' => $rent, 'tag' => $tag, 'lazy' => $lazy );
+		$c    = $d;
+		if ( ! $home ) {
+			$c['beds'] = array();
+		} else { // every size the development lists, its range listings' titles included ("Studio, 1-Bed & 2-Bed")
+			$rows = blockke_bkn_rows();
+			blockke_search_prime_titles();
+			foreach ( $d['ids'] as $id ) {
+				foreach ( isset( $rows[ $id ] ) && $rows[ $id ]['act'] === $sec['act'] ? blockke_search_row_beds( $rows[ $id ] ) : array() as $k ) {
+					$c['beds'][] = 'studio' === $k ? 0 : (int) $k;
+				}
+			}
+			$c['beds'] = array_values( array_unique( array_map( 'intval', $c['beds'] ) ) );
+			sort( $c['beds'] );
+		}
+		if ( 'unit' === $card['v'] ) {
+			$r           = $card['units'][0];
+			$p           = 'unit' === $r['f'] ? 0 : (float) $r['p'];
+			$c['id']     = (int) $r['id'];
+			$c['url']    = $r['u'];
+			$c['from']   = $rent ? 0 : $p;
+			$c['to']     = $c['from'];
+			$c['rfrom']  = $rent ? $p : 0;
+			$c['rto']    = $c['rfrom'];
+			$c['beds']   = $home && '' !== $r['k'] ? array( 'studio' === $r['k'] ? 0 : max( 1, (int) $r['b'] ) ) : array();
+			$c['types']  = '' !== $r['type'] ? array( $r['type'] ) : array();
+			$c['sqm']    = $r['sq'] > 0 ? round( $r['sq'] * blockke_dev_sqft_factor() ) : 0;
+			$c['cover']  = $r['img'] ? (int) $r['img'] : $d['cover'];
+			$c['areas']  = $r['areas'] ? $r['areas'] : $d['areas'];
+			$c['vt']     = (bool) $r['lo'];
+			$c['d']      = (int) $r['d'];
+			return blockke_card_html( $c, 'unit', $ctx );
+		}
+		if ( ( $q['lo'] > 0 || $q['hi'] > 0 ) && $card['lo'] > 0 ) { // with a price filter: the range of the homes that match
+			$c[ $rent ? 'rfrom' : 'from' ] = $card['lo'];
+			$c[ $rent ? 'rto' : 'to' ]     = $card['hi'];
+			$ctx['range']                  = true;
+		}
+		$match      = $card['units'];
+		$c['match'] = $match;
+		$h          = blockke_card_html( $c, 'group', $ctx );
+		foreach ( array_slice( $match, 0, 3 ) as $i => $r ) { // the home's ID, for search_match_click
+			$h = preg_replace( '/data-row="' . ( $i + 1 ) . '"/', 'data-row="' . ( $i + 1 ) . '" data-unit="' . (int) $r['id'] . '"', $h, 1 );
+		}
+		return $h;
+	}
+
+	/**
+	 * The query in words: "2 bed apartments for sale in Westlands", "studios to rent", "property for sale". $kinds and $acts: what
+	 * the results hold (they name a query that asked for any kind or either action).
+	 */
+	function blockke_search_words( $q, $kinds, $acts, $beds = true, $area = true ) {
+		$tt    = blockke_search_types();
+		$nouns = array();
+		foreach ( $q['types'] as $t ) {
+			$nouns[] = $tt[ $t ][2];
+		}
+		foreach ( $q['cats'] as $c ) {
+			$t = get_term_by( 'slug', $c, 'property_category' );
+			if ( $t instanceof WP_Term ) {
+				$nouns[] = strtolower( blockke_dev_text( $t->name ) );
+			}
+		}
+		if ( ! $nouns ) {
+			$nouns[] = '' !== $q['beds'] || array( 'home' ) === array_keys( $kinds ) ? 'homes' : 'property';
+		}
+		$noun = 1 === count( $nouns ) ? $nouns[0] : implode( ', ', array_slice( $nouns, 0, -1 ) ) . ' and ' . end( $nouns );
+		if ( $beds && '' !== $q['beds'] ) {
+			$noun = 'studio' === $q['beds'] && in_array( $noun, array( 'homes', 'apartments', 'studios', 'property' ), true ) ? 'studios' : strtolower( blockke_search_beds_label( $q['beds'] ) ) . ' ' . $noun;
+		}
+		$a   = $q['for'] ? $q['for'] : $acts;
+		$act = 2 === count( $a ) ? 'for sale and to rent' : ( 1 === count( $a ) ? ( 'rent' === $a[0] ? ( 'land' === $noun ? 'to lease' : 'to rent' ) : 'for sale' ) : '' );
+		$in  = '';
+		if ( $area && $q['area'] ) {
+			$names = array();
+			foreach ( $q['area'] as $s ) {
+				$t       = 'other' === $s ? null : get_term_by( 'slug', $s, 'property_area' );
+				$names[] = 'other' === $s ? 'other areas' : ( $t instanceof WP_Term ? blockke_dev_text( $t->name ) : $s );
+			}
+			$in = 'in ' . ( 1 === count( $names ) ? $names[0] : implode( ', ', array_slice( $names, 0, -1 ) ) . ' and ' . end( $names ) );
+		}
+		return implode( ' ', array_filter( array( $noun, $act, $in ) ) );
+	}
+
+	/** The price and completion asked for, mid-sentence: " at KES 8–12M completing in 2027", " under KES 8M ready to move into". */
+	function blockke_search_tail( $q ) {
+		$t = '';
+		if ( $q['lo'] > 0 || $q['hi'] > 0 ) {
+			$l  = blockke_search_band_label( $q['lo'], $q['hi'], array( 'rent' ) === $q['for'] );
+			$t .= 0 === strpos( $l, 'Under' ) ? ' under' . substr( $l, 5 ) : ' at ' . $l;
+		}
+		if ( '' !== $q['completion'] ) {
+			$t .= 'ready-now' === $q['completion'] ? ' ready to move into' : ' completing in ' . ( '-plus' === substr( $q['completion'], 4 ) ? substr( $q['completion'], 0, 4 ) . ' or later' : $q['completion'] );
+		}
+		return $t;
+	}
+
+	/** The type tabs: array( label, URL, current ), only types this search finds (with its other filters), or none when there's one. */
+	function blockke_search_tabs( $q ) {
+		$rows = blockke_bkn_rows();
+		$of   = blockke_bkn_devs()['of'];
+		$tt   = blockke_search_types();
+		$seen = array();
+		foreach ( $rows as $id => $r ) {
+			if ( ! isset( $of[ $id ] ) || ! blockke_search_ok( $r, $q, 'type' ) ) {
+				continue;
+			}
+			foreach ( $tt as $slug => $t ) {
+				if ( $r['kind'] === $t[0] && ( '' === $t[1] || $r['type'] === $t[1] ) ) {
+					$seen[ $slug ][ $of[ $id ] ] = 1;
+				}
+			}
+		}
+		$cur   = $q['cats'] || count( $q['types'] ) > 1 ? null : ( $q['types'] ? $q['types'][0] : '' );
+		$other = ! empty( $seen['commercial'] ) || ! empty( $seen['land'] ) || in_array( $cur, array( 'commercial', 'offices', 'warehouses', 'shops', 'land' ), true );
+		$list  = $other ? array( '' => 'All', 'homes' => 'Homes' ) : array( '' => 'All homes' );
+		if ( ! $other && 'homes' === $cur ) {
+			$cur = ''; // only homes here: "All homes" is the same list
+		}
+		$more = array( 'apartments' => 'Apartments', 'villas' => 'Villas', 'houses' => 'Houses', 'studios' => 'Studios' );
+		if ( $other ) {
+			$more += array( 'commercial' => 'Commercial', 'offices' => 'Offices', 'warehouses' => 'Warehouses', 'shops' => 'Shops', 'land' => 'Land' );
+		}
+		foreach ( $more as $slug => $label ) {
+			if ( ! empty( $seen[ $slug ] ) && ( ! in_array( $slug, array( 'offices', 'warehouses', 'shops' ), true ) || $slug === $cur ) ) {
+				$list[ $slug ] = $label; // commercial sub-types only when asked for: few listings, one tab is enough
+			} elseif ( $slug === $cur ) {
+				$list[ $slug ] = $label;
+			}
+		}
+		$out = array();
+		foreach ( $list as $slug => $label ) {
+			$slug  = (string) $slug;
+			$out[] = array( $label, blockke_search_url( $q, array( 'types' => '' === $slug ? array() : array( $slug ), 'cats' => array(), 'n' => 0 ) ), $slug === $cur );
+		}
+		return count( $out ) > 1 ? $out : array();
+	}
+
+	/** With no or few results: up to three wider searches, by results gained (a filter dropped, or a nearby area), and more nearby areas. */
+	function blockke_search_relax( $q, $have ) {
+		$labels = array( 'completion' => 'Any completion', 'beds' => 'Any bedrooms', 'price' => 'Any price', 'type' => 'Any type', 'area' => 'Any area' );
+		$clear  = array(
+			'completion' => array( 'completion' => '' ),
+			'beds'       => array( 'beds' => '' ),
+			'price'      => array( 'price' => '', 'lo' => 0, 'hi' => 0 ),
+			'type'       => array( 'types' => array(), 'cats' => array() ),
+			'area'       => array( 'area' => array() ),
+		);
+		$set    = array(
+			'completion' => '' !== $q['completion'],
+			'beds'       => '' !== $q['beds'],
+			'price'      => '' !== $q['price'],
+			'type'       => $q['types'] || $q['cats'],
+			'area'       => (bool) $q['area'],
+		);
+		$all    = array();
+		foreach ( $labels as $k => $l ) {
+			if ( $set[ $k ] ) {
+				$n = blockke_search_count( $q, $k );
+				if ( $n > $have ) {
+					$all[] = array( $l, $n, blockke_search_url( $q, $clear[ $k ] + array( 'n' => 0 ) ), $k );
+				}
+			}
+		}
+		$near = array();
+		if ( 1 === count( $q['area'] ) && 'other' !== $q['area'][0] ) {
+			foreach ( blockke_dev_neighbours( $q['area'][0] ) as $ring ) {
+				foreach ( $ring as $tid ) {
+					$t = get_term( $tid, 'property_area' );
+					if ( ! $t instanceof WP_Term ) {
+						continue;
+					}
+					$n = blockke_search_count( array_merge( $q, array( 'area' => array( $t->slug ) ) ) );
+					if ( $n > 0 ) {
+						$near[] = array( blockke_dev_text( $t->name ), $n, blockke_search_url( $q, array( 'area' => array( $t->slug ), 'n' => 0 ) ), 'area:' . $t->slug );
+					}
+				}
+			}
+		}
+		$top = array_merge( $all, $near );
+		usort(
+			$top,
+			function ( $a, $b ) {
+				return $b[1] - $a[1];
+			}
+		);
+		$top  = array_slice( $top, 0, 3 );
+		$used = wp_list_pluck( $top, 3 );
+		$rest = array();
+		foreach ( $near as $x ) {
+			if ( ! in_array( $x[3], $used, true ) && count( $rest ) < 4 ) {
+				$rest[] = $x;
+			}
+		}
+		return array( $top, $rest );
+	}
+
+	/** "Map": the /search/ page (page 39161 on block.ke, config search_map_page) with the query in its own parameters, while it is published. */
+	function blockke_search_map_url( $q ) {
+		$cfg = blockke_dev_config();
+		$pid = (int) ( isset( $cfg['search_map_page'] ) ? $cfg['search_map_page'] : 39161 );
+		if ( ! $pid || 'publish' !== get_post_status( $pid ) ) {
+			return '';
+		}
+		$a    = array();
+		$cat  = array_flip( blockke_search_cat_types() ); // type => category slug
+		$name = array();
+		foreach ( array_merge( $q['types'], $q['cats'] ) as $x ) {
+			$slug = isset( $cat[ $x ] ) && 'homes' !== $x ? $cat[ $x ] : ( in_array( $x, $q['cats'], true ) ? $x : '' );
+			$t    = '' !== $slug ? get_term_by( 'slug', $slug, 'property_category' ) : null;
+			if ( $t instanceof WP_Term ) {
+				$name[] = blockke_dev_text( $t->name );
+			}
+		}
+		if ( array( 'rent' ) === $q['for'] ) {
+			$a['act'] = 'rent';
+		}
+		if ( 1 === count( $q['area'] ) && 'other' !== $q['area'][0] ) {
+			$t = get_term_by( 'slug', $q['area'][0], 'property_area' );
+			if ( $t instanceof WP_Term ) {
+				$a['q'] = blockke_dev_text( $t->name );
+			}
+		}
+		if ( $name ) {
+			$a['type'] = implode( ',', $name );
+		}
+		if ( ctype_digit( $q['beds'] ) ) {
+			$a['bd'] = $q['beds'];
+		}
+		if ( $q['lo'] > 0 ) {
+			$a['pmin'] = (string) (int) $q['lo'];
+		}
+		if ( $q['hi'] > 0 ) {
+			$a['pmax'] = (string) (int) $q['hi'];
+		}
+		return add_query_arg( array_map( 'rawurlencode', $a ), get_permalink( $pid ) );
+	}
+
+	/**
+	 * Where a simple search belongs (config search_redirect), or '': one action and one area whose area page is on, at most one
+	 * type, a price band or none → that area's segment page; buying anywhere with a completion year → the new developments index.
+	 */
+	function blockke_search_redirect_url( $q ) {
+		$cfg = blockke_dev_config();
+		if ( $q['cats'] || count( $q['types'] ) > 1 || count( $q['area'] ) > 1 ) {
+			return '';
+		}
+		$type = $q['types'] ? $q['types'][0] : 'homes';
+		$keep = array(); // campaign tags survive the redirect
+		foreach ( wp_unslash( $_GET ) as $k => $v ) { // phpcs:ignore WordPress.Security.NonceVerification
+			if ( is_string( $v ) && preg_match( '/^(?:utm_[a-z]+|gclid|gbraid|wbraid|fbclid|_gl)$/', (string) $k ) ) {
+				$keep[ (string) $k ] = substr( $v, 0, 200 );
+			}
+		}
+		$args = array();
+		if ( 1 === count( $q['for'] ) && 1 === count( $q['area'] ) ) {
+			$term  = 'other' === $q['area'][0] ? null : get_term_by( 'slug', $q['area'][0], 'property_area' );
+			$segs  = blockke_area_segments();
+			$seg   = $type . '-for-' . $q['for'][0];
+			$bands = blockke_search_bands( 'rent' === $q['for'][0] );
+			if ( ! $term instanceof WP_Term || ! blockke_area_on( $term ) || ! isset( $segs[ $seg ] ) || ( '' !== $q['price'] && ! isset( $bands[ $q['price'] ] ) ) ) {
+				return '';
+			}
+			if ( empty( $cfg['card_v16'] ) && ( '' !== $q['beds'] || '' !== $q['price'] || '' !== $q['completion'] || '' !== $q['sort'] ) ) {
+				return ''; // v1.5 segment pages don't read these parameters: the visitor would lose them
+			}
+			$data = blockke_area_data( $term );
+			if ( empty( $data['segs'][ $seg ]['n'] ) ) {
+				return ''; // an empty segment page helps less than results with "Close matches"
+			}
+			foreach ( array( 'beds', 'price', 'completion', 'sort' ) as $k ) {
+				if ( '' !== $q[ $k ] && ( 'completion' !== $k || 'sale' === $q['for'][0] ) ) {
+					$args[ $k ] = $q[ $k ];
+				}
+			}
+			$url = blockke_area_url( $term, $seg, false );
+			return '' === $url ? '' : add_query_arg( array_map( 'rawurlencode', $args + $keep ), $url );
+		}
+		if ( ( ! $q['for'] || array( 'sale' ) === $q['for'] ) && ! $q['area'] && 'homes' === $type && '' !== $q['completion'] && blockke_bkn_on( 'dev_index', 'bke_index' ) ) {
+			$pid   = (int) $cfg['dev_index_page'];
+			$bands = blockke_search_bands( false );
+			if ( ! $pid || 'publish' !== get_post_status( $pid ) || ( '' !== $q['price'] && ! isset( $bands[ $q['price'] ] ) ) ) {
+				return '';
+			}
+			foreach ( array( 'completion', 'beds', 'price', 'sort' ) as $k ) {
+				if ( '' !== $q[ $k ] ) {
+					$args[ $k ] = $q[ $k ];
+				}
+			}
+			return add_query_arg( array_map( 'rawurlencode', $args + $keep ), get_permalink( $pid ) );
+		}
+		return '';
+	}
+
+	/** Everything the results page shows for a query. */
+	function blockke_search_state( $q ) {
+		$cfg   = blockke_dev_config();
+		$step  = max( 6, (int) $cfg['index_page_size'] );
+		$tt    = blockke_search_types();
+		$secs  = array();
+		$kinds = array();
+		$acts  = array();
+		$devs  = 0;
+		$homes = 0;
+		foreach ( blockke_search_match( $q ) as $key => $groups ) {
+			$ka    = explode( '|', $key );
+			$cards = blockke_search_cards( $groups, $ka[1], $q );
+			if ( ! $cards ) {
+				continue;
+			}
+			$kinds[ $ka[0] ] = 1;
+			$acts[ $ka[1] ]  = 1;
+			$devs           += count( $cards );
+			foreach ( $cards as $c ) {
+				$homes += $c['homes'];
+			}
+			$sub = array();
+			foreach ( $q['types'] as $t ) {
+				if ( $tt[ $t ][0] === $ka[0] && '' !== $tt[ $t ][1] ) {
+					$sub[] = $t;
+				}
+			}
+			$noun         = 1 === count( $sub ) ? ucfirst( $tt[ $sub[0] ][2] ) : ( 'home' === $ka[0] ? 'Homes' : ( 'land' === $ka[0] ? 'Land' : 'Commercial' ) );
+			$secs[ $key ] = array(
+				'kind'  => $ka[0],
+				'act'   => $ka[1],
+				'cards' => $cards,
+				'h2'    => $noun . ( 'rent' === $ka[1] ? ( 'land' === $ka[0] ? ' to lease' : ' to rent' ) : ' for sale' ),
+			);
+		}
+		$acts  = array_values( array_intersect( array( 'sale', 'rent' ), array_keys( $acts ) ) );
+		$words = blockke_search_words( $q, $kinds, $acts );
+		$only  = array( 'home' ) === array_keys( $kinds );
+		$num   = function ( $n, $one, $many ) {
+			return $n . ' ' . ( 1 === (int) $n ? $one : $many );
+		};
+		$url   = blockke_search_url( $q, array(), false );
+		// WhatsApp: the search in words, then the link ("Hello Block, I'm looking for apartments for sale: Westlands, 2 bed, KES 8–12M, completing 2027. ...")
+		$parts = array();
+		foreach ( $q['area'] as $s ) {
+			$t       = 'other' === $s ? null : get_term_by( 'slug', $s, 'property_area' );
+			$parts[] = $t instanceof WP_Term ? blockke_dev_text( $t->name ) : 'other areas';
+		}
+		if ( '' !== $q['beds'] ) {
+			$parts[] = blockke_search_beds_label( $q['beds'] );
+		}
+		if ( '' !== $q['price'] ) {
+			$parts[] = blockke_search_band_label( $q['lo'], $q['hi'], array( 'rent' ) === $q['for'] );
+		}
+		if ( '' !== $q['completion'] ) {
+			$parts[] = 'ready-now' === $q['completion'] ? 'ready to move into' : 'completing ' . ( '-plus' === substr( $q['completion'], 4 ) ? substr( $q['completion'], 0, 4 ) . ' or later' : $q['completion'] );
+		}
+		$ag    = blockke_dev_agent( 0 );
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hello ' . $cfg['brand'] . ", I'm looking for " . blockke_search_words( $q, $kinds, $acts, false, false ) . ( $parts ? ': ' . implode( ', ', $parts ) : '' ) . '. Please send current options and price lists. ' . $url );
+		$filt  = array();
+		foreach ( array( 'for' => implode( ',', $q['for'] ), 'type' => implode( ',', array_merge( $q['types'], $q['cats'] ) ), 'area' => implode( ',', $q['area'] ), 'beds' => $q['beds'], 'price' => $q['price'], 'completion' => $q['completion'] ) as $k => $v ) {
+			if ( '' !== $v ) {
+				$filt[] = $k . '=' . $v;
+			}
+		}
+		$relax = $devs <= 2 ? blockke_search_relax( $q, $devs ) : array( array(), array() );
+		return array(
+			'q'      => $q,
+			'secs'   => $secs,
+			'devs'   => $devs,
+			'homes'  => $homes,
+			'step'   => $step,
+			'show'   => $q['n'] ? $q['n'] : $step,
+			'words'  => $words,
+			'h1'     => ucfirst( $words ),
+			'title'  => ucfirst( $words ) . ' | ' . $cfg['brand_full'],
+			'count'  => $devs ? $num( $homes, $only ? 'home' : 'listing', $only ? 'homes' : 'listings' ) . ' in ' . $num( $devs, 'development', 'developments' ) : '',
+			'none'   => 'No ' . $words . blockke_search_tail( $q ) . '.',
+			'url'    => $url,
+			'wa'     => $wa,
+			'map'    => blockke_search_map_url( $q ),
+			'tabs'   => blockke_search_tabs( $q ),
+			'relax'  => $relax[0],
+			'near'   => $relax[1],
+			'filter' => implode( ',', $filt ),
+			'nset'   => count( array_filter( array( (bool) $q['area'], '' !== $q['beds'], '' !== $q['price'], '' !== $q['completion'] ) ) ),
+		);
+	}
+
+	/** The filter bar: a GET form (Apply without JavaScript; with it, changes apply at once), a sheet on phones. */
+	function blockke_search_bar( $s ) {
+		$q    = $s['q'];
+		$cfg  = blockke_dev_config();
+		$tt   = blockke_search_types();
+		$rent = array( 'rent' ) === $q['for'];
+		$sel  = function ( $name, $label, $opts, $cur, $attr = '' ) {
+			$h = '<label class="bks-sel"' . ( 'completion' === $name ? ' data-bks-done' : '' ) . '><span class="bks-lab">' . esc_html( $label ) . '</span><select name="' . esc_attr( $name ) . '"' . ( '' !== (string) $cur ? ' class="on"' : '' ) . $attr . '>';
+			foreach ( $opts as $v => $l ) {
+				$h .= '<option value="' . esc_attr( (string) $v ) . '"' . selected( (string) $v, (string) $cur, false ) . '>' . esc_html( $l ) . '</option>';
+			}
+			return $h . '</select></label>';
+		};
+		$homes = ! $q['types'] && ! $q['cats'];
+		foreach ( $q['types'] as $t ) {
+			$homes = $homes || 'home' === $tt[ $t ][0];
+		}
+		$f    = array();
+		$f[]  = $sel( 'for', 'Buy or rent', array( '' => 'Buy or rent', 'sale' => 'Buy', 'rent' => 'Rent' ), 1 === count( $q['for'] ) ? $q['for'][0] : '' );
+		$opts = array( '' => 'Any area' ) + blockke_search_areas();
+		foreach ( $q['area'] as $a ) {
+			if ( ! isset( $opts[ $a ] ) && 'other' !== $a ) {
+				$t          = get_term_by( 'slug', $a, 'property_area' );
+				$opts[ $a ] = $t instanceof WP_Term ? blockke_dev_text( $t->name ) : $a;
+			}
+		}
+		$cur = implode( ',', $q['area'] );
+		if ( count( $q['area'] ) > 1 ) {
+			$opts[ $cur ] = implode( ', ', array_map( function ( $a ) use ( $opts ) { return isset( $opts[ $a ] ) ? $opts[ $a ] : 'Other areas'; }, $q['area'] ) );
+		}
+		$opts['other'] = 'Other areas';
+		$f[]           = $sel( 'area', 'Area', $opts, $cur );
+		if ( $homes || '' !== $q['beds'] ) {
+			$opts = array( '' => 'Any bedrooms' );
+			foreach ( array( 'studio', '1', '2', '3', '4' ) as $b ) {
+				$opts[ $b ] = blockke_search_beds_label( $b );
+			}
+			$f[] = $sel( 'beds', 'Bedrooms', $opts, $q['beds'] );
+		}
+		$bands = array();
+		foreach ( array( 'sale', 'rent' ) as $m ) {
+			foreach ( blockke_search_bands( 'rent' === $m ) as $k => $l ) {
+				$bands[ $m ][] = array( (string) $k, $l );
+			}
+		}
+		$opts = array( '' => 'Any price' ) + blockke_search_bands( $rent );
+		if ( '' !== $q['price'] && ! isset( $opts[ $q['price'] ] ) ) {
+			$opts[ $q['price'] ] = blockke_search_band_label( $q['lo'], $q['hi'], $rent );
+		}
+		$f[] = $sel( 'price', 'Price', $opts, $q['price'], ' data-bands="' . esc_attr( wp_json_encode( $bands ) ) . '"' );
+		if ( ( $homes && ! $rent ) || '' !== $q['completion'] ) {
+			$years = array();
+			foreach ( blockke_bkn_rows() as $r ) {
+				if ( preg_match( '/^(?:20\d\d(?:-plus)?|ready-now)$/', $r['ct'] ) ) {
+					$years[ $r['ct'] ] = 1;
+				}
+			}
+			if ( '' !== $q['completion'] ) {
+				$years[ $q['completion'] ] = 1;
+			}
+			uksort(
+				$years,
+				function ( $a, $b ) {
+					return ( 'ready-now' === $a ? 9999 : (int) $a + ( false !== strpos( $a, 'plus' ) ? 0.5 : 0 ) ) <=> ( 'ready-now' === $b ? 9999 : (int) $b + ( false !== strpos( $b, 'plus' ) ? 0.5 : 0 ) );
+				}
+			);
+			$opts = array( '' => 'Any completion' );
+			foreach ( array_keys( $years ) as $y ) {
+				$opts[ (string) $y ] = blockke_search_done_label( (string) $y );
+			}
+			$f[] = $sel( 'completion', 'Completion', $opts, $q['completion'] );
+		}
+		$sorts = array( '' => 'Recommended', 'price-asc' => 'Price, lowest first', 'price-desc' => 'Price, highest first', 'newest' => 'Newest on Block' );
+		if ( 'soonest' === $q['sort'] ) {
+			$sorts['soonest'] = 'Completion, soonest';
+		}
+		$hidden = '';
+		if ( $q['types'] ) {
+			$hidden .= '<input type="hidden" name="type" value="' . esc_attr( implode( ',', $q['types'] ) ) . '">';
+		}
+		foreach ( $q['cats'] as $c ) {
+			$hidden .= '<input type="hidden" name="property_category[]" value="' . esc_attr( $c ) . '">';
+		}
+		if ( blockke_search_preview() ) {
+			$hidden .= '<input type="hidden" name="bke_search" value="1">';
+		}
+		$clear = $s['nset'] ? '<a class="bks-clear" href="' . esc_url( blockke_search_url( $q, array( 'area' => array(), 'beds' => '', 'price' => '', 'lo' => 0, 'hi' => 0, 'completion' => '', 'sort' => '', 'n' => 0 ) ) ) . '">Clear filters</a>' : '';
+		return '<form class="bkn-bar bks-bar" id="bks-bar" method="get" action="' . esc_url( get_permalink( blockke_search_page_id() ) ) . '" data-bke-own>' . $hidden
+			. '<div class="bkd-wrap bks-bar-in"><a class="bks-ftog" href="#bks-f" aria-controls="bks-f" aria-expanded="false">Filters' . ( $s['nset'] ? ' · ' . (int) $s['nset'] : '' ) . '</a>'
+			. '<div class="bks-f" id="bks-f" role="group" aria-label="Filters"><div class="bks-fh"><b>Filters</b><a class="bks-x" href="#" data-bks-close>Close</a></div>'
+			. '<div class="bks-fl">' . implode( '', $f ) . '</div><div class="bks-ff"><button class="bks-apply" type="submit">Show results</button>' . $clear . '</div></div>'
+			. str_replace( 'class="bks-sel"', 'class="bks-sel bks-sort"', $sel( 'sort', 'Sort', $sorts, $q['sort'] ) ) . '</div></form>';
+	}
+
+	/** The results page. */
+	function blockke_search_render( $s ) {
+		$cfg  = blockke_dev_config();
+		$e    = 'esc_html';
+		$q    = $s['q'];
+		$o    = array();
+		$o[]  = '<div id="bkd" class="bkd bkn bks" data-bkn-src="search" data-bkn-label="your search" data-devs="' . (int) $s['devs'] . '" data-homes="' . (int) $s['homes'] . '" data-segs="' . esc_attr( implode( ',', array_keys( $s['secs'] ) ) ) . '" data-filters="' . esc_attr( $s['filter'] ) . '"' . ( $s['devs'] ? '' : ' data-none' ) . '>' . blockke_dev_sprite( array( 'wa' ) );
+		$tabs = '';
+		foreach ( $s['tabs'] as $t ) {
+			$tabs .= '<a href="' . esc_url( $t[1] ) . '"' . ( $t[2] ? ' aria-current="page"' : '' ) . '>' . $e( $t[0] ) . '</a>';
+		}
+		$o[] = '<div class="bks-head"><div class="bkd-wrap"><nav class="bks-crumbs" aria-label="Breadcrumb"><a href="' . esc_url( home_url( '/' ) ) . '">Home</a><span aria-hidden="true">/</span><span aria-current="page">Search</span></nav>'
+			. '<h1 class="bks-h1">' . $e( $s['h1'] ) . '</h1>'
+			. ( $s['devs'] ? '<p class="bks-count"><span>' . $e( $s['count'] ) . '</span>' . ( '' !== $s['map'] ? '<a class="bks-map" href="' . esc_url( $s['map'] ) . '">Map</a>' : '' ) . '</p>' : '' )
+			. ( '' !== $tabs ? '<nav class="bks-types" aria-label="Type of property">' . $tabs . '</nav>' : '' ) . '</div></div>';
+		$o[] = blockke_search_bar( $s );
+		$wa  = '<a class="bks-wa" href="' . esc_url( $s['wa'] ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'Send this search to an advisor</a>';
+		$rl  = function ( $list ) use ( $e ) {
+			$h = '<ul class="bks-relax">';
+			foreach ( $list as $x ) {
+				$h .= '<li><a href="' . esc_url( $x[2] ) . '" data-relax="' . esc_attr( $x[3] ) . '"><span class="bks-rl">' . $e( $x[0] ) . '</span> <span class="bks-rn">(' . (int) $x[1] . ')</span></a></li>';
+			}
+			return $h . '</ul>';
+		};
+		if ( ! $s['devs'] ) {
+			$near = array();
+			foreach ( $s['near'] as $x ) {
+				$near[] = '<a href="' . esc_url( $x[2] ) . '" data-relax="' . esc_attr( $x[3] ) . '">' . $e( $x[0] ) . ' (' . (int) $x[1] . ')</a>';
+			}
+			$o[] = '<section class="bks-sec bks-none" aria-label="No results"><div class="bkd-wrap"><p class="bks-none-t">' . $e( $s['none'] ) . '</p>'
+				. ( $s['relax'] ? $rl( $s['relax'] ) : '' ) . ( $near ? '<p class="bks-near">Nearby: ' . implode( ', ', $near ) . '</p>' : '' )
+				. '<p class="bks-ask">' . $wa . '</p></div></section>';
+		}
+		$first = true;
+		$ids   = array();
+		foreach ( $s['secs'] as $key => $sec ) {
+			$sid   = 's-' . str_replace( '|', '-', $key );
+			$cards = $sec['cards'];
+			$total = count( $cards );
+			// "New on Block": the newest, at most 1 card in 5
+			$tags = array();
+			$room = (int) floor( $total / 5 );
+			if ( $room > 0 ) {
+				$cut = time() - DAY_IN_SECONDS * max( 1, (int) $cfg['index_new_days'] );
+				$new = array();
+				foreach ( $cards as $c ) {
+					if ( $c['pub'] >= $cut ) {
+						$new[ $c['g'] ] = $c['pub'];
+					}
+				}
+				arsort( $new );
+				$tags = array_slice( $new, 0, $room, true );
+			}
+			$o[] = '<section class="bks-sec" id="' . esc_attr( $sid ) . '" data-seg="' . esc_attr( $key ) . '" aria-labelledby="' . esc_attr( $sid ) . '-h"><div class="bkd-wrap">'
+				. '<h2 class="bks-h2' . ( 1 === count( $s['secs'] ) ? ' bkd-sr' : '' ) . '" id="' . esc_attr( $sid ) . '-h">' . $e( $sec['h2'] ) . '</h2><div class="bks-grid">';
+			foreach ( array_slice( $cards, 0, $s['show'] ) as $i => $c ) {
+				$h = blockke_search_card_html( $c, $sec, $q, $i + 1, isset( $tags[ $c['g'] ] ), ! ( $first && $i < 3 ) );
+				if ( isset( $ids[ $c['aid'] ] ) ) { // one development in two sections (sale and rent): ids stay unique
+					$h = str_replace( ' id="d-' . $c['aid'] . '"', ' id="d-' . $c['aid'] . '-' . $sid . '"', $h );
+				}
+				$ids[ $c['aid'] ] = 1;
+				$o[]              = $h;
+			}
+			$o[] = '</div>';
+			if ( $total > $s['show'] ) {
+				$more = min( $s['step'], $total - $s['show'] );
+				$o[]  = '<p class="bks-more-w"><a class="bks-more" href="' . esc_url( blockke_search_url( $q, array( 'n' => $s['show'] + $s['step'] ) ) . '#d-' . (int) $cards[ $s['show'] ]['aid'] ) . '" rel="nofollow">' . $e( 'Show ' . $more . ' more' ) . '</a></p>';
+			}
+			$o[]   = '</div></section>';
+			$first = false;
+		}
+		if ( $s['devs'] && $s['relax'] ) {
+			$o[] = '<section class="bks-sec bks-close" aria-labelledby="bks-close-h"><div class="bkd-wrap"><h2 class="bks-h3" id="bks-close-h">Close matches</h2>' . $rl( $s['relax'] ) . '<p class="bks-ask">' . $wa . '</p></div></section>';
+		} elseif ( $s['devs'] ) {
+			$o[] = '<div class="bkd-wrap"><p class="bks-ask">' . $wa . '</p></div>';
+		}
+		$o[] = '<div class="bkd-wrap"><p class="bks-disc">' . $e( $cfg['area_disclaimer'] ) . '</p></div></div>';
+		return implode( '', $o );
+	}
+
+	/** Search results styles, on top of the development layout's and the card family's. */
+	function blockke_search_css() {
+		return <<<'CSS'
+#bkd.bks{--sec:48px}
+#bkd.bks .bkn-name{font-family:var(--display)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;text-transform:none!important}
+#bkd.bks .bkd-ph{display:none}
+#bkd.bks-fade .bkn-img img:not(.bks-in){opacity:0}
+#bkd .bks-head{padding:24px 0 0}
+#bkd .bks-crumbs{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:13px;line-height:1.5;color:var(--muted)}
+#bkd .bks-crumbs a{color:var(--slate)!important}
+#bkd .bks-crumbs a:hover{text-decoration:underline}
+#bkd .bks-h1{margin:14px 0 0!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:40px!important;line-height:1.05!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
+#bkd .bks-count{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 24px;margin:12px 0 0;font-size:16px;line-height:1.5;color:var(--slate)}
+#bkd .bks-map{display:inline-block;padding:10px 0;margin:-10px 0;font-size:14px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+#bkd .bks-types{display:flex;gap:24px;margin:16px 0 0;overflow-x:auto;scrollbar-width:none;box-shadow:inset 0 -1px var(--line)}
+#bkd .bks-types::-webkit-scrollbar{display:none}
+#bkd .bks-types a{position:relative;flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;line-height:1.2;color:var(--slate)!important;white-space:nowrap}
+#bkd .bks-types a:hover{color:var(--navy)!important}
+#bkd .bks-types a[aria-current]{color:var(--navy)!important}
+#bkd .bks-types a[aria-current]::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--brass)}
+#bkd .bks-bar{position:sticky;top:var(--top);z-index:30;margin:0;background:var(--paper);border-bottom:1px solid var(--line)}
+#bkd .bks-bar.bks-up{z-index:100050}
+#bkd .bks-bar-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px;min-height:52px}
+#bkd .bks-ftog,#bkd .bks-x{display:inline-flex;align-items:center;min-height:44px;font-size:15px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
+#bkd .bks-f{display:none;order:3;flex:1 0 100%;padding:4px 0 24px}
+#bkd .bks-f:target,#bkd .bks-f.bks-open{display:block}
+#bkd .bks-fh{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px}
+#bkd .bks-fh b{font:var(--display-w) 30px/1.1 var(--display);letter-spacing:var(--display-ls);color:var(--navy)}
+#bkd .bks-fl{display:grid;gap:18px}
+#bkd .bks-sel{display:grid;gap:6px;min-width:0;margin:0}
+#bkd .bks-sel[hidden]{display:none}
+#bkd .bks-lab{font-size:14px;font-weight:600;line-height:1.4;color:var(--ink)}
+#bkd .bks-bar select{display:block;width:100%;max-width:none;height:48px;min-height:0;margin:0;padding:0 40px 0 14px;border:1px solid var(--line-2)!important;border-radius:2px!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center/12px 8px!important;box-shadow:none!important;font:400 16px/1.2 var(--font)!important;color:var(--navy)!important;-webkit-appearance:none;appearance:none;cursor:pointer}
+#bkd .bks-ff{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;margin-top:24px}
+#bkd .bks-apply{display:inline-flex;align-items:center;justify-content:center;flex:1 1 auto;min-height:52px;margin:0;padding:0 24px!important;border:0!important;border-radius:0!important;background:var(--navy)!important;box-shadow:none!important;font:600 15px/1.2 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:#fff!important;cursor:pointer}
+#bkd .bks-clear{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;color:var(--slate)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bks-sort{display:block}
+#bkd .bks-sort .bks-lab{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#bkd .bks-bar .bks-sort select,#bkd .bks-bar .bks-sort select.on{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 14px/1.2 var(--font)!important}
+#bkd .bks-f.bks-open{position:fixed;inset:0;z-index:100050;display:flex;flex-direction:column;padding:0;background:var(--paper);overflow:auto;overscroll-behavior:contain}
+#bkd .bks-open .bks-fh{position:sticky;top:0;z-index:1;padding:0 20px;background:var(--paper);border-bottom:1px solid var(--line)}
+#bkd .bks-open .bks-fl{padding:20px}
+#bkd .bks-open .bks-ff{position:sticky;bottom:0;margin:auto 0 0;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#bkd .bks-sec{padding:32px 0 0}
+#bkd .bks-sec+.bks-sec{padding-top:48px;content-visibility:auto;contain-intrinsic-size:auto 480px}
+#bkd .bks-h2{margin:0 0 24px!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:30px!important;line-height:1.1!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
+#bkd .bks-h3{margin:0 0 8px!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:26px!important;line-height:1.15!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
+#bkd .bks-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:40px 24px}
+#bkd .bks-more-w{margin:40px 0 0}
+#bkd .bks-more,#bkd .bks-wa{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:15px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
+#bkd .bks-more[aria-busy]{opacity:.6;cursor:progress}
+#bkd .bks-none-t{max-width:38ch;font-size:18px;line-height:1.5;color:var(--ink)}
+#bkd .bks-relax{margin:12px 0 0;padding:0;list-style:none}
+#bkd .bks-relax li{margin:0}
+#bkd .bks-relax a{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:15px;color:var(--navy)!important;text-decoration:none}
+#bkd .bks-rl{font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
+#bkd .bks-rn{color:var(--muted)}
+#bkd .bks-near{margin:12px 0 0;font-size:15px;line-height:1.7;color:var(--slate)}
+#bkd .bks-near a{color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bks-wa .bkd-i{width:20px;height:20px}
+#bkd .bks-ask{margin:40px 0 0}
+#bkd .bks-none .bks-ask,#bkd .bks-close .bks-ask{margin-top:24px}
+#bkd .bks-disc{margin:48px 0 0;padding:24px 0 48px;border-top:1px solid var(--line);font-size:13px;line-height:1.6;color:var(--muted)}
+@media (min-width:768px){
+#bkd .bks-head{padding-top:32px}
+#bkd .bks-h1{font-size:52px!important}
+#bkd .bks-count{font-size:17px}
+#bkd .bks-ftog,#bkd .bks-fh{display:none}
+#bkd .bks-bar-in{flex-wrap:nowrap;align-items:flex-start;gap:24px;min-height:64px}
+#bkd .bks-f,#bkd .bks-f:target{display:flex;flex-wrap:wrap;order:0;flex:0 1 auto;align-items:center;gap:0 24px;min-width:0;padding:10px 0}
+#bkd .bks-fl{display:contents}
+#bkd .bks-ff{display:contents}
+#bkd .bks-sort{flex:none;margin-left:auto;padding:10px 0}
+#bkd .bks-lab{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#bkd .bks-bar select{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-bottom:1px solid var(--line-2)!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 14px/1.2 var(--font)!important}
+#bkd .bks-bar select{field-sizing:content;min-width:72px}
+#bkd .bks-bar select.on{border-bottom:2px solid var(--brass)!important}
+#bkd .bks-apply{flex:none;min-height:44px;padding:0!important;background:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:5px}
+#bkd.bkd-js .bks-apply{display:none}
+#bkd .bks-sec{padding-top:40px}
+#bkd .bks-sec+.bks-sec{padding-top:72px}
+#bkd .bks-h2{font-size:34px!important;margin-bottom:28px!important}
+#bkd .bks-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 24px}
+#bkd .bks-disc{margin-top:72px}
+}
+@media (min-width:1000px){
+#bkd .bks-head{padding-top:48px}
+#bkd .bks-h1{font-size:64px!important}
+#bkd .bks-count{font-size:18px}
+#bkd .bks-sec{padding-top:48px}
+#bkd .bks-sec+.bks-sec{padding-top:96px}
+#bkd .bks-h2{font-size:40px!important;margin-bottom:32px!important}
+#bkd .bks-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:56px 32px}
+#bkd .bks-disc{margin-top:96px}
+}
+CSS;
+	}
+
+	/** Search results behaviour: the bar, the phone sheet, "Show 18 more" without a reload, and the search events. */
+	function blockke_search_js() {
+		return <<<'JS'
+(function(){
+  'use strict';
+  var root=document.getElementById('bkd');if(!root||!root.classList.contains('bks')){return;}
+  var dl=(window.dataLayer=window.dataLayer||[]),vt='onpagereveal' in window?1:0,html=document.documentElement;
+  function track(ev,o){var p=o||{};try{if(typeof window.gtag==='function'){window.gtag('event',ev,p);}else{p.event=ev;dl.push(p);}}catch(e){}}
+  function at(el,k){return el?el.getAttribute(k)||'':'';}
+  /* photos fade in once loaded (200ms) */
+  function fade(box){[].forEach.call(box.querySelectorAll('.bkn-img img'),function(im){var on=function(){im.classList.add('bks-in');};if(im.complete){on();}else{im.addEventListener('load',on,{once:true});im.addEventListener('error',on,{once:true});}});}
+  fade(root);root.classList.add('bks-fade');
+  track('search_view',{count_devs:+at(root,'data-devs'),count_homes:+at(root,'data-homes'),segments:at(root,'data-segs')});
+  if(root.hasAttribute('data-none')){track('index_no_results',{filters:at(root,'data-filters')});}
+  root.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a'):null;if(!a){return;}
+    var card=a.closest('.bkn-card');
+    if(card&&a.hasAttribute('data-row')){track('search_match_click',{target_id:at(card,'data-id'),unit_id:at(a,'data-unit'),row:+at(a,'data-row'),transport_type:'beacon'});}
+    else if(card&&a.classList.contains('bkn-mall')){track('search_match_click',{target_id:at(card,'data-id'),unit_id:'',row:'all',transport_type:'beacon'});}
+    else if(card&&a.classList.contains('bkn-a')){track('search_card_click',{target_id:at(card,'data-id'),position:+at(a,'data-pos'),kind:card.classList.contains('bkn-unit')?'unit':(card.querySelector('.bkn-match')?'group':'dev'),segment:at(a.closest('[data-seg]'),'data-seg'),vt:vt,transport_type:'beacon'});}
+    else if(a.hasAttribute('data-relax')){track('index_relax',{removed:at(a,'data-relax'),filters:at(root,'data-filters'),transport_type:'beacon'});}
+  });
+  /* the bar: changes apply at once on wider screens; on phones the sheet applies them together */
+  var form=document.getElementById('bks-bar');
+  if(form){
+    var box=document.getElementById('bks-f'),tog=form.querySelector('.bks-ftog'),wide=window.matchMedia('(min-width:768px)'),last=null;
+    var all=function(){return [].slice.call(form.querySelectorAll('select,input'));};
+    var go=function(){all().forEach(function(x){if(x.name&&x.value===''){x.disabled=true;}});form.submit();};
+    form.addEventListener('submit',function(e){e.preventDefault();go();});
+    window.addEventListener('pageshow',function(){all().forEach(function(x){x.disabled=false;});});
+    form.addEventListener('change',function(e){var t=e.target;
+      if(t.name==='for'){var p=form.querySelector('select[name="price"]'),c=form.querySelector('[data-bks-done]');
+        if(p){var b={};try{b=JSON.parse(p.getAttribute('data-bands')||'{}');}catch(x){b={};}p.length=1;(b[t.value==='rent'?'rent':'sale']||[]).forEach(function(o){p.add(new Option(o[1],o[0]));});p.value='';p.classList.remove('on');}
+        if(c){c.hidden=t.value==='rent';if(c.hidden){c.querySelector('select').value='';}}}
+      if(wide.matches||!box||!box.contains(t)){go();}
+    });
+    var trap=function(e){if(e.key==='Escape'){shut();return;}if(e.key!=='Tab'){return;}
+      var f=[].slice.call(box.querySelectorAll('a[href],button,select')).filter(function(x){return x.offsetParent!==null&&!x.disabled;});if(!f.length){return;}
+      if(e.shiftKey&&document.activeElement===f[0]){e.preventDefault();f[f.length-1].focus();}else if(!e.shiftKey&&document.activeElement===f[f.length-1]){e.preventDefault();f[0].focus();}};
+    var open=function(){last=document.activeElement;form.classList.add('bks-up');box.classList.add('bks-open');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');tog.setAttribute('aria-expanded','true');html.classList.add('bkd-lock');document.addEventListener('keydown',trap);var f=box.querySelector('select');if(f){f.focus();}};
+    var shut=function(){box.classList.remove('bks-open');form.classList.remove('bks-up');box.setAttribute('role','group');box.removeAttribute('aria-modal');tog.setAttribute('aria-expanded','false');html.classList.remove('bkd-lock');document.removeEventListener('keydown',trap);if(last&&last.focus){last.focus();}};
+    if(box&&tog){
+      tog.addEventListener('click',function(e){if(!wide.matches){e.preventDefault();open();}});
+      box.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-bks-close]')){e.preventDefault();shut();}});
+      if(wide.addEventListener){wide.addEventListener('change',function(){if(wide.matches&&box.classList.contains('bks-open')){shut();}});}
+    }
+  }
+  /* "Show 18 more": the next cards without a reload; the address keeps n, so Back and a reload show the same list */
+  root.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a.bks-more'):null;
+    if(!a||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||!window.fetch||!window.DOMParser){return;}
+    e.preventDefault();if(a.getAttribute('aria-busy')){return;}a.setAttribute('aria-busy','true');
+    var href=a.href.split('#')[0];
+    fetch(href,{credentials:'same-origin'}).then(function(r){if(!r.ok){throw new Error('more');}return r.text();}).then(function(txt){
+      var doc=new DOMParser().parseFromString(txt,'text/html'),first=null;
+      [].forEach.call(root.querySelectorAll('.bks-sec[data-seg]'),function(sec){
+        var ns=doc.querySelector('.bks-sec[data-seg="'+sec.getAttribute('data-seg')+'"]'),grid=sec.querySelector('.bks-grid');if(!ns||!grid){return;}
+        var ng=ns.querySelector('.bks-grid'),mine=sec.contains(a);
+        [].slice.call(ng?ng.children:[],grid.children.length).forEach(function(c,i){var x=document.importNode(c,true);grid.appendChild(x);fade(x);if(mine&&!i){first=x;}});
+        var ow=sec.querySelector('.bks-more-w'),nw=ns.querySelector('.bks-more-w');if(ow){if(nw){ow.parentNode.replaceChild(document.importNode(nw,true),ow);}else{ow.parentNode.removeChild(ow);}}
+      });
+      try{history.replaceState(history.state,'',href);}catch(x){}
+      if(first){var l=first.querySelector('a.bkn-a');if(l){try{l.focus({preventScroll:true});}catch(x){}}}
+      try{root.dispatchEvent(new CustomEvent('bkn:cards',{bubbles:true}));}catch(x){}
+    }).catch(function(){location.href=a.href;});
+  });
+})();
+JS;
+	}
+
+	add_action(
+		'template_redirect',
+		function () {
+			// Simple searches go to the page made for them (302: the parameter names the theme sends are not yet confirmed)
+			if ( is_admin() || ! is_page( blockke_search_page_id() ) || ! blockke_bkn_on( 'search_redirect' ) || isset( $_GET['bke_search'] ) || 'GET' !== ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				return;
+			}
+			try {
+				$q  = blockke_search_parse();
+				$to = null === $q ? '' : blockke_search_redirect_url( $q );
+			} catch ( Throwable $x ) {
+				$to = '';
+			}
+			if ( '' !== $to ) {
+				nocache_headers();
+				wp_safe_redirect( $to, 302 );
+				exit;
+			}
+		},
+		5
+	);
+
+	add_filter(
+		'template_include',
+		function ( $template ) {
+			if ( is_admin() || is_feed() || is_embed() || ! is_page( blockke_search_page_id() ) || ! blockke_bkn_on( 'search_layout', 'bke_search' ) ) {
+				return $template;
+			}
+			$q = blockke_search_parse();
+			if ( null === $q ) {
+				return $template; // a keyword, MLS number, saved search or anything else we can't read: the theme's results
+			}
+			$GLOBALS['blockke_search_preview'] = isset( $_GET['bke_search'] ) && current_user_can( 'edit_posts' ); // phpcs:ignore WordPress.Security.NonceVerification
+			try {
+				if ( ! blockke_bkn_rows() ) {
+					return $template;
+				}
+				$s    = blockke_search_state( $q );
+				$html = blockke_search_render( $s );
+			} catch ( Throwable $x ) {
+				error_log( 'BLOCK search results: ' . $x->getMessage() . ' (' . $x->getFile() . ':' . $x->getLine() . ')' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+				return $template;
+			}
+			$GLOBALS['blockke_dev_active'] = true;
+			if ( empty( blockke_dev_config()['price_check_popup'] ) ) {
+				$_GET['blockpop'] = '0';
+			}
+			status_header( 200 );
+			add_filter(
+				'body_class',
+				function ( $c ) {
+					$c[] = 'bkd-page';
+					$c[] = 'bks-page';
+					return $c;
+				}
+			);
+			// Results stay out of search engines (noindex, follow) with the page's own address as canonical
+			add_filter(
+				'wp_robots',
+				function ( $r ) {
+					unset( $r['index'], $r['max-image-preview'] );
+					$r['noindex'] = true;
+					$r['follow']  = true;
+					return $r;
+				},
+				99
+			);
+			add_filter(
+				'rank_math/frontend/robots',
+				function ( $r ) {
+					$r['index']  = 'noindex';
+					$r['follow'] = 'follow';
+					return $r;
+				},
+				99
+			);
+			$canon = get_permalink( blockke_search_page_id() );
+			foreach ( array( 'rank_math/frontend/canonical', 'rank_math/opengraph/facebook/og_url' ) as $h ) {
+				add_filter(
+					$h,
+					function () use ( $canon ) {
+						return $canon;
+					},
+					99
+				);
+			}
+			add_filter( 'rank_math/frontend/disable_adjacent_rel_links', '__return_true' );
+			add_filter(
+				'pre_get_document_title',
+				function () use ( $s ) {
+					return esc_html( $s['title'] );
+				},
+				99
+			);
+			foreach ( array( 'rank_math/frontend/title', 'rank_math/opengraph/facebook/og_title', 'rank_math/opengraph/twitter/twitter_title' ) as $h ) {
+				add_filter(
+					$h,
+					function () use ( $s ) {
+						return $s['title'];
+					},
+					99
+				);
+			}
+			add_action(
+				'wp_head',
+				function () {
+					$font = blockke_dev_font_head( '#bkd' );
+					if ( '' === $font[0] ) {
+						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}';
+					}
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_bkn_card_css() . blockke_search_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					if ( blockke_bkn_on( 'view_transitions' ) && empty( $GLOBALS['blockke_bkn_vt_printed'] ) ) {
+						$GLOBALS['blockke_bkn_vt_printed'] = true;
+						echo blockke_bkn_vt_head(); // phpcs:ignore WordPress.Security.EscapeOutput
+					}
+				},
+				99
+			);
+			add_action(
+				'wp_footer',
+				function () use ( $s ) {
+					$cfg = blockke_dev_config();
+					$ag  = blockke_dev_agent( 0 );
+					$js  = array(
+						'id'        => 0,
+						'slug'      => '',
+						'name'      => $s['h1'],
+						'leadName'  => $s['words'],
+						'title'     => $s['title'],
+						'url'       => $s['url'],
+						'brand'     => $cfg['brand'],
+						'agent'     => '',
+						'wa'        => $ag['wa'],
+						'endpoint'  => esc_url_raw( rest_url( 'block/v1/development-lead' ) ),
+						'gallery'   => array(),
+						'lp'        => 0,
+						'area'      => '',
+						'bands'     => $cfg['budget_bands'],
+						'back'      => 0,
+						'bedsMode'  => $cfg['beds_mode'],
+						'studioCat' => (string) $cfg['studio_cat'],
+						'search'    => 1,
+						'bkn'       => array( 'src' => 'search', 'label' => 'your search' ),
+					);
+					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_search_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+				},
+				20
+			);
+			get_header();
+			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+			get_footer();
+			$blank = WP_CONTENT_DIR . '/index.php';
+			return file_exists( $blank ) ? $blank : '';
+		},
+		99998
+	);
+
+	add_action(
+		'admin_bar_menu',
+		function ( $bar ) {
+			if ( is_admin() || ! is_page( blockke_search_page_id() ) || ! current_user_can( 'edit_posts' ) ) {
+				return;
+			}
+			$cfg  = blockke_dev_config();
+			$live = ! empty( $cfg['search_layout'] );
+			$here = remove_query_arg( 'bke_search', home_url( isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			$bar->add_node( array( 'id' => 'bks', 'title' => 'Search results: ' . ( $live ? 'on' : 'off' ), 'href' => add_query_arg( 'bke_search', $live ? '0' : '1', $here ) ) );
+			$bar->add_node( array( 'parent' => 'bks', 'id' => 'bks-on', 'title' => 'Preview the new search results', 'href' => add_query_arg( 'bke_search', '1', $here ) ) );
+			$bar->add_node( array( 'parent' => 'bks', 'id' => 'bks-off', 'title' => 'Preview the classic search results', 'href' => add_query_arg( 'bke_search', '0', $here ) ) );
+			$q = blockke_search_parse();
+			if ( null === $q ) {
+				$read = 'This search stays classic: it uses "' . mb_substr( (string) $GLOBALS['blockke_search_why'], 0, 40 ) . '"';
+			} else {
+				$to   = blockke_search_redirect_url( $q );
+				$read = '' === $to ? 'This search can use the new layout' : 'This search ' . ( ! empty( $cfg['search_redirect'] ) ? 'goes' : 'would go' ) . ' to ' . (string) wp_parse_url( $to, PHP_URL_PATH );
+			}
+			$bar->add_node( array( 'parent' => 'bks', 'id' => 'bks-read', 'title' => esc_html( $read ) ) );
+			$bar->add_node( array( 'parent' => 'bks', 'id' => 'bks-rd', 'title' => 'Redirects to area and new developments pages: ' . ( ! empty( $cfg['search_redirect'] ) ? 'on' : 'off' ) ) );
+		},
+		90
+	);
+
 	/* ---------------------------------------------------------------------
 	   @v16-transitions: card to development and back (context, photo transition, prefetch)
 	   --------------------------------------------------------------------- */
