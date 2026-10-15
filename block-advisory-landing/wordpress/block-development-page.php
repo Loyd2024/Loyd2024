@@ -5337,6 +5337,7 @@ JS;
 		if ( $at ) {
 			$forms['hero'] = 'Hero form (send me matches)';
 			$forms['find'] = 'Find-me-one request (none listed)';
+			$forms['inline'] = 'Quick form (between sections)';
 		}
 		$form_label  = isset( $forms[ $intent ] ) ? $forms[ $intent ] : ( isset( $forms[ $source ] ) ? $forms[ $source ] : $source );
 
@@ -5973,6 +5974,9 @@ JS;
 	 * Cached per area (transient bkd_area_{term id}); rebuilt when any listing changes (option bkd_sim_ver).
 	 */
 	function blockke_area_data( $term, $build = true ) {
+		if ( blockke_bkn_on( 'card_v16' ) ) { // the shared rows are one cache for every area, so there is nothing per area to skip
+			return blockke_area_v16_data( $term );
+		}
 		$cfg = blockke_dev_config();
 		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v15|' . md5( wp_json_encode( array( $cfg['studio_cat'], $cfg['area_cap'], $cfg['beds_mode'] ) ) );
 		$tk  = 'bkd_area_' . (int) $term->term_id;
@@ -6138,7 +6142,8 @@ JS;
 		if ( $x['max'] > $x['min'] ) {
 			return 'from ' . blockke_dev_short( $x['min'] ) . ' to ' . blockke_dev_short( $x['max'] ) . $m;
 		}
-		return ( 1 === (int) $x['n'] && 0 !== strpos( $x['cards'][0]['ptxt'], 'From' ) ? 'at ' : 'from ' ) . blockke_dev_short( $x['min'] ) . $m;
+		$one = 1 === (int) $x['n'] && ( isset( $x['cards'][0]['ptxt'] ) ? 0 !== strpos( $x['cards'][0]['ptxt'], 'From' ) : true ); // a v1.6 card with one price: min = max
+		return ( $one ? 'at ' : 'from ' ) . blockke_dev_short( $x['min'] ) . $m;
 	}
 
 	/** Everything one area page or segment page needs. */
@@ -6732,7 +6737,11 @@ JS;
 				exit;
 			}
 			$GLOBALS['blockke_area_preview'] = isset( $_GET['bke_area'] ) && current_user_can( 'edit_posts' ); // phpcs:ignore WordPress.Security.NonceVerification
-			$p = blockke_area_page( $term, $slug );
+			$p   = blockke_area_page( $term, $slug );
+			$v16 = ! empty( $p['data']['v16'] );
+			if ( $v16 && $p['seg'] && array_intersect( array_keys( $_GET ), array( 'beds', 'price', 'completion', 'sort', 'n' ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				$p['index'] = false; // a filtered or sorted view: the plain segment page is the one in search results
+			}
 			$GLOBALS['blockke_dev_active'] = true;
 			add_filter( 'rank_math/frontend/disable_adjacent_rel_links', '__return_true' ); // the archive's page 2, 3... are not these pages
 			if ( empty( blockke_dev_config()['price_check_popup'] ) ) {
@@ -6815,18 +6824,19 @@ JS;
 			}
 			add_action(
 				'wp_head',
-				function () {
+				function () use ( $v16 ) {
 					$font = blockke_dev_font_head( '#bkd' );
 					if ( '' === $font[0] ) {
 						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
 					}
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_area_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					$css = $v16 ? blockke_bkn_card_css() . blockke_index_css() . blockke_area_css_v16() : blockke_area_css();
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . $css . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				99
 			);
 			add_action(
 				'wp_footer',
-				function () use ( $p ) {
+				function () use ( $p, $v16 ) {
 					$cfg = blockke_dev_config();
 					$ag  = blockke_dev_agent( 0 );
 					$js  = array(
@@ -6855,13 +6865,17 @@ JS;
 						'mdSub'     => 'Tell us what you need and an advisor will send matching ' . $p['lname'] . ' to your WhatsApp.',
 						'okTail'    => 'with matching ' . $p['lname'],
 					);
+					if ( $v16 ) {
+						$js['listLabel'] = $p['lname'];
+					}
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
-					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_area_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					$own = $v16 ? blockke_area_js_v16() . "\n" . blockke_bkn_nav_js() : blockke_area_js();
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . $own . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				20
 			);
 			get_header();
-			echo blockke_area_render( $p ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+			echo $v16 ? blockke_area_render_v16( $p ) : blockke_area_render( $p ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
 			get_footer();
 			$blank = WP_CONTENT_DIR . '/index.php';
 			return file_exists( $blank ) ? $blank : '';
@@ -6904,6 +6918,11 @@ JS;
 		return ! empty( $cfg[ $key ] );
 	}
 
+	/** The cache version of the rows and everything built from them: any listing change, or a new row format. */
+	function blockke_bkn_ver() {
+		return (string) get_option( 'bkd_sim_ver', '0' ) . '|v161';
+	}
+
 	/** Lowercase, no punctuation or the generic words, for "is this the same building" checks. */
 	function blockke_bkn_norm( $s ) {
 		$s = strtolower( blockke_dev_text( $s ) );
@@ -6920,7 +6939,7 @@ JS;
 		if ( null !== $rows ) {
 			return $rows;
 		}
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v16';
+		$ver = blockke_bkn_ver();
 		$hit = get_transient( 'bkn_rows' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && ( $hit['ver'] === $ver || get_transient( 'bkn_build_lock' ) ) ) {
 			$rows = $hit['rows'];
@@ -6977,6 +6996,7 @@ JS;
 		$master = $master && $master !== $id ? $master : 0;
 		$proj   = blockke_dev_first_term( $id, 'property_project' );
 		$ct     = blockke_dev_first_term( $id, 'property_completion' );
+		$cy     = blockke_dev_first_term( $id, 'property_city' );
 		// main area: the listing's own choice, else its development's, else the busiest of its areas
 		$ma = sanitize_title( (string) blockke_dev_pm( $id, 'bke_dev_area' ) );
 		if ( '' === $ma && $master ) {
@@ -7014,6 +7034,7 @@ JS;
 			'cats'  => is_array( $cats ) ? array_values( wp_list_pluck( $cats, 'slug' ) ) : array(),
 			'areas' => is_array( $areas ) ? array_values( wp_list_pluck( $areas, 'slug' ) ) : array(),
 			'ma'    => $ma,
+			'cy'    => $cy ? blockke_dev_text( $cy->name ) : '',
 			'p'     => (float) blockke_dev_pm( $id, 'property_price' ),
 			'f'     => blockke_dev_price_flag( $id ),
 			'b'     => (int) blockke_dev_pm( $id, 'property_bedrooms' ),
@@ -7069,7 +7090,7 @@ JS;
 			return $out;
 		}
 		$rows = blockke_bkn_rows();
-		$ver  = (string) get_option( 'bkd_sim_ver', '0' ) . '|v16|' . count( $rows );
+		$ver  = blockke_bkn_ver() . '|' . count( $rows );
 		$hit  = get_transient( 'bkn_devs' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			$out = $hit['data'];
@@ -7269,6 +7290,69 @@ JS;
 		);
 	}
 
+	/**
+	 * Development cards for a set of matching listings (a segment, a search): each development's card with its prices and
+	 * bedrooms narrowed to the listings that matched, and those listings in 'match'. Keyed by development.
+	 */
+	function blockke_bkn_group( $ids, $rent = false ) {
+		$all  = blockke_bkn_devs();
+		$rows = blockke_bkn_rows();
+		$by   = array();
+		foreach ( $ids as $id ) {
+			if ( isset( $all['of'][ $id ], $rows[ $id ] ) ) {
+				$by[ $all['of'][ $id ] ][] = $rows[ $id ];
+			}
+		}
+		$out = array();
+		foreach ( $by as $k => $rs ) {
+			$c     = $all['devs'][ $k ];
+			$ps    = array();
+			$beds  = array();
+			$types = array();
+			$match = array();
+			foreach ( $rs as $r ) {
+				if ( 'unit' !== $r['f'] && $r['p'] > 0 && ( $rent || $r['p'] >= 1000000 ) ) {
+					$ps[] = $r['p'];
+				}
+				if ( 'home' === $r['kind'] && ! $r['dev'] && '' !== $r['k'] ) {
+					$beds[] = 'studio' === $r['k'] ? 0 : max( 1, $r['b'] );
+				}
+				if ( '' !== $r['type'] ) {
+					$types[ $r['type'] ] = 1;
+				}
+				if ( ! $r['dev'] ) {
+					$match[] = $r;
+				}
+			}
+			$beds = $beds ? array_values( array_unique( $beds ) ) : $c['beds']; // a development listed without its homes
+			sort( $beds );
+			usort(
+				$match,
+				function ( $a, $b ) {
+					return ( $a['p'] > 0 ? $a['p'] : PHP_INT_MAX ) <=> ( $b['p'] > 0 ? $b['p'] : PHP_INT_MAX );
+				}
+			);
+			$c['beds']  = $beds;
+			$c['types'] = $types ? array_keys( $types ) : $c['types'];
+			$c['match'] = $match;
+			if ( $rent ) {
+				$c['rfrom'] = $ps ? min( $ps ) : 0;
+				$c['rto']   = $ps ? max( $ps ) : 0;
+			} else {
+				$c['from'] = $ps ? min( $ps ) : 0;
+				$c['to']   = $ps ? max( $ps ) : 0;
+			}
+			$c['unit'] = ! $ps && (bool) array_filter(
+				$rs,
+				function ( $r ) {
+					return 'unit' === $r['f'];
+				}
+			);
+			$out[ $k ] = $c;
+		}
+		return $out;
+	}
+
 	/** "KES 6.06M", "KES 25.3M", "KES 180K": rounded up, so a "from" price is never understated. */
 	function blockke_bkn_money( $v ) {
 		$cur = blockke_dev_config()['currency'];
@@ -7362,7 +7446,7 @@ JS;
 		}
 		$img   = $c['cover'] ? wp_get_attachment_image( $c['cover'], $size, false, $attr ) : '';
 		$data  = ' data-id="' . (int) $c['id'] . '" data-areas="' . esc_attr( implode( ' ', $c['areas'] ) ) . '" data-beds="' . esc_attr( implode( ' ', $c['beds'] ) ) . '"'
-			. ' data-from="' . (int) ( $rent ? $c['rfrom'] : $c['from'] ) . '" data-to="' . (int) ( $rent ? $c['rto'] : $c['to'] ) . '" data-done="' . (int) blockke_bkn_done_key( $c ) . '" data-d="' . (int) $c['d'] . '" data-vt="' . ( $c['vt'] ? 1 : 0 ) . '"';
+			. ' data-from="' . (int) ( $rent ? $c['rfrom'] : $c['from'] ) . '" data-to="' . (int) ( $rent ? $c['rto'] : $c['to'] ) . '" data-done="' . (int) blockke_bkn_done_key( $c ) . '" data-d="' . (int) $c['d'] . '" data-st="' . esc_attr( $c['st'] ) . '" data-vt="' . ( $c['vt'] ? 1 : 0 ) . '"';
 		$link  = '<a class="bkn-a" href="' . esc_url( $c['url'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '"' . ( $ctx['pos'] ? ' data-pos="' . (int) $ctx['pos'] . '"' : '' ) . '>';
 		$tag   = $ctx['tag'] ? '<span class="bkn-tag">New on Block</span>' : '';
 		if ( 'unit' === $v ) { // one home, Compass order: price, what it is, where
@@ -7502,7 +7586,7 @@ CSS;
 		}
 		$cfg  = blockke_dev_config();
 		$all  = blockke_bkn_devs();
-		$ver  = (string) get_option( 'bkd_sim_ver', '0' ) . '|ix1|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'] ) ) );
+		$ver  = blockke_bkn_ver() . '|ix1|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'] ) ) );
 		$hit  = get_transient( 'bkn_index' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			$x = $hit['data'];
@@ -8412,6 +8496,595 @@ JS;
 		},
 		91
 	);
+
+	/* ---------------------------------------------------------------------
+	   Area and segment pages on the v1.6 cards (config card_v16): the same developments, cards and wording as the index
+	   --------------------------------------------------------------------- */
+
+	/** An area's segments from the shared rows: same shape as blockke_area_data(), cards are development cards. */
+	function blockke_area_v16_data( $term ) {
+		static $memo = array();
+		$tid = (int) $term->term_id;
+		if ( isset( $memo[ $tid ] ) ) {
+			return $memo[ $tid ];
+		}
+		$rows  = blockke_bkn_rows();
+		$slugs = array( $term->slug );
+		foreach ( (array) get_term_children( $tid, 'property_area' ) as $cid ) {
+			$ct = get_term( $cid, 'property_area' );
+			if ( $ct instanceof WP_Term ) {
+				$slugs[] = $ct->slug;
+			}
+		}
+		$in     = array();
+		$cities = array();
+		foreach ( $rows as $id => $r ) {
+			if ( array_intersect( $slugs, $r['areas'] ) && '' !== $r['act'] ) {
+				$in[ $id ] = $r;
+				if ( '' !== $r['cy'] ) {
+					$cities[ $r['cy'] ] = ( isset( $cities[ $r['cy'] ] ) ? $cities[ $r['cy'] ] : 0 ) + 1;
+				}
+			}
+		}
+		$segs = array();
+		foreach ( blockke_area_segments() as $slug => $seg ) {
+			$ids = array();
+			foreach ( $in as $id => $r ) {
+				if ( $r['act'] === $seg[1] && $r['kind'] === $seg[2] && ( '' === $seg[3] || $r['type'] === $seg[3] ) ) {
+					$ids[] = $id;
+				}
+			}
+			$rent  = 'rent' === $seg[1];
+			$cards = array_values( blockke_bkn_group( $ids, $rent ) );
+			usort(
+				$cards,
+				function ( $a, $b ) {
+					if ( $a['ft'] !== $b['ft'] ) {
+						return $a['ft'] ? -1 : 1;
+					}
+					if ( (bool) $a['cover'] !== (bool) $b['cover'] ) {
+						return $a['cover'] ? -1 : 1;
+					}
+					return $b['d'] - $a['d'];
+				}
+			);
+			$ps = array();
+			foreach ( $cards as $c ) {
+				foreach ( $rent ? array( $c['rfrom'], $c['rto'] ) : array( $c['from'], $c['to'] ) as $v ) {
+					if ( $v > 0 ) {
+						$ps[] = $v;
+					}
+				}
+			}
+			$segs[ $slug ] = array(
+				'n'     => count( $cards ),
+				'cards' => $cards,
+				'min'   => $ps ? min( $ps ) : 0,
+				'max'   => $ps ? max( $ps ) : 0,
+			);
+		}
+		arsort( $cities );
+		$memo[ $tid ] = array(
+			'segs' => $segs,
+			'city' => $cities ? (string) key( $cities ) : '',
+			'v16'  => 1,
+		);
+		return $memo[ $tid ];
+	}
+
+	/** Price bands for a segment page: sale in KES millions ("8-12"), rent in thousands a month ("80-150"). */
+	function blockke_area_v16_bands( $rent ) {
+		$cfg = blockke_dev_config();
+		$div = $rent ? 1000 : 1000000;
+		$u   = $rent ? 'K' : 'M';
+		$out = array();
+		foreach ( isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array() as $b ) {
+			$lo   = (float) $b[0];
+			$hi   = (float) $b[1];
+			$n    = function ( $v ) use ( $div ) {
+				return rtrim( rtrim( number_format( $v / $div, 1, '.', '' ), '0' ), '.' );
+			};
+			$m    = $rent ? ' a month' : '';
+			$slug = $n( $lo ) . '-' . ( $hi > 0 ? $n( $hi ) : '' );
+			$out[ $slug ] = array( $lo, $hi, $lo <= 0 ? 'Under KES ' . $n( $hi ) . $u . $m : ( $hi > 0 ? 'KES ' . $n( $lo ) . '–' . $n( $hi ) . $u . $m : 'KES ' . $n( $lo ) . $u . $m . ' and above' ) );
+		}
+		return $out;
+	}
+
+	/** A segment page's filters from the address, checked against what the bar offers. */
+	function blockke_area_v16_state( $rent ) {
+		$g    = function ( $k ) {
+			return isset( $_GET[ $k ] ) && is_scalar( $_GET[ $k ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $k ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		};
+		$page = max( 6, (int) blockke_dev_config()['area_page_size'] );
+		return array(
+			'beds'       => in_array( $g( 'beds' ), array( 'studio', '1', '2', '3', '4' ), true ) ? $g( 'beds' ) : '',
+			'price'      => isset( blockke_area_v16_bands( $rent )[ $g( 'price' ) ] ) ? $g( 'price' ) : '',
+			'completion' => ! $rent && isset( blockke_index_years()[ $g( 'completion' ) ] ) ? $g( 'completion' ) : '',
+			'sort'       => in_array( $g( 'sort' ), array( 'price-asc', 'price-desc', 'newest', 'soonest' ), true ) ? $g( 'sort' ) : '',
+			'n'          => min( 480, max( $page, (int) $g( 'n' ) ) ),
+			'page'       => $page,
+		);
+	}
+
+	/** The same test the segment page's script runs, so a filtered address shows the right cards before any script. */
+	function blockke_area_v16_match( $c, $f, $rent ) {
+		if ( '' !== $f['beds'] ) {
+			$b  = 'studio' === $f['beds'] ? 0 : (int) $f['beds'];
+			$ok = false;
+			foreach ( $c['beds'] as $x ) {
+				$ok = $ok || ( 4 === $b ? $x >= 4 : $x === $b );
+			}
+			if ( ! $ok ) {
+				return false;
+			}
+		}
+		if ( '' !== $f['price'] ) {
+			$band = blockke_area_v16_bands( $rent )[ $f['price'] ];
+			$fr   = (int) ( $rent ? $c['rfrom'] : $c['from'] );
+			$to   = (int) ( $rent ? $c['rto'] : $c['to'] );
+			$to   = $to > 0 ? $to : $fr;
+			if ( $fr <= 0 || $to < $band[0] || ( $band[1] > 0 && $fr >= $band[1] ) ) {
+				return false;
+			}
+		}
+		if ( '' !== $f['completion'] ) {
+			$d  = blockke_bkn_done_key( $c );
+			$cy = (int) floor( $d / 100 );
+			if ( 'ready-now' === $f['completion'] ? 'ready' !== $c['st'] : ( $d >= 999999 || ( false !== strpos( $f['completion'], '-plus' ) ? $cy < (int) $f['completion'] : $cy !== (int) $f['completion'] ) ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** The v1.6 area page (no segment) or segment page. */
+	function blockke_area_render_v16( $p ) {
+		$cfg   = blockke_dev_config();
+		$e     = 'esc_html';
+		$segs  = blockke_area_segments();
+		$data  = $p['data'];
+		$term  = $p['term'];
+		$area  = $p['area'];
+		$stub  = blockke_area_stub( $p );
+		$ag    = $stub['agent'];
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm looking at " . $p['lname'] . ' on block.ke. ' . $p['url'] );
+		$homes = 'home' === $p['kind'];
+		$rent  = 'rent' === $p['action'];
+		$s_url = blockke_dev_search_url( array( 'area' => $area, 'action' => $p['action'] ) );
+		$about = trim( (string) $term->description );
+		$paras = '' !== $about ? preg_split( '#(?<=</p>)\s*#', trim( wpautop( wp_kses_post( $about ) ) ), 2 ) : array();
+		$card  = function ( $c, $i, $rent, $extra = array() ) use ( $term ) {
+			return blockke_card_html( $c, 'dev', array_merge( array( 'src' => 'area', 'scope' => $term->slug, 'pos' => $i + 1, 'rent' => $rent ), $extra ) );
+		};
+		$o   = array();
+		$o[] = '<div id="bkd" class="bkd bka bka16 bkn" data-area="' . (int) $term->term_id . '" data-seg="' . esc_attr( $p['slug'] ) . '">' . blockke_dev_sprite();
+
+		// Head: where you are, what is here, and (on the area page) what the area is like
+		$crumbs = '<span class="bka16-home"><a href="' . esc_url( home_url( '/' ) ) . '">Home</a><span aria-hidden="true">/</span></span>';
+		if ( $p['seg'] ) {
+			$crumbs .= '<a href="' . esc_url( blockke_area_url( $term ) ) . '">' . $e( $area ) . '</a><span aria-hidden="true">/</span>';
+			if ( '' !== $p['seg'][4] ) {
+				$crumbs .= '<a href="' . esc_url( blockke_area_url( $term, $p['seg'][4] ) ) . '">' . $e( $segs[ $p['seg'][4] ][0] ) . '</a><span aria-hidden="true">/</span>';
+			}
+			$crumbs .= '<span class="bka16-cur" aria-current="page">' . $e( $p['label'] ) . '</span>'; // phones: the heading says it
+		} else {
+			$crumbs .= '<span aria-current="page">' . $e( $area ) . '</span>';
+		}
+		$tools = ( ! empty( $cfg['search'] ) ? '<a href="' . esc_url( $s_url ) . '" rel="nofollow"' . ( $homes ? ' data-bkd-search="hero" aria-haspopup="dialog"' : '' ) . '>' . ( $homes ? 'Search homes' : 'Search property' ) . '</a>' : '' )
+			. '<button type="button" data-bkd-share>Share</button>';
+		$o[]   = '<header class="bkn-head bka16-head" id="bkd-top"><div class="bkd-wrap"><div class="bka16-top"><nav class="bkn-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav><div class="bka16-tools">' . $tools . '</div></div>'
+			. '<h1 class="bkn-h1">' . $e( $p['seg'] ? $p['label'] . ' in ' . $area : 'Property in ' . $area ) . '</h1>'
+			. ( '' !== $p['tag'] ? '<p class="bkn-stand">' . $e( $p['tag'] ) . '</p>' : '' );
+		if ( ! $p['seg'] && $paras ) {
+			$o[] = '<div class="bka16-about">' . $paras[0] . '</div>' . ( isset( $paras[1] ) && '' !== trim( wp_strip_all_tags( $paras[1] ) ) ? '<p class="bka16-more"><a class="bkn-link" href="#bka-about">' . $e( 'More about ' . $area ) . '</a></p>' : '' );
+		}
+		if ( $p['seg'] ) {
+			$o[] = blockke_area_v16_tabs( $p );
+		}
+		$o[] = '</div></header>';
+
+		// Area page: three photos from its leading developments, captioned and linked
+		if ( ! $p['seg'] ) {
+			$lead = array();
+			foreach ( array( 'homes-for-sale', 'homes-for-rent', 'commercial-for-sale', 'commercial-for-rent', 'land-for-sale' ) as $s ) {
+				foreach ( $data['segs'][ $s ]['cards'] as $c ) {
+					if ( $c['cover'] && count( $lead ) < 3 && ! isset( $lead[ $c['id'] ] ) ) {
+						$lead[ $c['id'] ] = $c;
+					}
+				}
+			}
+			if ( $lead ) {
+				$o[] = '<div class="bkd-wrap"><ul class="bka16-strip bka16-n' . count( $lead ) . '">';
+				foreach ( array_values( $lead ) as $i => $c ) {
+					$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area" data-pos="' . ( $i + 1 ) . '"><span class="bkn-img">' . wp_get_attachment_image( $c['cover'], 0 === $i ? 'large' : 'medium_large', false, array( 'alt' => $c['name'], 'sizes' => 0 === $i ? '(min-width:1000px) 600px, 100vw' : '(min-width:1000px) 300px, 50vw', 'loading' => 0 === $i ? 'eager' : 'lazy', 'decoding' => 'async' ) ) . '</span><span class="bka16-cap">' . $e( $c['name'] ) . '</span></a></li>';
+				}
+				$o[] = '</ul></div>';
+			}
+		}
+
+		$o[] = '<main class="bka16-main">';
+		if ( $p['seg'] ) {
+			// The segment: every development of this one kind, filtered and sorted in place
+			$sd    = $data['segs'][ $p['slug'] ];
+			$show  = array();
+			$text  = array();
+			foreach ( $sd['cards'] as $c ) {
+				if ( $c['cover'] ) {
+					$show[] = $c;
+				} else {
+					$text[] = $c;
+				}
+			}
+			$o[] = '<section class="bka16-list" id="bka-list"><div class="bkd-wrap">';
+			if ( $show ) {
+				// Filtered and sorted here too, so a shared or reloaded address is right before the script runs (and without it)
+				$f    = blockke_area_v16_state( $rent );
+				$list = array();
+				foreach ( $show as $r => $c ) {
+					if ( blockke_area_v16_match( $c, $f, $rent ) ) {
+						$list[ $r ] = $c;
+					}
+				}
+				if ( '' !== $f['sort'] ) {
+					$v = function ( $c, $k ) use ( $rent ) {
+						return (int) ( $rent ? $c[ 'r' . $k ] : $c[ $k ] );
+					};
+					uasort(
+						$list,
+						function ( $a, $b ) use ( $f, $v ) {
+							switch ( $f['sort'] ) {
+								case 'price-asc':
+									return ( $v( $a, 'from' ) ? $v( $a, 'from' ) : PHP_INT_MAX ) <=> ( $v( $b, 'from' ) ? $v( $b, 'from' ) : PHP_INT_MAX );
+								case 'price-desc':
+									return $v( $b, 'from' ) <=> $v( $a, 'from' );
+								case 'soonest':
+									return blockke_bkn_done_key( $a ) <=> blockke_bkn_done_key( $b );
+							}
+							return $b['d'] <=> $a['d'];
+						}
+					);
+				}
+				$o[] = blockke_area_v16_bar( $p, $show, count( $list ) );
+				$o[] = '<h2 class="bkd-sr">Listings</h2><div class="bkn-grid bka16-grid" data-bka-grid data-page="' . (int) $f['page'] . '">';
+				$i   = 0;
+				foreach ( $list + $show as $r => $c ) { // the matches in order, then the rest, hidden; data-r keeps "Recommended"
+					$h   = $card( $c, $r, $rent, array( 'lazy' => $i > 2 ) );
+					$o[] = preg_replace( '/^<article /', '<article data-r="' . (int) $r . '"' . ( isset( $list[ $r ] ) && $i < $f['n'] ? '' : ' hidden' ) . ' ', $h, 1 );
+					$i++;
+				}
+				$o[] = '</div><div class="bkn-none bka16-none" data-bka-none' . ( $list ? ' hidden' : '' ) . '><p class="bkn-none-t" data-bka-none-t>None match these filters right now.</p><ul class="bkn-relax" data-bka-relax></ul>'
+					. '<p><button class="bkd-inline" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div>'
+					. '<a class="bkn-more" href="' . esc_url( add_query_arg( 'n', $f['n'] + $f['page'] ) ) . '" rel="nofollow" data-bka-more' . ( count( $list ) > $f['n'] ? '' : ' hidden' ) . '>Show ' . min( $f['page'], max( 0, count( $list ) - $f['n'] ) ) . ' more</a>';
+			} else {
+				$o[] = '<div class="bka16-empty"><h2 class="bkn-h2">' . $e( 'No ' . strtolower( $p['label'] ) . ' in ' . $area . ' listed right now' ) . '</h2><p class="bkn-sub">Tell us what you need and an advisor will send you matches as they come up.</p>'
+					. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div>';
+			}
+			if ( $text ) { // listed without photos: by name only, never a placeholder tile
+				$o[] = '<div class="bka16-text"><h2 class="bka16-h3">' . $e( 'Also listed, no photos yet (' . count( $text ) . ')' ) . '</h2><ul>';
+				foreach ( $text as $c ) {
+					$pr  = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true ) : blockke_bkn_price( $c['from'], $c['to'] );
+					$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area">' . $e( $c['name'] ) . '</a>' . ( '' !== $pr ? '<span>' . $e( $pr ) . '</span>' : '' ) . '</li>';
+				}
+				$o[] = '</ul></div>';
+			}
+			$other = array();
+			foreach ( $segs as $s => $seg ) {
+				if ( '' === $seg[4] && $s !== $p['slug'] && $s !== $p['seg'][4] && $data['segs'][ $s ]['n'] ) {
+					$other[] = '<a href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $seg[0] ) . '</a>';
+				}
+			}
+			$other[] = '<a href="' . esc_url( blockke_area_url( $term ) ) . '">' . $e( $paras ? 'About ' . $area : 'All property in ' . $area ) . '</a>';
+			$o[]     = '<p class="bka16-also"><span>Also in ' . $e( $area ) . ':</span> ' . implode( '<span aria-hidden="true"> · </span>', $other ) . '</p></div></section>';
+		} else {
+			// The area page: one section per kind, never mixed
+			$first = true;
+			foreach ( $segs as $s => $seg ) {
+				$sd = $data['segs'][ $s ];
+				if ( '' !== $seg[4] || ! $sd['n'] ) {
+					continue;
+				}
+				$r     = 'rent' === $seg[1];
+				$cards = array_values(
+					array_filter(
+						$sd['cards'],
+						function ( $c ) {
+							return (bool) $c['cover'];
+						}
+					)
+				);
+				$cards = array_slice( $cards, 0, max( 3, (int) $cfg['area_cards'] ) );
+				$all   = 'See all ' . strtolower( $seg[0] ) . ' in ' . $area . ' (' . $sd['n'] . ')';
+				$sub   = ( 1 === $sd['n'] ? '1 listing' : $sd['n'] . ' listings' ) . ( $sd['min'] > 0 ? ', from ' . blockke_bkn_money( $sd['min'] ) . ( $r ? ' a month' : '' ) : '' );
+				$o[]   = '<section class="bka16-sec" id="bka-' . esc_attr( $s ) . '"><div class="bkd-wrap"><div class="bka16-sh"><div><h2 class="bkn-h2">' . $e( $seg[0] ) . '</h2><p class="bkn-sub">' . $e( $sub ) . '</p></div>'
+					. '<a class="bkn-link bka16-all-top" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a></div>'
+					. blockke_area_v16_tabs( $p, $s );
+				if ( $cards ) {
+					$o[] = '<div class="bkn-grid bka16-cards">';
+					foreach ( $cards as $i => $c ) {
+						$o[] = $card( $c, $i, $r, array( 'lazy' => ! $first || $i > 0 ) );
+					}
+					$o[] = '</div><div class="bka16-rows">'; // phones: one card, then the next three as rows
+					foreach ( array_slice( $cards, 1, 3 ) as $i => $c ) {
+						$o[] = blockke_card_html( $c, 'row', array( 'src' => 'area', 'scope' => $term->slug, 'pos' => $i + 2, 'rent' => $r ) );
+					}
+					$o[] = '</div>';
+				}
+				$o[] = '<a class="bkn-link bka16-all" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a></div></section>';
+				if ( $first ) { // after the first grid: a short way to ask
+					$o[] = '<aside class="bka16-ask"><div class="bkd-wrap bka16-ask-in"><div><h2 class="bka16-h3">' . $e( 'Looking for something specific in ' . $area . '?' ) . '</h2><p>Tell us what you need. Price lists by WhatsApp.</p></div>' . blockke_area_quick_form( 'inline', 'Send', $p ) . '</div></aside>';
+				}
+				$first = false;
+			}
+			if ( $first ) {
+				$o[] = '<section class="bka16-sec"><div class="bkd-wrap bka16-empty"><h2 class="bkn-h2">' . $e( 'Nothing listed in ' . $area . ' right now' ) . '</h2><p class="bkn-sub">Tell us what you need and an advisor will send you matches as they come up.</p>'
+					. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div></section>';
+			}
+		}
+
+		// Nearby areas with the same kind of listing
+		$near = blockke_area_nearby( $p );
+		if ( $near ) {
+			$what = $p['seg'] ? $p['label'] : 'Homes for sale';
+			$o[]  = '<section class="bka16-sec bka16-near-sec" id="bka-nearby"><div class="bkd-wrap"><h2 class="bkn-h2">' . $e( $what . ' nearby' ) . '</h2><ul class="bka-near">';
+			foreach ( $near as $n ) {
+				$o[] = '<li><a href="' . esc_url( $n[2] ) . '"><b>' . $e( blockke_dev_text( $n[0]->name ) ) . '</b><span>' . $e( 1 === $n[1] ? '1 listing' : $n[1] . ' listings' ) . '</span></a></li>';
+			}
+			$o[] = '</ul></div></section>';
+		}
+
+		// The rest of the area's own description
+		if ( ! $p['seg'] && isset( $paras[1] ) && '' !== trim( wp_strip_all_tags( $paras[1] ) ) ) {
+			$o[] = '<section class="bka16-sec" id="bka-about"><div class="bkd-wrap bka16-about-sec"><h2 class="bkn-h2">' . $e( 'About ' . $area ) . '</h2><div class="bka16-about">' . $paras[1] . '</div></div></section>';
+		}
+		$o[] = '</main>';
+
+		// The one navy band
+		$o[] = '<section class="bkn-ask" id="bkd-enquire"><div class="bkd-wrap bkn-ask-in"><div class="bkn-ask-t"><h2 class="bkn-h2">' . $e( 'Ask about ' . $p['lname'] ) . '</h2>'
+			. '<p>Tell us your budget and what you need. An advisor sends matching listings with prices and terms.</p>'
+			. '<p class="bkn-ask-direct"><a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'WhatsApp an advisor</a><a href="tel:' . esc_attr( $ag['phone'] ) . '">Call ' . $e( $ag['phone_display'] ) . '</a></p></div>'
+			. '<div class="bkn-ask-f">' . blockke_area_v16_form( $p ) . '</div></div>'
+			. '<div class="bkd-wrap"><p class="bkn-disc bka16-disc">' . $e( $cfg['area_disclaimer'] ) . '</p></div></section>';
+
+		$o[] = '<nav class="bkd-mb" id="bkd-mb" aria-label="Quick contact"><a class="bkd-mb-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '</a>'
+			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor</button></nav>';
+		$o[] = '<div class="bkd-md" id="bkd-md" hidden role="dialog" aria-modal="true" aria-labelledby="bkd-md-t" aria-describedby="bkd-md-sub"><div class="bkd-md-box">'
+			. '<button class="bkd-md-x" type="button" data-bkd-close aria-label="Close">' . blockke_dev_icon( 'close' ) . '</button>'
+			. '<h2 class="bkd-h2" id="bkd-md-t">' . $e( 'Get matching ' . $p['things'] ) . '</h2><p class="bkd-md-sub" id="bkd-md-sub"></p>'
+			. '<div id="bkd-md-form">' . blockke_area_quick_form( 'modal', 'Send me matches', $p ) . '</div></div></div>';
+		if ( ! empty( $cfg['search'] ) && $homes ) {
+			$o[] = blockke_dev_search_sheet( $stub );
+		}
+		$o[] = '</div>';
+		return implode( '', $o );
+	}
+
+	/** Type tabs, as text: "All 28 · Apartments 24 · Villas 3" ($parent: the top-level segment; on a segment page, its own). */
+	function blockke_area_v16_tabs( $p, $parent = '' ) {
+		$segs = blockke_area_segments();
+		$data = $p['data'];
+		$cur  = $p['slug'];
+		$top  = '' !== $parent ? $parent : ( '' !== $p['seg'][4] ? $p['seg'][4] : $p['slug'] );
+		$kids = array();
+		foreach ( $segs as $s => $seg ) {
+			if ( $seg[4] === $top && $data['segs'][ $s ]['n'] > 0 && ! blockke_area_same_as_parent( $data, $s ) ) {
+				$kids[ $s ] = preg_replace( '/ for (sale|rent|lease)$/', '', $seg[0] );
+			}
+		}
+		if ( ! $kids ) {
+			return '';
+		}
+		$items = array( $top => 'All' ) + $kids;
+		$h     = '<nav class="bka16-tabs" aria-label="' . esc_attr( $segs[ $top ][0] . ' by type' ) . '">';
+		foreach ( $items as $s => $l ) {
+			$n  = (int) $data['segs'][ $s ]['n'];
+			$h .= $s === $cur ? '<span aria-current="page">' . esc_html( $l ) . ' <small>' . $n . '</small></span>' : '<a href="' . esc_url( blockke_area_url( $p['term'], $s ) ) . '">' . esc_html( $l ) . ' <small>' . $n . '</small></a>';
+		}
+		return $h . '</nav>';
+	}
+
+	/** The segment page's filter bar: bedrooms (homes), price, completion (homes for sale), sort; a GET form. */
+	function blockke_area_v16_bar( $p, $cards, $n = null ) {
+		$e     = 'esc_html';
+		$g     = function ( $k ) {
+			return isset( $_GET[ $k ] ) && is_scalar( $_GET[ $k ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $k ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		};
+		$rent  = 'rent' === $p['action'];
+		$homes = 'home' === $p['kind'];
+		$sel   = function ( $name, $label, $opts ) use ( $e, $g ) {
+			$cur = $g( $name );
+			$h   = '<label class="bkn-f"><span class="bkd-sr">' . $e( $label ) . '</span><select name="' . esc_attr( $name ) . '" data-bka-f="' . esc_attr( $name ) . '">';
+			foreach ( $opts as $v => $l ) {
+				$h .= '<option value="' . esc_attr( $v ) . '"' . selected( (string) $v, $cur, false ) . '>' . $e( $l ) . '</option>';
+			}
+			return $h . '</select></label>';
+		};
+		$beds = array();
+		foreach ( $cards as $c ) {
+			foreach ( $c['beds'] as $b ) {
+				$beds[ min( 4, $b ) ] = 1;
+			}
+		}
+		ksort( $beds );
+		$f = '';
+		if ( $homes && count( $beds ) > 1 ) {
+			$bo = array( '' => 'Any bedrooms' );
+			foreach ( array_keys( $beds ) as $b ) {
+				$bo[ 0 === $b ? 'studio' : (string) $b ] = 0 === $b ? 'Studio' : ( 4 === $b ? '4+ bed' : $b . ' bed' );
+			}
+			$f .= $sel( 'beds', 'Bedrooms', $bo );
+		}
+		$po = array( '' => 'Any price' );
+		foreach ( blockke_area_v16_bands( $rent ) as $k => $b ) {
+			$po[ $k ] = $b[2];
+		}
+		$f .= count( $cards ) > 3 ? $sel( 'price', 'Price', $po ) : '';
+		if ( $homes && ! $rent && count( $cards ) > 3 ) {
+			$f .= $sel( 'completion', 'Completion', array( '' => 'Any completion' ) + blockke_index_years() );
+		}
+		$sort = count( $cards ) > 1 ? $sel( 'sort', 'Sort', array( '' => 'Recommended', 'price-asc' => 'Price, lowest first', 'price-desc' => 'Price, highest first', 'newest' => 'Newest on Block' ) + ( $homes && ! $rent ? array( 'soonest' => 'Completion, soonest' ) : array() ) ) : '';
+		$n    = null === $n ? count( $cards ) : $n;
+		return '<form class="bkn-bar bka16-bar" method="get" data-bka-bar role="search" aria-label="' . esc_attr( 'Filter ' . strtolower( $p['label'] ) ) . '"><div class="bkn-bar-in">'
+			. '<div class="bkn-fields">' . $f . '</div><p class="bkn-count bka16-count" data-bka-count aria-live="polite">' . $e( 1 === $n ? '1 listing' : $n . ' listings' ) . '</p>' . $sort
+			. '<noscript><button class="bkn-apply" type="submit">Apply</button></noscript></div>'
+			. '<script type="application/json" data-bka-bands>' . wp_json_encode( blockke_area_v16_bands( $rent ), JSON_HEX_TAG ) . '</script></form>';
+	}
+
+	/** The full enquiry form on v1.6 area pages: name, phone, email, budget, message; the qualifying questions come after. */
+	function blockke_area_v16_form( $p ) {
+		$cfg  = blockke_dev_config();
+		$rent = 'rent' === $p['action'];
+		$h    = '<form class="bkd-form" data-bkd-lead="contact" data-unit="' . esc_attr( $p['name'] ) . '" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$h   .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
+		$h   .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
+		$h   .= '<label class="bkd-f"><span>Budget <small>(optional)</small></span><select name="budget"><option value="">Not sure yet</option>';
+		foreach ( isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array() as $b ) {
+			$h .= '<option>' . esc_html( $b[2] ) . '</option>';
+		}
+		$ph = 'commercial' === $p['kind'] ? 'Size, parking, move-in date.' : ( 'land' === $p['kind'] ? 'Plot size, intended use, title type.' : 'Bedrooms, streets you like, move-in date.' );
+		$h .= '</select></label><label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="' . esc_attr( $ph ) . '"></textarea></label>';
+		$h .= '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send</button>' . blockke_area_consent( $p ) . '</form>' . blockke_dev_ok();
+		return $h;
+	}
+
+	/** v1.6 area page styles, on top of the index's and the card family's. */
+	function blockke_area_css_v16() {
+		return <<<'CSS'
+#bkd.bka16 .bka16-top{display:flex;justify-content:space-between;align-items:center;gap:16px}
+#bkd .bka16-top .bkn-crumbs{flex:1 1 auto;min-width:0}
+#bkd .bka16-home{display:contents}
+#bkd .bka16-tools{display:flex;align-items:center;flex:none;gap:20px;font-size:14px;white-space:nowrap}
+#bkd .bka16-tools a,#bkd .bka16-tools button{display:inline-flex;align-items:center;margin:0;padding:0;border:0;background:none;min-height:40px;font:500 14px/1 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+@media (max-width:639px){#bkd .bka16-home,#bkd .bka16-cur,#bkd .bkn-crumbs span:has(+ .bka16-cur){display:none}#bkd .bka16-tools{gap:16px}}
+#bkd .bka16-about{max-width:62ch;margin:20px 0 0;font-size:17px;line-height:1.65;color:var(--ink)}
+#bkd .bka16-about p{margin:0 0 14px}
+#bkd .bka16-more{margin:4px 0 0;font-size:15px}
+#bkd .bka16-tabs{display:flex;flex-wrap:wrap;gap:6px 24px;margin:28px 0 0;padding:0 0 0;font-size:15px}
+@media (max-width:767px){#bkd .bka16-tabs{flex-wrap:nowrap;gap:20px;overflow-x:auto;scrollbar-width:none;margin-right:calc(var(--gutter) * -1);padding-right:var(--gutter)}#bkd .bka16-tabs::-webkit-scrollbar{display:none}}
+#bkd .bka16-tabs a,#bkd .bka16-tabs span{display:inline-flex;flex:none;align-items:center;gap:6px;min-height:40px;white-space:nowrap;color:var(--navy)!important;text-decoration:none;border-bottom:1px solid transparent}
+#bkd .bka16-tabs a:hover{border-bottom-color:var(--line-2)}
+#bkd .bka16-tabs span[aria-current]{font-weight:600;border-bottom:2px solid var(--brass)}
+#bkd .bka16-tabs small{font-size:13px;font-weight:400;color:var(--muted)}
+#bkd .bka16-strip{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px 16px;margin:8px 0 0;padding:0;list-style:none}
+#bkd .bka16-strip.bka16-n1{grid-template-columns:1fr}
+#bkd .bka16-strip.bka16-n2{grid-template-columns:1fr 1fr}
+#bkd .bka16-strip li{margin:0;min-width:0}
+#bkd .bka16-strip a{display:block;color:var(--navy)!important;text-decoration:none}
+#bkd .bka16-strip .bkn-img img{position:absolute;inset:0}
+#bkd .bka16-strip.bka16-n1 .bkn-img{aspect-ratio:21/9}
+#bkd .bka16-strip.bka16-n3 li:first-child{grid-row:1/span 2}
+#bkd .bka16-strip.bka16-n3 li:first-child a{display:grid;grid-template-rows:minmax(0,1fr) auto;height:100%}
+#bkd .bka16-strip.bka16-n3 li:first-child .bkn-img{aspect-ratio:auto;height:100%}
+#bkd .bka16-cap{display:block;margin-top:10px;font-size:14px;color:var(--slate)}
+#bkd .bka16-strip a:hover .bka16-cap{text-decoration:underline;text-underline-offset:3px}
+@media (max-width:767px){#bkd .bka16-strip,#bkd .bka16-strip.bka16-n2{grid-template-columns:1fr 1fr;gap:16px 12px}#bkd .bka16-strip li:first-child,#bkd .bka16-strip.bka16-n3 li:first-child{grid-column:1/-1;grid-row:auto}#bkd .bka16-strip.bka16-n3 li:first-child a{display:block;height:auto}#bkd .bka16-strip.bka16-n3 li:first-child .bkn-img,#bkd .bka16-strip.bka16-n1 .bkn-img{aspect-ratio:3/2;height:auto}#bkd .bka16-strip.bka16-n2 li:last-child{grid-column:1/-1}}
+#bkd .bka16-main{display:block}
+#bkd .bka16-sec{padding:var(--sec) 0 0}
+#bkd .bka16-sh{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:32px}
+#bkd .bka16-sh .bkn-link{font-size:15px;white-space:nowrap}
+#bkd .bka16-sec .bka16-tabs{margin:-12px 0 28px}
+#bkd .bka16-rows{display:none}
+#bkd .bka16-all{display:none}
+@media (max-width:767px){
+#bkd .bka16-cards>.bkn-card:not(:first-child){display:none}
+#bkd .bka16-rows{display:block;margin-top:24px;border-top:1px solid var(--line)}
+#bkd .bka16-all{display:inline-block;margin-top:20px;font-size:15px}
+#bkd .bka16-all-top{display:none}
+}
+#bkd .bka16-ask{margin:var(--sec) 0 0;padding:40px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#bkd .bka16-ask-in{display:grid;gap:20px;align-items:center}
+@media (min-width:1000px){#bkd .bka16-ask-in{grid-template-columns:minmax(0,5fr) minmax(0,7fr);column-gap:64px}}
+#bkd .bka16-h3{margin:0;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:28px!important;line-height:1.15!important;letter-spacing:var(--display-ls)!important;color:var(--navy)!important;text-transform:none!important}
+#bkd .bka16-ask p{margin:8px 0 0;font-size:16px;color:var(--slate)}
+#bkd .bka16-ask .bkd-form{display:grid;gap:12px}
+@media (min-width:768px){#bkd .bka16-ask .bkd-form{grid-template-columns:minmax(0,1fr) auto;align-items:end}#bkd .bka16-ask .bkd-qgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}#bkd .bka16-ask .bkd-consent{grid-column:1/-1}}
+#bkd .bka16-list{padding:0}
+#bkd .bka16-bar{position:static;margin:0 0 40px;border-top:0}
+#bkd .bka16-bar .bkn-bar-in{padding:0}
+#bkd .bka16-count{margin-left:auto}
+@media (max-width:999px){
+#bkd .bka16-bar .bkn-bar-in{flex-wrap:wrap;gap:0 16px;padding-bottom:4px}
+#bkd .bka16-bar .bkn-fields{display:flex;flex:1 1 100%;flex-wrap:nowrap;gap:20px;overflow-x:auto;scrollbar-width:none;margin-right:calc(var(--gutter) * -1);padding-right:var(--gutter)}
+#bkd .bka16-bar .bkn-fields::-webkit-scrollbar{display:none}
+#bkd .bka16-bar .bkn-fields .bkn-f{flex:none}
+#bkd .bka16-bar .bkn-count{display:block;margin:0 auto 0 0;font-size:14px;color:var(--muted)}
+#bkd .bka16-bar .bkn-bar-in>.bkn-f{margin-left:auto}
+}
+#bkd .bka16-grid>.bkn-card[hidden]{display:none}
+#bkd .bka16-text{margin-top:56px;max-width:720px}
+#bkd .bka16-text ul{margin-top:12px;border-top:1px solid var(--line)}
+#bkd .bka16-text li{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+#bkd .bka16-text li a{color:var(--navy)!important}
+#bkd .bka16-text li span{color:var(--muted);font-variant-numeric:tabular-nums}
+#bkd .bka16-also{margin:56px 0 0;font-size:15px;line-height:1.9}
+#bkd .bka16-also>span:first-child{color:var(--slate);margin-right:4px}
+#bkd .bka16-also a{color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bka16-empty{max-width:640px;padding:16px 0 0}
+#bkd .bka16-empty .bkd-btn{margin-top:20px}
+#bkd .bka16-near-sec .bka-near{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 32px;margin:28px 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}
+#bkd .bka16-near-sec .bka-near li{margin:0;border-bottom:1px solid var(--line)}
+#bkd .bka16-near-sec .bka-near a{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-height:56px;padding:16px 0;color:var(--navy)!important;text-decoration:none}
+#bkd .bka16-near-sec .bka-near b{font-weight:500;font-size:16px}
+#bkd .bka16-near-sec .bka-near span{flex:none;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+#bkd .bka16-near-sec .bka-near a:hover b{text-decoration:underline;text-underline-offset:4px}
+@media (max-width:999px){#bkd .bka16-near-sec .bka-near{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:639px){#bkd .bka16-near-sec .bka-near{grid-template-columns:1fr}}
+#bkd .bka16-about-sec .bka16-about{margin-top:20px}
+#bkd.bka16 .bkn-ask{margin-top:var(--sec)}
+#bkd .bka16-disc{margin-top:56px;color:var(--on-navy)}
+CSS;
+	}
+
+	/** v1.6 segment page behaviour: filters and sort in place, kept in the address; "Show more". */
+	function blockke_area_js_v16() {
+		return <<<'JS'
+(function(){
+  'use strict';
+  var root=document.getElementById('bkd');if(!root||!root.classList.contains('bka16')){return;}
+  var dl=(window.dataLayer=window.dataLayer||[]),C=window.BKDEV||{};
+  function track(ev,o){var p={area:C.area||'',segment:C.seg||''};for(var k in o){p[k]=o[k];}try{if(typeof window.gtag==='function'){window.gtag('event',ev,p);}else{p.event=ev;dl.push(p);}}catch(e){}}
+  root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-bkn]');if(a){var c=a.closest('[data-id]'),s=a.closest('section,ul');track('area_card_click',{target_id:c?c.getAttribute('data-id'):'',position:+(a.getAttribute('data-pos')||0),section:s&&s.id||'',vt:('onpagereveal' in window)?1:0,transport_type:'beacon'});}});
+  var grid=root.querySelector('[data-bka-grid]'),form=root.querySelector('[data-bka-bar]');if(!grid||!form){return;}
+  var bands={};try{bands=JSON.parse(form.querySelector('[data-bka-bands]').textContent);}catch(e){}
+  var cards=[].slice.call(grid.querySelectorAll('.bkn-card')),page=+grid.getAttribute('data-page')||24,n=page;
+  var more=root.querySelector('[data-bka-more]'),none=root.querySelector('[data-bka-none]'),count=root.querySelector('[data-bka-count]');
+  var y=new Date().getFullYear();
+  function read(){var f={};['beds','price','completion','sort'].forEach(function(k){var s=form.querySelector('[name="'+k+'"]');f[k]=s?s.value:'';});return f;}
+  function num(c,k){return +c.getAttribute('data-'+k)||0;}
+  function match(c,f,skip){
+    if(skip!=='beds'&&f.beds){var b=f.beds==='studio'?0:+f.beds,ok=false;(c.getAttribute('data-beds')||'').split(' ').filter(Boolean).forEach(function(x){x=+x;ok=ok||(b===4?x>=4:x===b);});if(!ok){return false;}}
+    if(skip!=='price'&&f.price&&bands[f.price]){var bd=bands[f.price],fr=num(c,'from'),to=num(c,'to')||fr;if(!fr||to<bd[0]||(bd[1]>0&&fr>=bd[1])){return false;}}
+    if(skip!=='completion'&&f.completion){var d=num(c,'done'),cy=Math.floor(d/100);
+      if(f.completion==='ready-now'){if(c.getAttribute('data-st')!=='ready'){return false;}}
+      else if(/-plus$/.test(f.completion)){if(d>=999999||cy<parseInt(f.completion,10)){return false;}}
+      else if(cy!==+f.completion||d>=999999){return false;}}
+    return true;}
+  var labels={beds:'Any bedrooms',price:'Any price',completion:'Any completion'};
+  function apply(user){
+    var f=read(),list=cards.filter(function(c){return match(c,f);});
+    var s=f.sort;if(s){list.sort(function(a,b){if(s==='price-asc'){return (num(a,'from')||Infinity)-(num(b,'from')||Infinity);}if(s==='price-desc'){return num(b,'from')-num(a,'from');}if(s==='soonest'){return num(a,'done')-num(b,'done');}return num(b,'d')-num(a,'d');});}
+    else{list.sort(function(a,b){return num(a,'r')-num(b,'r');});}
+    cards.forEach(function(c){c.hidden=true;});
+    list.forEach(function(c,i){grid.appendChild(c);c.hidden=i>=n;});
+    ['beds','price','completion','sort'].forEach(function(k){var el=form.querySelector('[name="'+k+'"]');if(el){el.classList.toggle('on',!!f[k]);}});
+    count.textContent=list.length===1?'1 listing':list.length+' listings';
+    if(more){more.hidden=list.length<=n;more.textContent='Show '+Math.min(page,list.length-n)+' more';}
+    none.hidden=list.length>0;
+    if(!list.length){root.querySelector('[data-bka-none-t]').textContent='None match these filters right now.';var rl=root.querySelector('[data-bka-relax]');rl.innerHTML='';
+      ['beds','price','completion'].forEach(function(k){if(!f[k]){return;}var c=cards.filter(function(x){return match(x,f,k);}).length;if(!c){return;}var li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=labels[k]+' ('+c+')';
+        b.addEventListener('click',function(){form.querySelector('[name="'+k+'"]').value='';apply(true);});li.appendChild(b);rl.appendChild(li);});}
+    var u=new URLSearchParams(location.search);['beds','price','completion','sort'].forEach(function(k){if(f[k]){u.set(k,f[k]);}else{u.delete(k);}});if(n>page){u.set('n',n);}else{u.delete('n');}
+    var qs=u.toString();try{history.replaceState(history.state,'',location.pathname+(qs?'?'+qs:'')+location.hash);}catch(e){}
+    C.listLabel=(C.leadName||'').replace(/ on block\.ke$/,'');C.ctxBeds=f.beds;
+  }
+  var q=new URLSearchParams(location.search);n=Math.max(page,+q.get('n')||page);
+  form.addEventListener('change',function(e){n=page;var t=e.target;if(t.name==='sort'){track('area_sort',{sort:t.value||'recommended'});}else{track('area_filter',{filter:t.name,value:t.value||'any'});}apply(true);});
+  form.addEventListener('submit',function(e){e.preventDefault();apply(true);});
+  if(more){more.addEventListener('click',function(e){e.preventDefault();n+=page;apply();track('area_more',{shown:n});});}
+  apply(false);
+})();
+JS;
+	}
 
 	/* ---------------------------------------------------------------------
 	   @v16-search: search results on the new layout (/advanced-search/)
