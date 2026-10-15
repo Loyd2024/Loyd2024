@@ -3668,12 +3668,11 @@ JS;
 		// label stays above the name, so the offer names the street without repeating the area.
 		$street = $d['address'] === $d['area_line'] ? '' : preg_replace( '/,\s*' . preg_quote( $d['area'], '/' ) . '$/iu', '', $d['address'] );
 		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( blockke_dev_homes_label( $d['units'] ), $street ) ) ) ) : '';
-		// v1.6 (view_transitions): the photo comes first, 3:2 like the card it grows from, painted underneath with the card-size
-		// file the browser already holds; its label moves to the gallery viewer (the disclaimer already mentions renders)
+		// v1.6 (view_transitions): the photo comes first, 3:2 like the card it grows from (the card's own file paints the box
+		// underneath, set as the page reveals: blockke_bkn_vt_head()); its label moves to the gallery viewer, and the
+		// disclaimer already mentions renders
 		$vt     = ! $lp && blockke_bkn_vt_on();
-		$bg     = $vt && $hero ? (string) wp_get_attachment_image_url( $hero, 'medium_large' ) : '';
-		$bg     = '' !== $bg ? str_replace( array( '(', ')', "'", '"', ' ' ), array( '%28', '%29', '%27', '%22', '%20' ), esc_url_raw( $bg ) ) : '';
-		$head   = '<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav><div class="bkd-hero-tools">'
+		$head   ='<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav><div class="bkd-hero-tools">'
 			. ( $search ? '<a class="bkd-srch" data-bkd-search="hero" href="' . esc_url( $s_url ) . '" aria-label="Search homes" aria-haspopup="dialog">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> homes</span></span></a>' : '' )
 			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div></div>' )
 			. '<p class="bkd-status">' . ( $d['chip'] ? '<b>' . $e( $d['chip'] ) . '</b>' : '' ) . '<span>' . $e( $d['area_line'] ) . '</span></p>'
@@ -3681,7 +3680,7 @@ JS;
 			. ( $d['tagline'] ? '<p class="bkd-hero-tag">' . $e( $d['tagline'] ) . '</p>' : '' )
 			. ( $offer ? '<p class="bkd-hero-offer">' . $offer . '</p>' : '' )
 			. ( $lp ? '<dl class="bkd-hfacts bkd-hfacts-cover">' . $hf_html . '</dl>' : '' ) . '</div>';
-		$fig    = '<figure class="bkd-hero-media"' . ( $vt ? ' id="bkd-hero-media"' . ( '' !== $bg ? ' style="background:var(--mist) url(' . esc_attr( $bg ) . ') center/cover"' : '' ) . ( $hero && '' !== $d['hero_label'] ? ' data-cap="' . esc_attr( $d['hero_label'] ) . '"' : '' ) : '' ) . '>'
+		$fig    = '<figure class="bkd-hero-media"' . ( $vt ? ' id="bkd-hero-media"' . ( $hero && '' !== $d['hero_label'] ? ' data-cap="' . esc_attr( $d['hero_label'] ) . '"' : '' ) : '' ) . '>'
 			. blockke_dev_img(
 				$hero,
 				'full',
@@ -7434,10 +7433,10 @@ CSS;
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[data-bkn]'),c,im,vt;
     if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||(a.target&&a.target!=='_self')||a.hasAttribute('download')||a.origin!==L.origin){return;}
-    c=a.closest('[data-id]');vt=!!(c&&a.classList.contains('bkn-a')&&c.getAttribute('data-vt')==='1');
-    put({id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()});
+    c=a.closest('[data-id]');vt=!!(c&&a.classList.contains('bkn-a')&&c.getAttribute('data-vt')==='1');im=vt?c.querySelector('.bkn-img img'):null;
+    put({id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,im:im?String(im.currentSrc||im.src||''):'',k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()});
     manual(true); /* only when leaving by a card, so other ways back keep the browser's own scroll */
-    if(V&&vt&&(im=c.querySelector('.bkn-img img'))){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;} /* only the card's own photo moves */
+    if(V&&im){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;} /* only the card's own photo moves */
   });
   /* back without the back/forward cache: the card in view and focused, else where the visitor was. The focus ring
      shows only to visitors who opened the card from the keyboard (or a screen reader), not after a tap or a click. */
@@ -7448,7 +7447,6 @@ CSS;
       if(f){if(!x.k){s=document.createElement('style');s.textContent='#bkd .bkn-quiet:focus-visible,#bkd .bkn-quiet:focus-visible::after{outline:0}';document.head.appendChild(s);f.classList.add('bkn-quiet');f.addEventListener('blur',function(){f.classList.remove('bkn-quiet');},{once:true});}
         try{f.focus({preventScroll:true});}catch(e){}}}else{window.scrollTo(0,+x.y||0);}
     x.r=1;put(x);
-    if(V&&V.v&&x.vt){V.n(x);}
     var auto=function(){setTimeout(function(){manual(false);},0);};
     if(document.readyState==='complete'){auto();}else{window.addEventListener('load',auto);}
   }
@@ -7466,21 +7464,22 @@ JS;
 
 	/** In <head> on every #bkd page when view_transitions is on: the transition styles and the early listener script. */
 	function blockke_bkn_vt_head() {
-		// pagereveal fires before deferred or footer scripts can listen, so this script stays inline and unoptimised.
-		// Slow phones (Save-Data, 2G, 2 GB memory or less) skip the transition. bknVT: c() clears the named photo,
-		// n(ctx) names the card's photo when it is on screen, i the named photo, h its link, v the incoming transition.
+		// pagereveal fires before deferred or footer scripts can listen, so this script stays inline and unoptimised. Slow
+		// phones (Save-Data, 2G, 2 GB of memory or less) skip the transition. window.bknVT: c() clears the photo a card click
+		// named (i), h is that card's link. Each handler gets the transition, the context, the event, the hero figure, m
+		// (this is the development the card opened) and b (this is the list the card was on).
+		// - leaving: a photo named by a click that led elsewhere is cleared; the hero keeps its name only on the way back to its list
+		// - arriving from a card: the hero box is painted with the very file the card showed (already in the browser), so the
+		//   photo never lands on an empty box while the large image loads
+		// - arriving back on the list: the card's photo, when on screen, takes the hero's place, then loses its name
 		$css = '@view-transition{navigation:auto}@media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}'
 			. '#bkd .bkd-hero-media>img{view-transition-name:bkn-photo}'
 			. '::view-transition-group(bkn-photo){animation-duration:280ms;animation-timing-function:cubic-bezier(.2,0,0,1)}'
 			. '::view-transition-old(bkn-photo),::view-transition-new(bkn-photo){width:100%;height:100%;object-fit:cover;overflow:clip}'
 			. '::view-transition-old(root),::view-transition-new(root){animation-duration:160ms}';
-		$js  = "(function(w,d){var n=navigator,k=n.connection||{},s=k.saveData||/2g$/.test(k.effectiveType)||n.deviceMemory<=2,N='viewTransitionName',L=location,"
-			. "V=w.bknVT={c:function(){V.i&&(V.i.style[N]='',V.i=0)},n:function(c){var l=d.querySelectorAll('#d-'+(c.id|0)+' .bkn-img img'),i=l[c.n]||l[0],r=i&&i.getBoundingClientRect();V.v&&!V.i&&r&&r.top<innerHeight&&r.bottom>0&&(i.style[N]='bkn-photo',V.i=i)}};"
-			. "function on(t,f){w.addEventListener(t,function(e){var v=e.viewTransition,c;if(v){if(s)return v.skipTransition();try{c=JSON.parse(sessionStorage.bkn_ctx)}catch(x){}f(v,c||{},e)}})}"
-			// leaving: a photo named by a click that led elsewhere is cleared; the hero keeps its name only on the way back to its list
-			. "on('pageswap',function(v,c,e){var t=e.activation&&e.activation.entry.url,h=d.querySelector('#bkd-hero-media>img');t!=V.h&&V.c();h&&!(c.vt&&c.path==L.pathname&&t==c.from)&&(h.style[N]='none')});"
-			// arriving back on the list: the card's photo takes the hero's place, then loses its name
-			. "on('pagereveal',function(v,c){V.c();if(c.vt&&c.from==L.href){V.v=v;v.finished.then(function(){V.v=0;V.c()});V.n(c)}})})(window,document);";
+		$js  = <<<'JS'
+!function(w,d){var n=navigator,k=n.connection||{},s=k.saveData||/2g$/.test(k.effectiveType)||n.deviceMemory<=2,N='viewTransitionName',L=location,V=w.bknVT={c:function(){V.i&&(V.i.style[N]='',V.i=0)}};function on(t,f){w.addEventListener(t,function(e){var v=e.viewTransition,c,h=d.getElementById('bkd-hero-media');if(v)if(s)v.skipTransition();else{try{c=JSON.parse(sessionStorage.bkn_ctx)}catch(x){}c=c||{};f(v,c,h,c.vt&&c.path==L.pathname,c.vt&&c.from==L.href,e)}})}on('pageswap',function(v,c,h,m,b,e){var t=e.activation.entry.url,i=h&&h.querySelector('img');t!=V.h&&V.c();i&&!(m&&t==c.from)&&(i.style[N]='none')});on('pagereveal',function(v,c,h,m,b,i){V.c();h&&m&&c.im&&(h.style.backgroundImage='url('+JSON.stringify(c.im)+')');if(b&&(i=d.querySelectorAll('#d-'+(c.id|0)+' .bkn-img img'),i=i[c.n]||i[0])){h=i.getBoundingClientRect();h.top<innerHeight&&h.bottom>0&&(i.style[N]='bkn-photo',V.i=i,v.finished.then(V.c))}})}(window,document);
+JS;
 		return '<style id="bkn-vt">' . $css . "</style>\n" . '<script id="bkn-vt-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $js . "</script>\n";
 	}
 
@@ -7578,7 +7577,7 @@ JS;
 		if ( $vt ) { // photo first and full-bleed on phones, 7 of 12 columns from 1000px (held in view beside the text), 3:2 throughout like the cards
 			$css .= '#bkd .bkd-hero-vt{padding-top:0}'
 				. '#bkd .bkd-hero-vt .bkd-hero-grid{grid-template-areas:"media" "head" "body";row-gap:24px}'
-				. '#bkd .bkd-hero-vt .bkd-hero-media{aspect-ratio:3/2}'
+				. '#bkd .bkd-hero-vt .bkd-hero-media{aspect-ratio:3/2;background:var(--mist) center/cover no-repeat}'
 				. '@media (min-width:1000px){#bkd .bkd-hero-vt{padding-top:clamp(24px,3.4vw,52px)}#bkd .bkd-hero-vt .bkd-hero-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-areas:"head media" "body media";column-gap:56px}'
 				. '#bkd .bkd-hero-vt .bkd-hero-media{position:sticky;top:calc(var(--top) + 24px)}}';
 		}
