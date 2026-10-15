@@ -6929,7 +6929,7 @@ JS;
 
 	/** The cache version of the rows and everything built from them: any listing change, or a new row format. */
 	function blockke_bkn_ver() {
-		return (string) get_option( 'bkd_sim_ver', '0' ) . '|v161';
+		return (string) get_option( 'bkd_sim_ver', '0' ) . '|v162';
 	}
 
 	/** Lowercase, no punctuation or the generic words, for "is this the same building" checks. */
@@ -6967,6 +6967,17 @@ JS;
 				'ignore_sticky_posts' => true,
 				'orderby'             => 'ID',
 				'order'               => 'DESC',
+				'tax_query'           => array( // phpcs:ignore WordPress.DB.SlowDBQuery -- every listing; snippet 41011 skips a query that already names property_completion
+					'relation' => 'OR',
+					array(
+						'taxonomy' => 'property_completion',
+						'operator' => 'EXISTS',
+					),
+					array(
+						'taxonomy' => 'property_completion',
+						'operator' => 'NOT EXISTS',
+					),
+				),
 			)
 		);
 		if ( null !== $keep[0] ) {
@@ -6993,6 +7004,22 @@ JS;
 	}
 
 	/** One listing's row, or null when it is sold or let. */
+	/** A listing for several sizes ("Studio, 1-Bed & 2-Bed Apartments") has no bedroom key of its own: its sizes from the title. */
+	function blockke_bkn_range_beds( $r ) {
+		if ( 'home' !== $r['kind'] || $r['dev'] || '' !== $r['k'] ) {
+			return array();
+		}
+		$out = array();
+		$tb  = blockke_area_title_beds( $r['id'], true );
+		foreach ( $tb[1] as $x ) {
+			$out[] = 'studio' === $x ? 0 : (int) $x;
+		}
+		if ( preg_match( '/(\d)\s*(?:-|–|to)\s*(\d)\s*(?:-\s*)?bed/i', $r['t'], $mm ) ) { // "3-5 Bed" keeps its top
+			$out[] = (int) $mm[2];
+		}
+		return $out;
+	}
+
 	function blockke_bkn_row( $id ) {
 		if ( has_term( array( 'sold', 'let' ), 'property_status', $id ) ) {
 			return null;
@@ -7231,6 +7258,7 @@ JS;
 			if ( 'home' === $r['kind'] && ! $r['dev'] && '' !== $r['k'] ) {
 				$beds[] = 'studio' === $r['k'] ? 0 : max( 1, $r['b'] );
 			}
+			$beds = array_merge( $beds, blockke_bkn_range_beds( $r ) ); // a listing for several sizes counts each
 			if ( '' !== $r['type'] ) {
 				$types[ $r['type'] ] = 1;
 			}
@@ -7326,6 +7354,7 @@ JS;
 				if ( 'home' === $r['kind'] && ! $r['dev'] && '' !== $r['k'] ) {
 					$beds[] = 'studio' === $r['k'] ? 0 : max( 1, $r['b'] );
 				}
+				$beds = array_merge( $beds, blockke_bkn_range_beds( $r ) );
 				if ( '' !== $r['type'] ) {
 					$types[ $r['type'] ] = 1;
 				}
@@ -7450,8 +7479,9 @@ JS;
 		);
 		if ( 'lead' === $v ) {
 			$attr['fetchpriority'] = 'high';
-		} elseif ( $ctx['lazy'] ) {
-			$attr['loading'] = 'lazy';
+			$attr['loading']       = false; // WordPress would otherwise add loading="lazy" itself
+		} else {
+			$attr['loading'] = $ctx['lazy'] ? 'lazy' : false;
 		}
 		$img   = $c['cover'] ? wp_get_attachment_image( $c['cover'], $size, false, $attr ) : '';
 		$data  = ' data-id="' . (int) $c['id'] . '" data-areas="' . esc_attr( implode( ' ', $c['areas'] ) ) . '" data-beds="' . esc_attr( implode( ' ', $c['beds'] ) ) . '"'
@@ -10822,9 +10852,10 @@ JS;
 	add_action(
 		'wp_head',
 		function () {
-			if ( empty( $GLOBALS['blockke_dev_active'] ) || ! blockke_bkn_vt_on() ) {
+			if ( empty( $GLOBALS['blockke_dev_active'] ) || ! blockke_bkn_vt_on() || ! empty( $GLOBALS['blockke_bkn_vt_printed'] ) ) {
 				return;
 			}
+			$GLOBALS['blockke_bkn_vt_printed'] = true; // once per page (the search page checks the same flag)
 			echo blockke_bkn_vt_head(); // phpcs:ignore WordPress.Security.EscapeOutput -- fixed markup.
 			if ( is_singular( 'estate_property' ) ) {
 				echo '<link rel="expect" href="#bkd-hero-media" blocking="render">' . "\n";
