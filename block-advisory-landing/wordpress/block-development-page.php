@@ -202,6 +202,23 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				array( 'Checks before you commit', 'We help you check ownership, approvals and the sale or lease agreement before you pay a deposit.' ),
 				array( 'One advisor throughout', 'From the first viewing to signing, the same advisor stays with you.' ),
 			),
+			'card_v16'           => false, // v1.6: area and segment pages use the new card, filter bar and URL state
+			'dev_index'          => false, // v1.6: /new-developments/ on the new layout (preview: ?bke_index=1)
+			'dev_index_page'     => 30752, // the page it takes over
+			'index_picks'        => array(), // lead first, then up to 2 listing IDs; empty: chosen automatically
+			'index_group_size'   => 8,     // cards per completion year before "Show N more"
+			'index_page_size'    => 18,    // flat sorts and search results: cards per step
+			'index_min_photos'   => 3,     // fewer photos: listed by name in the A-Z only
+			'index_ready_max'    => 8,
+			'index_ready_singles' => false, // single ready listings (often resales) in "Ready to move into"
+			'index_new_days'     => 30,    // "New on Block" tag
+			'index_advisor'      => array( 'name' => '', 'photo' => 0, 'line' => '', 'phone' => '' ), // shown in the shortlist band once filled in
+			'search_layout'      => false, // v1.6: /advanced-search/ results on the new layout (preview: ?bke_search=1)
+			'search_redirect'    => false, // v1.6: simple searches go to the matching area or segment page, or the index
+			'search_params'      => array( 'area' => array( 'location', 'property_area', 'advanced_area', 'adv_location' ), 'beds' => array( 'componentsbeds', 'beds', 'bedrooms' ), 'min' => array( 'price_low', 'price_min' ), 'max' => array( 'price_max' ) ),
+			'search_ignore'      => array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid', 'fbclid', '_gl', 'submit', 'bke_search' ),
+			'view_transitions'   => false, // v1.6: the card photo carries on into the development page (and its hero becomes photo-first, 3:2)
+			'prefetch'           => false, // v1.6: fetch a development page while the visitor's pointer rests on its card
 			'area_disclaimer'    => 'Listings are published in good faith from information supplied by owners, landlords and developers, and may change without notice. Please confirm prices, sizes, availability and terms before you commit. Block Real Estate does not give financial or legal advice; we recommend an advocate reviews any agreement before you sign.',
 			'why'                => array(
 				array( 'Independent advice', 'We compare developments, layouts and payment plans side by side, so you choose with clarity rather than pressure.' ),
@@ -2247,7 +2264,7 @@ JS;
 	 * meta rows, view statistics included). Listings not primed fall back to get_post_meta().
 	 */
 	function blockke_dev_pm_keys() {
-		return array( 'property_bedrooms', 'property_size', 'property_price', 'property_label', 'property_label_before', 'property_subunits_master', 'property_has_subunits', 'prop_featured', '_thumbnail_id', 'bke_completion_stated' );
+		return array( 'property_bedrooms', 'property_size', 'property_price', 'property_label', 'property_label_before', 'property_subunits_master', 'property_has_subunits', 'prop_featured', '_thumbnail_id', 'bke_completion_stated', 'bke_dev_layout', 'bke_dev_area', 'image_to_attach', 'wpestate_property_gallery', 'bke_index_line' );
 	}
 
 	function blockke_dev_pm_prime( $ids, $set = null ) {
@@ -6832,4 +6849,581 @@ JS;
 		},
 		90
 	);
+
+	/* =====================================================================
+	   4) New developments, search results and one card family (v1.6)
+	      Every listing read once into rows (cached), grouped into developments; one card markup for the index,
+	      search results and area pages. Each feature has its own switch and an editor preview.
+	   ===================================================================== */
+
+	/** A v1.6 switch: the config key, or an editor's ?{preview}=1 / 0 (preview '' = no preview). */
+	function blockke_bkn_on( $key, $preview = '' ) {
+		$cfg = blockke_dev_config();
+		if ( '' !== $preview && isset( $_GET[ $preview ] ) && current_user_can( 'edit_posts' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return '1' === (string) $_GET[ $preview ]; // phpcs:ignore WordPress.Security.NonceVerification
+		}
+		return ! empty( $cfg[ $key ] );
+	}
+
+	/** Lowercase, no punctuation or the generic words, for "is this the same building" checks. */
+	function blockke_bkn_norm( $s ) {
+		$s = strtolower( blockke_dev_text( $s ) );
+		$s = preg_replace( '/\b(?:residences?|apartments?|homes|villas?|the)\b/u', ' ', $s );
+		return trim( preg_replace( '/[^a-z0-9]+/u', ' ', $s ) );
+	}
+
+	/**
+	 * Every published listing as a row: what cards, filters and grouping need. Cached in transient bkn_rows (rebuilt when
+	 * any listing changes, option bkd_sim_ver); while one request rebuilds, others serve the copy they have.
+	 */
+	function blockke_bkn_rows() {
+		static $rows = null;
+		if ( null !== $rows ) {
+			return $rows;
+		}
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v16';
+		$hit = get_transient( 'bkn_rows' );
+		if ( is_array( $hit ) && isset( $hit['ver'] ) && ( $hit['ver'] === $ver || get_transient( 'bkn_build_lock' ) ) ) {
+			$rows = $hit['rows'];
+			return $rows;
+		}
+		set_transient( 'bkn_build_lock', 1, 60 );
+		$keep = array( isset( $_GET['completion'] ) ? $_GET['completion'] : null, isset( $_REQUEST['bke_completion'] ) ? $_REQUEST['bke_completion'] : null ); // phpcs:ignore WordPress.Security.NonceVerification
+		unset( $_GET['completion'], $_REQUEST['bke_completion'] ); // another snippet narrows property queries by these
+		$q = new WP_Query(
+			array(
+				'post_type'           => 'estate_property',
+				'post_status'         => 'publish',
+				'fields'              => 'ids',
+				'posts_per_page'      => 3000,
+				'no_found_rows'       => true,
+				'ignore_sticky_posts' => true,
+				'orderby'             => 'ID',
+				'order'               => 'DESC',
+			)
+		);
+		if ( null !== $keep[0] ) {
+			$_GET['completion'] = $keep[0];
+		}
+		if ( null !== $keep[1] ) {
+			$_REQUEST['bke_completion'] = $keep[1];
+		}
+		$ids = array_map( 'intval', $q->posts );
+		if ( $ids && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $ids, true, false );
+		}
+		blockke_dev_pm_prime( $ids );
+		$rows = array();
+		foreach ( $ids as $id ) {
+			$r = blockke_bkn_row( $id );
+			if ( $r ) {
+				$rows[ $id ] = $r;
+			}
+		}
+		set_transient( 'bkn_rows', array( 'ver' => $ver, 'rows' => $rows ), DAY_IN_SECONDS );
+		delete_transient( 'bkn_build_lock' );
+		return $rows;
+	}
+
+	/** One listing's row, or null when it is sold or let. */
+	function blockke_bkn_row( $id ) {
+		if ( has_term( array( 'sold', 'let' ), 'property_status', $id ) ) {
+			return null;
+		}
+		$kt     = blockke_area_kind( $id );
+		$act    = blockke_area_action( $id, $kt[0] );
+		$cats   = get_the_terms( $id, 'property_category' );
+		$areas  = get_the_terms( $id, 'property_area' );
+		$master = (int) blockke_dev_pm( $id, 'property_subunits_master' );
+		$master = $master && $master !== $id ? $master : 0;
+		$proj   = blockke_dev_first_term( $id, 'property_project' );
+		$ct     = blockke_dev_first_term( $id, 'property_completion' );
+		// main area: the listing's own choice, else its development's, else the busiest of its areas
+		$ma = sanitize_title( (string) blockke_dev_pm( $id, 'bke_dev_area' ) );
+		if ( '' === $ma && $master ) {
+			$ma = sanitize_title( (string) blockke_dev_pm( $master, 'bke_dev_area' ) );
+		}
+		$src = $master ? get_the_terms( $master, 'property_area' ) : false;
+		$src = is_array( $src ) && $src ? $src : $areas;
+		if ( '' === $ma && is_array( $src ) && $src ) {
+			usort(
+				$src,
+				function ( $a, $b ) {
+					return (int) $b->count === (int) $a->count ? (int) $a->term_id - (int) $b->term_id : (int) $b->count - (int) $a->count;
+				}
+			);
+			$ma = $src[0]->slug;
+		}
+		$gal = blockke_dev_pm( $id, 'wpestate_property_gallery' );
+		$gal = is_array( $gal ) ? $gal : maybe_unserialize( $gal );
+		$gal = is_array( $gal ) ? $gal : explode( ',', (string) blockke_dev_pm( $id, 'image_to_attach' ) );
+		$img = (int) blockke_dev_pm( $id, '_thumbnail_id' );
+		$lo  = (string) blockke_dev_pm( $id, 'bke_dev_layout' );
+		$dev = '1' === (string) blockke_dev_pm( $id, 'property_has_subunits' );
+		$cfg = blockke_dev_config();
+		return array(
+			'id'    => $id,
+			't'     => blockke_dev_text( get_the_title( $id ) ),
+			'u'     => get_permalink( $id ),
+			'dev'   => $dev,
+			'm'     => $master,
+			'dk'    => blockke_dev_dev_key( $id ),
+			'pj'    => $proj ? (int) $proj->term_id : 0,
+			'kind'  => $kt[0],
+			'type'  => $kt[1],
+			'act'   => $act,
+			'cats'  => is_array( $cats ) ? array_values( wp_list_pluck( $cats, 'slug' ) ) : array(),
+			'areas' => is_array( $areas ) ? array_values( wp_list_pluck( $areas, 'slug' ) ) : array(),
+			'ma'    => $ma,
+			'p'     => (float) blockke_dev_pm( $id, 'property_price' ),
+			'f'     => blockke_dev_price_flag( $id ),
+			'b'     => (int) blockke_dev_pm( $id, 'property_bedrooms' ),
+			'k'     => 'home' === $kt[0] ? blockke_dev_sim_key( $id ) : '',
+			'sq'    => (float) blockke_dev_pm( $id, 'property_size' ),
+			'st'    => blockke_dev_is_offplan( $id ) ? 'offplan' : ( has_term( 'complete', 'property_status', $id ) || has_term( 'ready-now', 'property_completion', $id ) ? 'ready' : '' ),
+			'cs'    => blockke_dev_text( (string) blockke_dev_pm( $id, 'bke_completion_stated' ) ),
+			'ct'    => $ct ? $ct->slug : '',
+			'img'   => $img,
+			'ph'    => count( array_unique( array_filter( array_map( 'intval', array_merge( array( $img ), $gal ) ) ) ) ),
+			'ft'    => '1' === (string) blockke_dev_pm( $id, 'prop_featured' ),
+			'lo'    => ! empty( $cfg['enabled'] ) && ( 'on' === $lo || ( 'off' !== $lo && ( ( ! empty( $cfg['auto'] ) && $dev ) || ( $master && 'sale' === $act && $cfg['auto_units'] && ( true === $cfg['auto_units'] || ( is_array( $cfg['auto_units'] ) && in_array( $ma, $cfg['auto_units'], true ) ) ) ) ) ) ),
+			'ln'    => blockke_dev_text( (string) blockke_dev_pm( $id, 'bke_index_line' ) ),
+			'd'     => (int) get_post_time( 'U', true, $id ),
+		);
+	}
+
+	/**
+	 * Completion from a stated date ("Dec 2027", "Q2 2027", "late 2027", "2028") or a Completion term:
+	 * array( year, month 0-12, quarter 0-4, word, passed ). Year 0 = unknown.
+	 */
+	function blockke_bkn_done( $stated, $term ) {
+		$y = 0;
+		$m = 0;
+		$q = 0;
+		$w = '';
+		$s = strtolower( (string) $stated );
+		if ( preg_match( '/\b(20\d\d)\b/', $s, $mm ) ) {
+			$y = (int) $mm[1];
+			if ( preg_match( '/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/', $s, $mo ) ) {
+				$m = 1 + array_search( $mo[1], array( 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec' ), true );
+			} elseif ( preg_match( '/\bq([1-4])\b/', $s, $qq ) ) {
+				$q = (int) $qq[1];
+			} elseif ( preg_match( '/\b(early|mid|late|end)\b/', $s, $ww ) ) {
+				$w = 'end' === $ww[1] ? 'late' : $ww[1];
+			}
+		} elseif ( preg_match( '/^(20\d\d)/', (string) $term, $mm ) ) {
+			$y = (int) $mm[1];
+		}
+		$now  = (int) current_time( 'Y' ) * 12 + (int) current_time( 'n' );
+		$last = $y ? $y * 12 + ( $m ? $m : ( $q ? $q * 3 : 12 ) ) : 0;
+		return array( $y, $m, $q, $w, $y && $last < $now );
+	}
+
+	/**
+	 * Developments: listings grouped as one card each (a main listing and its units; else a Project; else the listing),
+	 * merged when two groups are the same building. Cached in transient bkn_devs with the rows.
+	 * Returns array( 'devs' => group key => development, 'of' => listing id => group key ).
+	 */
+	function blockke_bkn_devs() {
+		static $out = null;
+		if ( null !== $out ) {
+			return $out;
+		}
+		$rows = blockke_bkn_rows();
+		$ver  = (string) get_option( 'bkd_sim_ver', '0' ) . '|v16|' . count( $rows );
+		$hit  = get_transient( 'bkn_devs' );
+		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
+			$out = $hit['data'];
+			return $out;
+		}
+		// 1. groups by development key; units follow their main listing
+		$g = array();
+		foreach ( $rows as $id => $r ) {
+			$k = $r['m'] && isset( $rows[ $r['m'] ] ) ? 'm' . $r['m'] : ( $r['dev'] ? 'm' . $id : ( $r['pj'] ? 'p' . $r['pj'] : 'i' . $id ) );
+			$g[ $k ][] = $id;
+		}
+		// 2. the same building listed twice: two groups sharing a Project, or the same name in the same main area
+		$by_pj = array();
+		$by_nm = array();
+		$alias = array();
+		foreach ( $g as $k => $ids ) {
+			$lead = $rows[ $ids[0] ];
+			foreach ( $ids as $id ) {
+				if ( $rows[ $id ]['dev'] ) {
+					$lead = $rows[ $id ];
+				}
+			}
+			$keys = array();
+			if ( $lead['pj'] ) {
+				$keys[] = 'pj' . $lead['pj'];
+			}
+			$nm = blockke_bkn_norm( blockke_dev_listing_name( $lead['id'] ) );
+			if ( strlen( $nm ) > 3 && 'i' !== $k[0] ) { // a single listing joins only by its Project
+				$keys[] = 'nm' . $lead['ma'] . '|' . $nm;
+			}
+			foreach ( $keys as $x ) {
+				$to = 0 === strpos( $x, 'pj' ) ? ( isset( $by_pj[ $x ] ) ? $by_pj[ $x ] : null ) : ( isset( $by_nm[ $x ] ) ? $by_nm[ $x ] : null );
+				if ( null !== $to && $to !== $k ) {
+					$alias[ $k ] = $to;
+					break;
+				}
+			}
+			if ( ! isset( $alias[ $k ] ) ) {
+				foreach ( $keys as $x ) {
+					if ( 0 === strpos( $x, 'pj' ) ) {
+						$by_pj[ $x ] = $k;
+					} else {
+						$by_nm[ $x ] = $k;
+					}
+				}
+			}
+		}
+		foreach ( $alias as $from => $to ) {
+			while ( isset( $alias[ $to ] ) ) {
+				$to = $alias[ $to ];
+			}
+			$g[ $to ] = array_merge( $g[ $to ], $g[ $from ] );
+			unset( $g[ $from ] );
+		}
+		// 3. one development per group
+		$devs = array();
+		$of   = array();
+		foreach ( $g as $k => $ids ) {
+			$c = blockke_bkn_dev( $k, $ids, $rows );
+			if ( $c ) {
+				$devs[ $k ] = $c;
+				foreach ( $ids as $id ) {
+					$of[ $id ] = $k;
+				}
+			}
+		}
+		$out = array(
+			'devs' => $devs,
+			'of'   => $of,
+		);
+		set_transient( 'bkn_devs', array( 'ver' => $ver, 'data' => $out ), DAY_IN_SECONDS );
+		return $out;
+	}
+
+	/** One development from its listings. */
+	function blockke_bkn_dev( $k, $ids, $rows ) {
+		$mains = array();
+		foreach ( $ids as $id ) {
+			if ( $rows[ $id ]['dev'] ) {
+				$mains[] = $id;
+			}
+		}
+		$cand = $mains ? $mains : $ids;
+		usort(
+			$cand,
+			function ( $a, $b ) use ( $rows ) {
+				$x = $rows[ $a ];
+				$y = $rows[ $b ];
+				if ( $x['lo'] !== $y['lo'] ) {
+					return $x['lo'] ? -1 : 1;
+				}
+				if ( 'sale' === $x['act'] && 'sale' !== $y['act'] ) {
+					return -1;
+				}
+				if ( 'sale' === $y['act'] && 'sale' !== $x['act'] ) {
+					return 1;
+				}
+				return $y['ph'] !== $x['ph'] ? $y['ph'] - $x['ph'] : $a - $b;
+			}
+		);
+		$s    = $rows[ $cand[0] ];
+		$name = blockke_dev_listing_name( $s['id'] );
+		$name = trim( preg_split( '/\s+(?:\||–|—|by)\s+/u', $name )[0], " ,.-\t" );
+		// prices, bedrooms, kinds, dates across its listings
+		$sale  = array();
+		$rent  = array();
+		$beds  = array();
+		$types = array();
+		$acts  = array();
+		$kinds = array();
+		$areas = array();
+		$ft    = false;
+		$d     = 0;
+		$st    = '';
+		foreach ( $ids as $id ) {
+			$r             = $rows[ $id ];
+			$acts[ $r['act'] ] = 1;
+			$kinds[ $r['kind'] ] = 1;
+			$ft            = $ft || $r['ft'];
+			$d             = max( $d, $r['d'] );
+			$areas         = array_merge( $areas, $r['areas'] );
+			if ( 'unit' !== $r['f'] && $r['p'] > 0 ) {
+				if ( 'sale' === $r['act'] && $r['p'] >= 1000000 ) {
+					$sale[] = $r['p'];
+				} elseif ( 'rent' === $r['act'] ) {
+					$rent[] = $r['p'];
+				}
+			}
+			if ( 'home' === $r['kind'] && ! $r['dev'] && '' !== $r['k'] ) {
+				$beds[] = 'studio' === $r['k'] ? 0 : max( 1, $r['b'] );
+			}
+			if ( '' !== $r['type'] ) {
+				$types[ $r['type'] ] = 1;
+			}
+			if ( 'offplan' === $r['st'] || ( '' === $st && 'ready' === $r['st'] ) ) {
+				$st = $r['st'];
+			}
+		}
+		if ( ! $beds && 'home' === $s['kind'] ) {
+			$tb = blockke_area_title_beds( $s['id'], true );
+			foreach ( $tb[1] as $x ) {
+				$beds[] = 'studio' === $x ? 0 : (int) $x;
+			}
+			if ( preg_match( '/(\d)\s*(?:-|–|to)\s*(\d)\s*(?:-\s*)?bed/i', $s['t'], $mm ) ) { // "3-5 Bed" keeps its top
+				$beds[] = (int) $mm[2];
+			}
+		}
+		$beds = array_values( array_unique( $beds ) );
+		sort( $beds );
+		$cs = $s['cs'];
+		foreach ( $ids as $id ) {
+			if ( '' === $cs && '' !== $rows[ $id ]['cs'] ) {
+				$cs = $rows[ $id ]['cs'];
+			}
+		}
+		$ma    = $s['ma'];
+		$at    = $ma ? get_term_by( 'slug', $ma, 'property_area' ) : null;
+		$place = $at ? blockke_dev_text( $at->name ) : '';
+		$ring  = $ma ? blockke_dev_neighbours( $ma ) : array( array(), array() );
+		foreach ( array_unique( $areas ) as $sl ) {
+			if ( $sl === $ma ) {
+				continue;
+			}
+			$t = get_term_by( 'slug', $sl, 'property_area' );
+			if ( $t && in_array( (int) $t->term_id, $ring[0], true ) ) {
+				$place = blockke_dev_text( $t->name ) . ', ' . $place; // "Brookside, Westlands"
+				break;
+			}
+		}
+		unset( $kinds[''] );
+		return array(
+			'g'      => $k,
+			'id'     => $s['id'],
+			'ids'    => array_values( $ids ),
+			'url'    => $s['u'],
+			'name'   => '' !== $name ? $name : $s['t'],
+			'place'  => $place,
+			'area'   => $ma,
+			'areas'  => array_values( array_unique( $areas ) ),
+			'kind'   => isset( $kinds['home'] ) ? 'home' : ( $kinds ? key( $kinds ) : $s['kind'] ),
+			'types'  => array_keys( $types ),
+			'acts'   => array_keys( array_filter( $acts ) ),
+			'from'   => $sale ? min( $sale ) : 0,
+			'to'     => $sale ? max( $sale ) : 0,
+			'rfrom'  => $rent ? min( $rent ) : 0,
+			'rto'    => $rent ? max( $rent ) : 0,
+			'beds'   => $beds,
+			'st'     => $st,
+			'done'   => blockke_bkn_done( $cs, $s['ct'] ),
+			'line'   => mb_substr( $s['ln'], 0, 120 ),
+			'photos' => $s['ph'],
+			'cover'  => $s['img'] ? $s['img'] : (int) array_reduce( $ids, function ( $c, $id ) use ( $rows ) { return $c ? $c : $rows[ $id ]['img']; }, 0 ),
+			'ft'     => $ft,
+			'vt'     => (bool) $s['lo'],
+			'd'      => $d,
+			'n'      => count( $ids ),
+		);
+	}
+
+	/** "KES 6.06M", "KES 25.3M", "KES 180K": rounded up, so a "from" price is never understated. */
+	function blockke_bkn_money( $v ) {
+		$cur = blockke_dev_config()['currency'];
+		if ( $v <= 0 ) {
+			return '';
+		}
+		if ( $v >= 1000000 ) {
+			$dp = $v >= 10000000 ? 1 : 2;
+			$x  = ceil( round( $v / 1000000, 6 ) * pow( 10, $dp ) ) / pow( 10, $dp );
+			return $cur . ' ' . rtrim( rtrim( number_format( $x, $dp, '.', '' ), '0' ), '.' ) . 'M';
+		}
+		return $cur . ' ' . ceil( $v / 1000 ) . 'K';
+	}
+
+	/** "From KES 6.2M", "KES 168.5M", "KES 6.2M–19.8M" (with a price filter), rents " a month". */
+	function blockke_bkn_price( $from, $to, $rent = false, $range = false ) {
+		if ( $from <= 0 ) {
+			return '';
+		}
+		$m = $rent ? ' a month' : '';
+		if ( $to > $from ) {
+			return $range ? blockke_bkn_money( $from ) . '–' . preg_replace( '/^\D+/', '', blockke_bkn_money( $to ) ) . $m : 'From ' . blockke_bkn_money( $from ) . $m;
+		}
+		return blockke_bkn_money( $from ) . $m;
+	}
+
+	/** "Studio", "3 bed", "1–3 bed", "Studio to 3 bed"; villas and houses say so ("5 bed villa", "3–5 bed villas"). */
+	function blockke_bkn_beds( $beds, $types = array() ) {
+		if ( ! $beds ) {
+			return '';
+		}
+		$lo = min( $beds );
+		$hi = max( $beds );
+		$t  = '';
+		if ( 1 === count( $types ) && in_array( $types[0], array( 'villa', 'house' ), true ) ) {
+			$t = ' ' . $types[0] . ( $lo !== $hi ? 's' : '' );
+		}
+		if ( $lo === $hi ) {
+			return 0 === $lo ? 'Studio' . ( $t ? $t : '' ) : $lo . ' bed' . $t;
+		}
+		return ( 0 === $lo ? 'Studio to ' : $lo . '–' ) . $hi . ' bed' . $t;
+	}
+
+	/** "Completion Sep 2028", "Completion Q2 2027", "Completion late 2027", "Completion 2027", "Ready to move in", or ''. */
+	function blockke_bkn_done_text( $c, $flat = false ) {
+		if ( 'ready' === $c['st'] ) {
+			return 'Ready to move in';
+		}
+		list( $y, $m, $q, $w, $passed ) = $c['done'];
+		if ( ! $y || $passed ) {
+			return $flat ? 'Completion to be confirmed' : '';
+		}
+		$mon = array( '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
+		return 'Completion ' . ( $m ? $mon[ $m ] . ' ' : ( $q ? 'Q' . $q . ' ' : ( $w ? $w . ' ' : '' ) ) ) . $y;
+	}
+
+	/** The completion as a sortable key: 202809 for Sep 2028, 202812 for "2028", 999999 when unknown or passed. */
+	function blockke_bkn_done_key( $c ) {
+		list( $y, $m, $q, $w, $passed ) = $c['done'];
+		if ( ! $y || $passed ) {
+			return 999999;
+		}
+		return $y * 100 + ( $m ? $m : ( $q ? $q * 3 : ( 'early' === $w ? 4 : ( 'mid' === $w ? 7 : 12 ) ) ) );
+	}
+
+	/**
+	 * One card, every page. $v: 'dev' (default), 'lead', 'row' (small, phones), 'group' (search: with the matching homes),
+	 * 'unit' (search: one home). $ctx: 'src' (index, area, segment, search), 'scope' (an area slug: drop it from the place
+	 * line), 'pos', 'range' (show the price range), 'rent', 'tag' ("New on Block"), 'lazy' (default true).
+	 */
+	function blockke_card_html( $c, $v = 'dev', $ctx = array() ) {
+		$e     = 'esc_html';
+		$ctx   = array_merge( array( 'src' => 'index', 'scope' => '', 'pos' => 0, 'range' => false, 'rent' => false, 'tag' => false, 'lazy' => true, 'sizes' => '(min-width:1000px) 379px, (min-width:768px) calc(50vw - 52px), calc(100vw - 40px)' ), $ctx );
+		$rent  = $ctx['rent'];
+		$price = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, $ctx['range'] ) : blockke_bkn_price( $c['from'], $c['to'], false, $ctx['range'] );
+		$place = $ctx['scope'] && $c['area'] === $ctx['scope'] ? '' : $c['place'];
+		$pl    = implode( ' · ', array_filter( array( $place, blockke_bkn_beds( $c['beds'], $c['types'] ) ) ) );
+		$dl    = implode( ' · ', array_filter( array( '' !== $price ? '<b>' . $e( $price ) . '</b>' : '', $rent ? '' : $e( blockke_bkn_done_text( $c ) ) ) ) );
+		$alt   = $c['cover'] ? trim( (string) get_post_meta( $c['cover'], '_wp_attachment_image_alt', true ) ) : '';
+		$alt   = '' !== $alt ? $alt : $c['name'] . ( '' !== $c['place'] ? ', ' . $c['place'] : '' );
+		$size  = 'row' === $v ? 'medium' : ( 'lead' === $v ? 'large' : 'medium_large' );
+		$attr  = array(
+			'alt'      => $alt,
+			'decoding' => 'async',
+			'sizes'    => 'lead' === $v ? '(min-width:1000px) 690px, 100vw' : ( 'row' === $v ? '112px' : $ctx['sizes'] ),
+		);
+		if ( 'lead' === $v ) {
+			$attr['fetchpriority'] = 'high';
+		} elseif ( $ctx['lazy'] ) {
+			$attr['loading'] = 'lazy';
+		}
+		$img   = $c['cover'] ? wp_get_attachment_image( $c['cover'], $size, false, $attr ) : '';
+		$data  = ' data-id="' . (int) $c['id'] . '" data-areas="' . esc_attr( implode( ' ', $c['areas'] ) ) . '" data-beds="' . esc_attr( implode( ' ', $c['beds'] ) ) . '"'
+			. ' data-from="' . (int) ( $rent ? $c['rfrom'] : $c['from'] ) . '" data-to="' . (int) ( $rent ? $c['rto'] : $c['to'] ) . '" data-done="' . (int) blockke_bkn_done_key( $c ) . '" data-d="' . (int) $c['d'] . '" data-vt="' . ( $c['vt'] ? 1 : 0 ) . '"';
+		$link  = '<a class="bkn-a" href="' . esc_url( $c['url'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '"' . ( $ctx['pos'] ? ' data-pos="' . (int) $ctx['pos'] . '"' : '' ) . '>';
+		$tag   = $ctx['tag'] ? '<span class="bkn-tag">New on Block</span>' : '';
+		if ( 'unit' === $v ) { // one home, Compass order: price, what it is, where
+			$what = array_filter( array( blockke_bkn_beds( $c['beds'], $c['types'] ), ! empty( $c['sqm'] ) ? blockke_dev_num( $c['sqm'] ) . ' m²' : '' ) );
+			return '<article class="bkn-card bkn-unit" id="d-' . (int) $c['id'] . '"' . $data . '>' . $link . '<span class="bkn-img">' . $img . $tag . '</span>'
+				. '<span class="bkn-uprice">' . $e( '' !== $price ? $price : 'Price on request' ) . '</span></a>'
+				. '<p class="bkn-place">' . $e( implode( ' · ', $what ) ) . '</p><p class="bkn-data">' . $e( implode( ', ', array_filter( array( $c['name'], $place ) ) ) ) . '</p></article>';
+		}
+		if ( 'row' === $v ) {
+			return '<article class="bkn-row" id="d-' . (int) $c['id'] . '"' . $data . '>' . $link . '<span class="bkn-img">' . $img . '</span><span class="bkn-rt"><span class="bkn-name">' . $e( $c['name'] ) . '</span>'
+				. '<span class="bkn-data">' . $dl . '</span></span></a></article>';
+		}
+		$h = '<article class="bkn-card' . ( 'lead' === $v ? ' bkn-lead-card' : '' ) . '" id="d-' . (int) $c['id'] . '"' . $data . '>' . $link
+			. '<span class="bkn-img">' . $img . $tag . '</span>'
+			. ( 'lead' === $v ? '<h2 class="bkn-name">' . $e( $c['name'] ) . '</h2>' : '<h3 class="bkn-name">' . $e( $c['name'] ) . '</h3>' ) . '</a>'
+			. ( '' !== $pl ? '<p class="bkn-place">' . $e( $pl ) . '</p>' : '' )
+			. ( '' !== $dl ? '<p class="bkn-data">' . $dl . '</p>' : '' )
+			. ( 'lead' === $v && '' !== $c['line'] ? '<p class="bkn-line">' . $e( $c['line'] ) . '</p>' : '' );
+		if ( 'group' === $v && ! empty( $c['match'] ) ) { // the homes in it that match a search
+			$m  = $c['match'];
+			$mb = array();
+			foreach ( $m as $r ) {
+				$mb[ 'studio' === $r['k'] ? 0 : max( 1, $r['b'] ) ] = 1;
+			}
+			ksort( $mb );
+			$bl = array_map(
+				function ( $b ) {
+					return 0 === $b ? 'studio' : (string) $b;
+				},
+				array_keys( $mb )
+			);
+			$h .= '<div class="bkn-match"><p class="bkn-mh">' . $e( count( $m ) . ( 1 === count( $m ) ? ' home matches' : ' homes match' ) . ( $bl ? ': ' . ( count( $bl ) > 1 ? implode( ', ', array_slice( $bl, 0, -1 ) ) . ' and ' . end( $bl ) : $bl[0] ) . ( 'studio' === end( $bl ) && 1 === count( $bl ) ? '' : ' bed' ) : '' ) ) . '</p><ul>';
+			foreach ( array_slice( $m, 0, 3 ) as $i => $r ) {
+				$what = array_filter( array( 'studio' === $r['k'] ? 'Studio' : ( $r['b'] ? $r['b'] . ' bed' : '' ), $r['sq'] > 0 ? blockke_dev_num( round( $r['sq'] * blockke_dev_sqft_factor() ) ) . ' m²' : '' ) );
+				$h   .= '<li><a href="' . esc_url( $r['u'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '" data-row="' . ( $i + 1 ) . '"><span>' . $e( implode( ' · ', $what ) ) . '</span><b>' . $e( $r['p'] > 0 && 'unit' !== $r['f'] ? blockke_bkn_money( $r['p'] ) . ( $rent ? ' a month' : '' ) : 'On request' ) . '</b></a></li>';
+			}
+			$h .= '</ul>' . ( count( $m ) > 3 ? '<a class="bkn-mall" href="' . esc_url( $c['url'] ) . '#bkd-residences" data-bkn="' . esc_attr( $ctx['src'] ) . '">' . $e( 'See all ' . count( $m ) . ' in the price list' ) . '</a>' : '' ) . '</div>';
+		}
+		return $h . '</article>';
+	}
+
+	/** The card family's styles: shared by the index, search results and area pages. */
+	function blockke_bkn_card_css() {
+		return <<<'CSS'
+#bkd .bkn-card{position:relative;min-width:0}
+#bkd .bkn-a{display:block;color:var(--navy)!important;text-decoration:none}
+#bkd .bkn-a::after{content:"";position:absolute;inset:0;z-index:0}
+#bkd .bkn-a:focus-visible{outline:none}
+#bkd .bkn-a:focus-visible::after{outline:2px solid var(--brass-d);outline-offset:4px}
+#bkd .bkn-img{position:relative;display:block;aspect-ratio:3/2;overflow:hidden;background:var(--mist)}
+#bkd .bkn-img img{width:100%!important;height:100%!important;max-width:none!important;object-fit:cover;transition:filter .2s,opacity .2s}
+#bkd .bkn-tag{position:absolute;left:0;bottom:0;padding:6px 10px;background:var(--paper);font-size:12px;font-weight:500;line-height:1.3;color:var(--brass-d)}
+#bkd .bkn-name{margin:14px 0 0;font:var(--display-w) 26px/1.15 var(--display);letter-spacing:var(--display-ls);color:var(--navy)}
+#bkd .bkn-place{margin:6px 0 0;font-size:14px;line-height:1.5;color:var(--slate)}
+#bkd .bkn-data{margin:4px 0 0;font-size:15px;line-height:1.5;color:var(--ink);font-variant-numeric:tabular-nums}
+#bkd .bkn-data b{font-weight:600;color:var(--navy)}
+#bkd .bkn-line{margin:14px 0 0;max-width:38ch;font-size:16px;line-height:1.6;color:var(--ink)}
+@media (hover:hover){#bkd .bkn-card:hover .bkn-img img{filter:brightness(.94)}#bkd .bkn-card:hover .bkn-name{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}}
+#bkd .bkn-uprice{display:block;margin:14px 0 0;font-size:20px;font-weight:600;line-height:1.3;color:var(--navy);font-variant-numeric:tabular-nums}
+#bkd .bkn-unit .bkn-place{margin-top:4px;color:var(--ink)}
+#bkd .bkn-unit .bkn-data{margin-top:2px;font-size:14px;color:var(--slate)}
+#bkd .bkn-match{position:relative;z-index:1;margin:16px 0 0;padding:14px 0 0;border-top:1px solid var(--line)}
+#bkd .bkn-mh{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--ink)}
+#bkd .bkn-match li{margin:0}
+#bkd .bkn-match li a{display:flex;justify-content:space-between;gap:16px;min-height:40px;align-items:center;font-size:14px;color:var(--ink)!important;text-decoration:none;border-bottom:1px solid var(--line)}
+#bkd .bkn-match li a b{font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums}
+#bkd .bkn-match li a:hover span{text-decoration:underline;text-underline-offset:4px}
+#bkd .bkn-mall{display:inline-flex;min-height:40px;align-items:center;font-size:14px;font-weight:500;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bkn-row{position:relative;border-bottom:1px solid var(--line)}
+#bkd .bkn-row .bkn-a{display:grid;grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:center;padding:14px 0}
+#bkd .bkn-row .bkn-img{width:112px;aspect-ratio:3/2}
+#bkd .bkn-rt{display:block;min-width:0}
+#bkd .bkn-row .bkn-name{display:block;margin:0;font-size:18px;line-height:1.2}
+#bkd .bkn-row .bkn-data{display:block;margin-top:4px;font-size:14px}
+CSS;
+	}
+
+	/**
+	 * Shared by every list page (index, search results, area and segment pages): what happens when a card is clicked and
+	 * when the visitor comes back (context for the development page, scroll restore, the photo transition, prefetch).
+	 * Printed inside the page script, after window.BKDEV is set.
+	 */
+	function blockke_bkn_nav_js() {
+		return '';
+	}
+
+	/** In <head> on every #bkd page when view_transitions is on: the transition styles and the early listener script. */
+	function blockke_bkn_vt_head() {
+		return '';
+	}
+
+	/* ---------------------------------------------------------------------
+	   @v16-index: the new developments index (/new-developments/)
+	   --------------------------------------------------------------------- */
+
+	/* ---------------------------------------------------------------------
+	   @v16-search: search results on the new layout (/advanced-search/)
+	   --------------------------------------------------------------------- */
+
+	/* ---------------------------------------------------------------------
+	   @v16-transitions: card to development and back (context, photo transition, prefetch)
+	   --------------------------------------------------------------------- */
 }
