@@ -103,6 +103,9 @@
  * and a shared "Amenities & Location" paragraph is split between them; a title-like first line is not the lead;
  * single homes show bedrooms, bathrooms, size and plot; villas are compared with villas and houses; the full
  * description no longer widens the page on phones.
+ * v1.4.5 (2026-10-15): an off-plan page whose listing gives no deposit, reservation fee or instalment wording, or
+ * whose completion is weeks away, heads its payment section "Ask for the payment plan" instead of "Pay in
+ * instalments"; the kids' play area tile no longer calls it "safe".
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -1666,7 +1669,7 @@ JS;
 			array( '/\bspa\b|sauna|steam|jacuzzi|hot tub|massage|hammam|wellness (centre|center|lounge|suite)/u', 'spa', 'Spa and sauna', 'lotus', 88, 'Unwind after a long day without leaving home.' ),
 			array( '/\bgym|fitness|health club|work ?out/u', 'gym', 'Gym', 'dumbbell', 87, 'Train before work, with no membership or commute.' ),
 			array( '/forest|botanical|arboretum|\bnature\b/u', 'nature', 'Nature walks', 'leaf', 86, 'Trees and birdsong instead of traffic.' ),
-			array( '/\bkids?\b|child|play ?(area|ground|room|park|zone)|creche|crèche|day ?care/u', 'kids', 'Kids’ play area', 'kite', 85, 'A safe place for children to play, close to home.' ),
+			array( '/\bkids?\b|child|play ?(area|ground|room|park|zone)|creche|crèche|day ?care/u', 'kids', 'Kids’ play area', 'kite', 85, 'Room for children to play, close to home.' ),
 			array( '/restaurant|caf[eé]|coffee|bistro|eatery|food court/u', 'cafe', 'Café and restaurant', 'cup', 84, 'Coffee, lunch or dinner without getting in the car.' ),
 			array( '/golf/u', 'golf', 'Golf', 'flag', 83, 'Tee times close to home.' ),
 			array( '/garden|landscap|green (space|area)|lawn|(?<!car )\bpark\b|courtyard|orchard/u', 'garden', 'Gardens', 'leaf', 82, 'Green space for slow mornings and fresh air.' ),
@@ -3827,7 +3830,10 @@ JS;
 
 		// Payment plan (off-plan) or mortgage (complete)
 		if ( $d['offplan'] ) {
-			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments' : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : 'Pay in <em>instalments</em>' ) );
+			// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
+			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
+			// "Pay in instalments" only when the listing mentions instalments and there is time for them
+			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments' : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : ( $plan['instalments'] && ! $close ? 'Pay in <em>instalments</em>' : 'Ask for the <em>payment plan</em>' ) ) );
 			$text    = $plan['text'] ? $plan['text'] : 'Spread the cost while the building goes up: a deposit, then instalments up to completion. Ask for the developer\'s official schedule.';
 			$steps   = $plan['steps'];
 			$titles  = '';
@@ -3847,8 +3853,7 @@ JS;
 				$o[] = '</ol>';
 			}
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="payment-plan">Get the official payment plan</button></div>';
-			if ( $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3 ) {
-				// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
+			if ( $close ) {
 				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Completion is close</p><p class="bkd-body">' . $e( 'Completion is scheduled for ' . $d['completion'] . ', so an instalment plan would be short. Ask for the developer\'s current payment terms, and whether a mortgage can cover the balance.' ) . '</p>'
 					. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
 			} else {
