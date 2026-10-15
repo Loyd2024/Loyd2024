@@ -1,0 +1,51 @@
+# Publishes the static site in dentist-website/ to GitHub Pages.
+# One-time setup: repository Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Deploy dentist website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dentist-website/**"
+      - ".github/workflows/deploy-dentist-website.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      # 404.html is served at any missing URL, so it uses <base href="/"> to find its CSS and links.
+      # On a project page the site lives under /<repo>/, so point the base there.
+      - name: Set 404 page base path
+        run: |
+          base="${{ steps.pages.outputs.base_path }}/"
+          sed -i "s|<base href=\"/\">|<base href=\"${base}\">|" dentist-website/404.html
+          grep -n "<base " dentist-website/404.html
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dentist-website
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
