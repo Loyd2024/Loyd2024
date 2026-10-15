@@ -7929,8 +7929,8 @@ CSS;
 	function blockke_search_cards( $groups, $key, $q ) {
 		list( $kind, $act ) = explode( '|', $key );
 		$rows               = blockke_bkn_rows();
-		$devs = blockke_bkn_devs()['devs'];
-		$out  = array();
+		$devs               = blockke_bkn_devs()['devs'];
+		$out                = array();
 		foreach ( $groups as $g => $ids ) {
 			if ( ! isset( $devs[ $g ] ) ) {
 				continue;
@@ -8025,19 +8025,6 @@ CSS;
 		$home = 'home' === $sec['kind'];
 		$ctx  = array( 'src' => 'search', 'pos' => $pos, 'rent' => $rent, 'tag' => $tag, 'lazy' => $lazy );
 		$c    = $d;
-		if ( ! $home ) {
-			$c['beds'] = array();
-		} else { // every size the development lists, its range listings' titles included ("Studio, 1-Bed & 2-Bed")
-			$rows = blockke_bkn_rows();
-			blockke_search_prime_titles();
-			foreach ( $d['ids'] as $id ) {
-				foreach ( isset( $rows[ $id ] ) && $rows[ $id ]['act'] === $sec['act'] ? blockke_search_row_beds( $rows[ $id ] ) : array() as $k ) {
-					$c['beds'][] = 'studio' === $k ? 0 : (int) $k;
-				}
-			}
-			$c['beds'] = array_values( array_unique( array_map( 'intval', $c['beds'] ) ) );
-			sort( $c['beds'] );
-		}
 		if ( 'unit' === $card['v'] ) {
 			$r           = $card['units'][0];
 			$p           = 'unit' === $r['f'] ? 0 : (float) $r['p'];
@@ -8055,6 +8042,19 @@ CSS;
 			$c['vt']     = (bool) $r['lo'];
 			$c['d']      = (int) $r['d'];
 			return blockke_card_html( $c, 'unit', $ctx );
+		}
+		if ( ! $home ) {
+			$c['beds'] = array();
+		} else { // every size the development lists, its range listings' titles included ("Studio, 1-Bed & 2-Bed")
+			$rows = blockke_bkn_rows();
+			blockke_search_prime_titles();
+			foreach ( $d['ids'] as $id ) {
+				foreach ( isset( $rows[ $id ] ) && $rows[ $id ]['act'] === $sec['act'] ? blockke_search_row_beds( $rows[ $id ] ) : array() as $k ) {
+					$c['beds'][] = 'studio' === $k ? 0 : (int) $k;
+				}
+			}
+			$c['beds'] = array_values( array_unique( array_map( 'intval', $c['beds'] ) ) );
+			sort( $c['beds'] );
 		}
 		if ( ( $q['lo'] > 0 || $q['hi'] > 0 ) && $card['lo'] > 0 ) { // with a price filter: the range of the homes that match
 			$c[ $rent ? 'rfrom' : 'from' ] = $card['lo'];
