@@ -118,7 +118,7 @@ A note is ignored when the visitor reached the development again from another pa
 
 **Prefetch (`prefetch`).** When the pointer rests on a card (or a finger touches it), Chrome fetches the development page in advance, so it opens at once. Never on *Data Saver* or 2G, and nothing is prerendered, so analytics run once. These fetches are not counted as views.
 
-**Turning it on.** Both switches are off. Editors can preview the photo-first hero and the transition with `?bke_vt=1` (and `?bke_vt=0`). With every v1.6 switch off, development and landing pages are byte for byte as in v1.5.
+**Turning it on.** Both switches are off. Editors can preview the photo-first hero on any development page with `?bke_vt=1` (and `?bke_vt=0`); the transition itself needs the switch, as the parameter is not carried from page to page. Logged-in editors always get the list note on development pages, so previews of the new lists work end to end. With every v1.6 switch off, development and landing pages are byte for byte as in v1.5 for visitors.
 
 **Tracking.** `context_beds` (bedrooms preset from the card) and `back_to_results` with `source` (index, area, segment, search or other).
 
