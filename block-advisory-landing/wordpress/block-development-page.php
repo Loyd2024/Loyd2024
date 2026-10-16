@@ -7996,7 +7996,8 @@ JS;
 
 	/**
 	 * Everything the index shows, from the developments: the grid (off-plan homes for sale with a cover, photos, a price and
-	 * an area), Ready to move into, the A-Z, the lead and the picks. Cached with the developments.
+	 * an area), Ready to move into, the A-Z (with each area's "All homes for sale" link), the lead and the picks. Cached with
+	 * the developments; the area switches and card_v16 are part of the version, as the A-Z links depend on them.
 	 */
 	function blockke_index_data() {
 		static $x = null;
@@ -8005,7 +8006,7 @@ JS;
 		}
 		$cfg  = blockke_dev_config();
 		$all  = blockke_bkn_devs();
-		$ver  = blockke_bkn_ver() . '|ix2|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'], $cfg['index_metro'] ) ) );
+		$ver  = blockke_bkn_ver() . '|ix3|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'], $cfg['index_metro'], $cfg['area_pages'], ! empty( $cfg['card_v16'] ), $cfg['area_cards'], $cfg['area_page_size'] ) ) );
 		$hit  = get_transient( 'bkn_index' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			$x = $hit['data'];
@@ -8130,6 +8131,9 @@ JS;
 		$far  = 0; // off-plan developments outside index_metro (Diani, Nyali, Nanyuki...): not "Nairobi and nearby"
 		$rows = blockke_bkn_rows();
 		$near = array_map( 'strtolower', (array) $cfg['index_metro'] );
+		if ( function_exists( '_prime_post_caches' ) ) { // their modified dates in one query, not one each
+			_prime_post_caches( array_map( 'intval', wp_list_pluck( $grid, 'id' ) ), false, false );
+		}
 		foreach ( $grid as $c ) {
 			$mod = max( $mod, (int) get_post_modified_time( 'U', true, $c['id'] ) );
 			$cy  = isset( $rows[ $c['id'] ]['cy'] ) ? strtolower( $rows[ $c['id'] ]['cy'] ) : '';
@@ -8139,6 +8143,7 @@ JS;
 			'grid'  => $grid,
 			'ready' => $ready,
 			'az'    => $az,
+			'azto'  => blockke_index_az_links( $az, $rows ),
 			'other' => $other,
 			'lead'  => $lead,
 			'picks' => $picks,
@@ -8149,6 +8154,55 @@ JS;
 		);
 		set_transient( 'bkn_index', array( 'ver' => $ver, 'data' => $x ), DAY_IN_SECONDS );
 		return $x;
+	}
+
+	/**
+	 * Where each area's "All homes for sale in X" link in the A-Z goes: area slug => URL. With card_v16 on, the page that
+	 * answers for the area's homes for sale (its segment page, or the area page when the segment folds into it, at its
+	 * canonical); with only the area page on, the segment page; else the theme's area archive. Worked out once, when the
+	 * index data is built, and cached with it. It is built for visitors, so an editor's previews (?bke_area, ?bke_cards)
+	 * are left out while it runs.
+	 */
+	function blockke_index_az_links( $az, $rows ) {
+		$cfg   = blockke_dev_config();
+		$v16   = ! empty( $cfg['card_v16'] );
+		$slugs = array();
+		foreach ( $az as $c ) {
+			if ( '' !== $c['area'] ) {
+				$slugs[ $c['area'] ] = 1;
+			}
+		}
+		$keep = array_intersect_key( $_GET, array( 'bke_area' => 1, 'bke_cards' => 1 ) ); // phpcs:ignore WordPress.Security.NonceVerification
+		$_GET = array_diff_key( $_GET, $keep ); // phpcs:ignore WordPress.Security.NonceVerification
+		if ( $v16 && function_exists( '_prime_post_caches' ) ) { // the area pages read titles for bedroom ranges: those listings in one query, not one each
+			$ids = array();
+			foreach ( $rows as $id => $r ) {
+				if ( blockke_bkn_is_range( $r ) ) {
+					$ids[] = (int) $id;
+				}
+			}
+			_prime_post_caches( $ids, false, false );
+		}
+		$out = array();
+		foreach ( array_keys( $slugs ) as $slug ) {
+			$t = get_term_by( 'slug', $slug, 'property_area' );
+			if ( ! $t ) {
+				continue;
+			}
+			$on = function_exists( 'blockke_area_on' ) && blockke_area_on( $t );
+			if ( $on && $v16 ) {
+				$to = blockke_area_page( $t, 'homes-for-sale' )['canon'];
+			} elseif ( $on ) {
+				$to = blockke_area_url( $t, 'homes-for-sale', false );
+			} else {
+				$to = get_term_link( $t );
+			}
+			if ( ! is_wp_error( $to ) && '' !== (string) $to ) {
+				$out[ $slug ] = (string) $to;
+			}
+		}
+		$_GET = $_GET + $keep; // phpcs:ignore WordPress.Security.NonceVerification
+		return $out;
 	}
 
 	/** The completion group a development falls in: '2026', '2027', '2028', '2029-plus', or 'tbc'. */
@@ -8289,6 +8343,9 @@ JS;
 		$grid  = $x['grid'];
 		$f     = blockke_index_state();
 		$areas = blockke_index_areas( $grid );
+		if ( '' !== $f['area'] && 'other' !== $f['area'] && ! isset( $areas[ $f['area'] ] ) ) {
+			$f['area'] = ''; // an area the filter doesn't offer is no area, as the script reads it (and never repeated back in the page)
+		}
 		$bands = blockke_index_bands();
 		$years = blockke_index_years();
 		$url   = get_permalink( blockke_index_page_id() );
@@ -8340,9 +8397,10 @@ JS;
 			. '<p class="bkn-stand">' . $e( blockke_index_where( $x, 'developments selling off-plan' ) . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . '. Prices and dates are as published by each developer; updated ' . wp_date( 'j M Y', $x['mod'] ? $x['mod'] : time() ) . '.' ) . '</p>'
 			. '<p class="bkn-ask-top"><a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>Ask an advisor on WhatsApp</a></p></div></header>';
 
-		// Filter bar: a plain GET form; the script filters in place and keeps the address up to date
+		// Filter bar: a plain GET form; the script filters in place and keeps the address up to date. Each field's label is
+		// for screen readers in the bar, and shows above its select in the phone and tablet sheet.
 		$sel = function ( $name, $label, $opts, $cur ) use ( $e ) {
-			$h = '<label class="bkn-f"><span class="bkd-sr">' . $e( $label ) . '</span><select name="' . esc_attr( $name ) . '" data-bkn-f="' . esc_attr( $name ) . '">';
+			$h = '<label class="bkn-f"><span class="bkn-lab">' . $e( $label ) . '</span><select name="' . esc_attr( $name ) . '" data-bkn-f="' . esc_attr( $name ) . '">';
 			foreach ( $opts as $v => $l ) {
 				$h .= '<option value="' . esc_attr( $v ) . '"' . selected( (string) $v, (string) $cur, false ) . '>' . $e( $l ) . '</option>';
 			}
@@ -8361,7 +8419,8 @@ JS;
 			. $sel( 'beds', 'Bedrooms', array( '' => 'Any bedrooms', 'studio' => 'Studio', '1' => '1 bed', '2' => '2 bed', '3' => '3 bed', '4' => '4+ bed' ), $f['beds'] )
 			. $sel( 'price', 'Price', $bopt, $f['price'] )
 			. $sel( 'completion', 'Completion', array( '' => 'Any completion' ) + $years, $f['completion'] )
-			. '<div class="bkn-sheet-foot"><button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit" data-bkn-show>Show developments</button></div></div>'
+			. '<div class="bkn-sheet-foot"><button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit" data-bkn-show>' . $e( 'Show ' . $found . ( 1 === $found ? ' development' : ' developments' ) ) . '</button>'
+			. '<a class="bkn-sclear" href="' . esc_url( $url ) . '" data-bkn-sclear' . ( $nset ? '' : ' hidden' ) . '>Clear filters</a></div></div>'
 			. '<p class="bkn-count" data-bkn-count aria-live="polite"' . ( $set ? '>' . $e( $found . ( 1 === $found ? ' development' : ' developments' ) ) : ' hidden>' ) . '</p>'
 			. '<a class="bkn-clear" href="' . esc_url( $url ) . '" data-bkn-clear' . ( $set || '' !== $f['sort'] ? '' : ' hidden' ) . '>Clear filters</a>'
 			. $sel( 'sort', 'Sort', array( '' => 'Recommended', 'soonest' => 'Completion, soonest', 'price-asc' => 'Price, lowest first', 'price-desc' => 'Price, highest first', 'newest' => 'Newest on Block' ), $f['sort'] )
@@ -8424,7 +8483,7 @@ JS;
 			}
 			$head = 'tbc' === $g
 				? '<div class="bkn-gh"><h2 class="bkn-gy bkn-gy-tbc">Completion date to be confirmed</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development whose' : ' developments whose' ) . ' published date has passed or was never given.' ) . '</p></div>'
-				: '<div class="bkn-gh"><h2 class="bkn-gy"><span class="bkn-gk">Completing in</span> ' . $e( $l ) . '</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development' : ' developments' ) . ( $fr ? ', from ' . blockke_bkn_money( min( $fr ) ) : '' ) ) . '</p></div>';
+				: '<div class="bkn-gh"><h2 class="bkn-gy"><span class="bkn-gk">Completing in</span> ' . $e( $l ) . '</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development' : ' developments' ) . ( $fr && '' === $f['price'] ? ', from ' . blockke_bkn_money( min( $fr ) ) : '' ) ) . '</p></div>'; // under a price filter the cards give their ranges, and a lower "from" would look like the filter failed
 			$o[]  = '<section class="bkn-group" id="g-' . esc_attr( $g ) . '" data-g="' . esc_attr( $g ) . '"' . ( $m && ! $flat ? '' : ' hidden' ) . '><div class="bkd-wrap"><div class="bkn-grid">' . $head;
 			$i    = 0;
 			foreach ( $cards as $k => $c ) {
@@ -8471,29 +8530,24 @@ JS;
 			. '<a href="tel:' . esc_attr( $tel ? '+' . $tel : $ag['phone'] ) . '">Call ' . $e( $tel ? blockke_dev_phone_display( $tel ) : $ag['phone_display'] ) . '</a></p></div>'
 			. '<div class="bkn-ask-f">' . blockke_index_form() . '</div></div></section>';
 
-		// A-Z: every development we list, by neighbourhood, busiest first. An area with one development, and developments
-		// without an area, go together under "Other areas" at the end, each name followed by its area.
+		// A-Z: every development we list, by neighbourhood, busiest first, each area with its own "All homes for sale in X"
+		// link (worked out with the index data, blockke_index_az_links()). Developments without an area come last, under a
+		// name of their own: "Other areas" in the filter means the areas it doesn't list, a different set.
 		$byarea = array();
-		$single = array();
 		foreach ( $x['az'] as $c ) {
-			$byarea[ '' !== $c['area'] ? $c['area'] : 'other' ][] = $c;
-		}
-		foreach ( $byarea as $slug => $list ) {
-			if ( 'other' === $slug || 1 === count( $list ) ) {
-				$single = array_merge( $single, $list );
-				unset( $byarea[ $slug ] );
-			}
+			$byarea[ '' !== $c['area'] ? $c['area'] : '' ][] = $c;
 		}
 		uksort(
 			$byarea,
 			function ( $a, $b ) use ( $byarea ) {
+				if ( '' === $a || '' === $b ) {
+					return '' === $a ? 1 : -1;
+				}
 				return count( $byarea[ $b ] ) - count( $byarea[ $a ] ) ? count( $byarea[ $b ] ) - count( $byarea[ $a ] ) : strcmp( $a, $b );
 			}
 		);
-		if ( $single ) {
-			$byarea['other'] = $single;
-		}
-		$o[] = '<section class="bkn-az"><div class="bkd-wrap"><h2 class="bkn-h2">Every development we list, by neighbourhood</h2><div class="bkn-az-cols">';
+		$azto = isset( $x['azto'] ) ? (array) $x['azto'] : array();
+		$o[]  = '<section class="bkn-az"><div class="bkd-wrap"><h2 class="bkn-h2">Every development we list, by neighbourhood</h2><div class="bkn-az-cols">';
 		foreach ( $byarea as $slug => $list ) {
 			usort(
 				$list,
@@ -8501,20 +8555,15 @@ JS;
 					return strcasecmp( $a['name'], $b['name'] );
 				}
 			);
-			$t    = 'other' === $slug ? null : get_term_by( 'slug', $slug, 'property_area' );
-			$nm   = $t ? blockke_dev_text( $t->name ) : 'Other areas';
-			$o[]  = '<details class="bkn-azg"><summary>' . $e( $nm ) . ' <span>(' . count( $list ) . ')</span></summary><ul>';
+			$t   = '' === (string) $slug ? null : get_term_by( 'slug', $slug, 'property_area' );
+			$nm  = $t ? blockke_dev_text( $t->name ) : 'Neighbourhood to be confirmed';
+			$o[] = '<details class="bkn-azg"><summary>' . $e( $nm ) . ' <span>(' . count( $list ) . ')</span></summary><ul>';
 			foreach ( $list as $c ) {
-				$p   = blockke_bkn_price( $c['from'], $c['to'] );
-				$in  = ! $t && '' !== $c['area'] ? get_term_by( 'slug', $c['area'], 'property_area' ) : null;
-				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="index">' . $e( $c['name'] . ( $in ? ', ' . blockke_dev_text( $in->name ) : '' ) ) . '</a>' . ( '' !== $p ? '<span>' . $e( $p ) . '</span>' : '' ) . '</li>';
+				$p   = blockke_bkn_price( $c['from'], $c['to'], false, false, count( $c['beds'] ) > 1 ); // "From" for several sizes, as on its card
+				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="index">' . $e( $c['name'] ) . '</a>' . ( '' !== $p ? '<span>' . $e( $p ) . '</span>' : '' ) . '</li>';
 			}
-			if ( $t ) {
-				$to  = function_exists( 'blockke_area_on' ) && blockke_area_on( $t ) ? blockke_area_url( $t, 'homes-for-sale' ) : get_term_link( $t );
-				if ( function_exists( 'blockke_area_on' ) && blockke_area_on( $t ) && blockke_bkn_on( 'card_v16' ) ) { // the page that answers for it: the segment, or the area page it folds into
-					$to = blockke_area_page( $t, 'homes-for-sale' )['canon'];
-				}
-				$o[] = '<li class="bkn-azall"><a href="' . esc_url( is_wp_error( $to ) ? '' : $to ) . '">' . $e( 'All homes for sale in ' . $nm ) . '</a></li>';
+			if ( $t && ! empty( $azto[ $slug ] ) ) {
+				$o[] = '<li class="bkn-azall"><a href="' . esc_url( $azto[ $slug ] ) . '">' . $e( 'All homes for sale in ' . $nm ) . '</a></li>';
 			}
 			$o[] = '</ul></details>';
 		}
@@ -8605,12 +8654,13 @@ JS;
 #bkd .bkn-lead-card .bkn-data{margin-top:4px;font-size:16px}
 #bkd .bkn-picks{display:none}
 @media (min-width:768px){#bkd .bkn-picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;margin-top:56px}}
+/* the lead from 1000px: photo in 7 columns, words in 5. Its link stays a real box (the keyboard and Back reach it), with the photo laid over the left column */
 @media (min-width:1000px){
 #bkd .bkn-lead-card{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);grid-template-rows:1fr auto auto auto auto;column-gap:48px}
-#bkd .bkn-lead-card .bkn-a{display:contents}
-#bkd .bkn-lead-card .bkn-a::after{display:none}
-#bkd .bkn-lead-card .bkn-img{grid-column:1;grid-row:1/-1}
-#bkd .bkn-lead-card .bkn-name{grid-column:2;grid-row:2}#bkd .bkn-lead-card .bkn-place{grid-column:2;grid-row:3}#bkd .bkn-lead-card .bkn-data{grid-column:2;grid-row:4}#bkd .bkn-lead-card .bkn-line{grid-column:2;grid-row:5}
+#bkd .bkn-lead-card::before{content:"";grid-column:1;grid-row:1/-1;aspect-ratio:3/2}
+#bkd .bkn-lead-card .bkn-a{grid-column:2;grid-row:2}
+#bkd .bkn-lead-card .bkn-img{position:absolute;top:0;left:0;width:calc((100% - 48px) * 7 / 12);height:100%;aspect-ratio:auto}
+#bkd .bkn-lead-card .bkn-place{grid-column:2;grid-row:3}#bkd .bkn-lead-card .bkn-data{grid-column:2;grid-row:4}#bkd .bkn-lead-card .bkn-line{grid-column:2;grid-row:5}
 #bkd .bkn-lead-card .bkn-name{margin-top:0}
 #bkd .bkn-lead-card > :last-child{margin-bottom:6px}
 }
@@ -8630,21 +8680,32 @@ JS;
 #bkd .bkn-bar-in>.bkn-f:last-of-type{margin-left:0}
 #bkd .bkn-count[hidden]+.bkn-clear[hidden]+.bkn-f{margin-left:auto}
 #bkd .bkn-fbtn,#bkd .bkn-sheet-head,#bkd .bkn-sheet-foot{display:none}
+#bkd .bkn-lab{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 #bkd .bkn-apply{height:40px;padding:0 16px;border:1px solid var(--navy);background:none;font:500 14px var(--font);color:var(--navy)}
+/* phones and tablets: "Filters" and Sort in the bar; the sheet is one design with search's: a title and Close, each field
+   labelled above a boxed select, and the live "Show N" button with "Clear filters" at the foot */
 @media (max-width:999px){
 #bkd .bkn-bar-in{gap:8px 16px;min-height:52px}
 #bkd .bkn-fbtn{display:inline-flex;align-items:center;height:44px;padding:0;border:0;border-bottom:1px solid var(--line-2);background:none;font:600 15px/1 var(--font);color:var(--navy);cursor:pointer}
 #bkd .bkn-fields{display:none}
-#bkd .bkn-fields.on{position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;align-items:stretch;gap:20px;padding:20px var(--gutter) calc(20px + env(safe-area-inset-bottom));background:var(--paper);overflow:auto}
-#bkd .bkn-fields.on .bkn-sheet-head{display:flex;align-items:center;justify-content:space-between;font:600 17px var(--font);color:var(--navy)}
-#bkd .bkn-fields.on .bkn-sheet-foot{display:block;margin-top:auto}
-#bkd .bkn-fields.on select{width:100%;height:52px;font-size:16px!important}
+#bkd .bkn-fields.on{position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;background:var(--paper);overflow:auto;overscroll-behavior:contain}
+#bkd .bkn-fields.on .bkn-sheet-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px;padding:0 calc(var(--gutter) - 12px) 0 var(--gutter);background:var(--paper);border-bottom:1px solid var(--line);font:600 17px/1.2 var(--font);color:var(--navy)}
+#bkd .bkn-fields.on .bkn-sheet-head b{font-weight:600}
+#bkd .bkn-fields.on .bkn-f{display:grid;gap:8px;margin:20px var(--gutter) 0}
+#bkd .bkn-fields.on .bkn-f:last-of-type{margin-bottom:32px}
+#bkd .bkn-fields.on .bkn-lab,#bkd .bkn-fields.on .bkn-f>.bkd-sr{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal;font-size:14px;font-weight:600;line-height:1.4;color:var(--ink)}
+#bkd .bkn-fields.on select{width:100%;height:52px;padding:0 44px 0 16px;border:1px solid var(--line-2)!important;border-radius:0!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 16px center!important;font:400 16px/1.2 var(--font)!important;color:var(--navy)!important}
+#bkd .bkn-fields.on select:focus-visible{outline:2px solid var(--brass-d);outline-offset:2px}
+#bkd .bkn-fields.on .bkn-sheet-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:12px 24px;margin-top:auto;padding:12px var(--gutter) calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#bkd .bkn-sheet-foot .bkd-btn{flex:1 1 auto;width:auto;font-size:15px!important;letter-spacing:0!important;text-transform:none!important}
+#bkd .bkn-sclear{flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;color:var(--slate)!important;text-decoration:underline;text-underline-offset:4px}
 #bkd .bkn-x{display:grid;place-items:center;width:44px;height:44px;border:0;background:none;color:var(--navy);cursor:pointer}
 #bkd .bkn-x .bkd-i{width:20px;height:20px}
 #bkd .bkn-count{display:none}
 #bkd .bkn-clear{display:none}
 #bkd .bkn-bar-in>.bkn-f,#bkd .bkn-bar-in>.bkn-f:last-of-type{margin-left:auto}
 }
+@media (scripting:none) and (max-width:999px){#bkd [data-bkn-bar] .bkn-fbtn{display:none}#bkd [data-bkn-bar] .bkn-fields{display:flex;flex-wrap:wrap;gap:0 24px}#bkd [data-bkn-bar] .bkn-bar-in{flex-wrap:wrap}}
 #bkd .bkn-body{padding-bottom:var(--sec)}
 #bkd .bkn-group{padding-top:56px}
 #bkd .bkn-group+.bkn-group{content-visibility:auto;contain-intrinsic-size:auto 900px}
@@ -8726,7 +8787,7 @@ CSS;
   [].slice.call(root.querySelectorAll('.bkn-group .bkn-card,.bkn-flat .bkn-card,.bkn-ready .bkn-card')).forEach(function(c){byId[c.getAttribute('data-id')]=c;});
   D.rows.forEach(function(r){var c=byId[r[0]];if(c&&r[6]==='ready'){c._ri=ri;}if(r[6]==='ready'){ri++;}if(c&&home[r[6]]){c._home=home[r[6]];cards.push(c);}});
   var gkeys=groups.map(function(g){return g.getAttribute('data-g');});
-  var none=root.querySelector('[data-bkn-none]'),count=root.querySelector('[data-bkn-count]'),clear=root.querySelector('[data-bkn-clear]');
+  var none=root.querySelector('[data-bkn-none]'),count=root.querySelector('[data-bkn-count]'),clear=root.querySelector('[data-bkn-clear]'),sclear=root.querySelector('[data-bkn-sclear]');
   var fields=root.querySelector('[data-bkn-fields]'),fbtn=root.querySelector('[data-bkn-sheet]'),show=root.querySelector('[data-bkn-show]');
   var KEYS=['area','beds','price','completion','sort','n','open'];
   var q=new URLSearchParams(location.search),want=(q.get('open')||'').split(','),open=gkeys.filter(function(k){return want.indexOf(k)>-1;}),n=Math.max(page,+q.get('n')||page);
@@ -8741,7 +8802,7 @@ CSS;
     return true;
   }
   function plural(k,w){return k+' '+w+(k===1?'':'s');}
-  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*Math.pow(10,dp)*1e6)/1e6)/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}return 'KES '+Math.ceil(Math.round(v/1e3*1e6)/1e6)+'K';}
+  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*Math.pow(10,dp)*1e6)/1e6)/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}var k=Math.ceil(Math.round(v/1e3*1e6)/1e6);return 'KES '+(k>=1000?'1M':k+'K');}
   function phrase(f){var b=f.beds?(f.beds==='studio'?'studio ':(f.beds==='4'?'4+ bed ':f.beds+' bed ')):'',s=b+'developments';
     if(f.area){s+=' in '+(f.area==='other'?'other areas':(D.areas[f.area]||f.area));}
     if(f.price){var l=D.bands[f.price][2];s+=' '+(/^Under/.test(l)?'under '+l.replace(/^Under /,''):(/and above$/.test(l)?'from '+l.replace(/ and above$/,''):'at '+l));}
@@ -8765,11 +8826,15 @@ CSS;
   function place(flat){var out=cards.some(function(c){return (!flat||!c._m)&&c.parentNode!==c._home;});
     if(out){cards.forEach(function(c){if(!flat||!c._m){c._home.appendChild(c);}});}}
   function sheetOpen(){return !!fields&&fields.classList.contains('on');}
-  /* after a change the results start just under the bar, not above the screen */
-  function toResults(){var t=(top&&!top.hidden?top:body).getBoundingClientRect().top-form.getBoundingClientRect().bottom;if(t<0){window.scrollBy(0,t);}}
+  /* after a change the results start just under the bar, not above the screen. Worked out from the page, not from where the
+     bar is drawn at that moment: when the list grows above the screen the browser keeps what was in view (scroll anchoring),
+     which can take the page past the list and the bar with it */
+  function toResults(){var el=top&&!top.hidden?top:body,y=el.getBoundingClientRect().top+window.pageYOffset-(parseFloat(getComputedStyle(form).top)||0)-form.offsetHeight;if(window.pageYOffset>y+1){window.scrollTo(0,Math.max(0,Math.round(y)));}}
+  /* the first card shown, for the keyboard focus once the list has changed under it */
+  function firstCard(){return root.querySelector('.bkn-top:not([hidden]) a.bkn-a,[data-bkn-flat]:not([hidden]) .bkn-card:not([hidden]) a.bkn-a,.bkn-group:not([hidden]) .bkn-card:not([hidden]) a.bkn-a');}
   function link(o){var u=new URLSearchParams();Object.keys(o).forEach(function(k){if(o[k]){u.set(k,o[k]);}});var s=u.toString();return location.pathname+(s?'?'+s:'');}
-  var lastKey='',lastNone='';
-  function apply(user,sent){
+  var lastKey='',lastNone='',lastF=null,lastEmpty=false;
+  function apply(){
     var f=read(),set=!!(f.area||f.beds||f.price||f.completion),flat=!!f.sort||f.completion==='ready-now',matched=[],nset=0;
     var base={area:f.area,beds:f.beds,price:f.price,completion:f.completion};
     ['area','beds','price','completion'].forEach(function(k){if(f[k]){nset++;}var s=form.querySelector('[name="'+k+'"]');if(s){s.classList.toggle('on',!!f[k]);}});
@@ -8781,7 +8846,7 @@ CSS;
       groups.forEach(function(g){var key=g.getAttribute('data-g'),grid=g.querySelector('.bkn-grid'),i=0,fr=[],isOpen=open.indexOf(key)>-1;
         [].slice.call(grid.querySelectorAll('.bkn-card')).forEach(function(c){if(c._m){i++;fr.push(R[c.getAttribute('data-id')].from);}c.hidden=!c._m||(!isOpen&&i>size);});
         g.hidden=i===0;var gn=g.querySelector('[data-bkn-gn]');
-        if(gn){gn.textContent=key==='tbc'?plural(i,'development')+' whose published date has passed or was never given.':plural(i,'development')+(fr.length?', from '+money(Math.min.apply(null,fr)):'');}
+        if(gn){gn.textContent=key==='tbc'?plural(i,'development')+' whose published date has passed or was never given.':plural(i,'development')+(fr.length&&!f.price?', from '+money(Math.min.apply(null,fr)):'');}
         var mo=g.querySelector('[data-bkn-more]');if(mo){mo.hidden=isOpen||i<=size;mo.textContent='Show '+(i-size)+' more '+(key==='tbc'?'without a confirmed date':'completing in '+(D.years[key]||key));
           base.open=gkeys.filter(function(k){return k===key||open.indexOf(k)>-1;}).join(',');mo.href=link(base)+'#g-'+key;delete base.open;}});
       flatSec.hidden=true;flatMore.hidden=true;
@@ -8803,14 +8868,14 @@ CSS;
         if(c){opts.push([c,k]);}});
       opts.sort(function(a,b){return b[0]-a[0];}).slice(0,3).forEach(function(o){var li=document.createElement('li'),b=document.createElement('button');b.type='button';
         b.textContent={completion:'Any completion',beds:'Any bedrooms',price:'Any price',area:'Any area'}[o[1]]+' ('+o[0]+')';
-        b.addEventListener('click',function(){form.querySelector('[name="'+o[1]+'"]').value='';n=page;apply(true);track('index_relax',{removed:o[1]});toResults();
-          var a=root.querySelector('[data-bkn-flat]:not([hidden]) .bkn-card:not([hidden]) a.bkn-a,.bkn-group:not([hidden]) .bkn-card:not([hidden]) a.bkn-a');if(a){a.focus({preventScroll:true});}});
+        b.addEventListener('click',function(){flush();form.querySelector('[name="'+o[1]+'"]').value='';n=page;apply();track('index_relax',{removed:o[1]});toResults();
+          var a=firstCard();if(a){a.focus({preventScroll:true});}});
         li.appendChild(b);rl.appendChild(li);});
       var wa=root.querySelector('[data-bkn-wa]');if(wa){wa.href=wa.href.split('?')[0]+'?text='+encodeURIComponent('Hi '+(C.brand||'Block')+', I\'m looking at new developments: '+said(f)+'. Please send current options and price lists. '+location.origin+link(base));}
-      var ph=phrase(f);if(user&&ph!==lastNone&&(sent||!sheetOpen())){lastNone=ph;track('index_no_results',{filters:ph});} /* once per search; from the phone sheet only when it is applied */
     }else{lastNone='';}
+    lastF=f;lastEmpty=empty;
     count.hidden=!set;count.textContent=plural(matched.length,'development');
-    clear.hidden=!set&&!f.sort;
+    clear.hidden=!set&&!f.sort;if(sclear){sclear.hidden=!set;}
     if(fbtn){fbtn.textContent='Filters'+(nset?' · '+nset:'');}
     if(show){show.textContent='Show '+plural(matched.length,'development');}
     /* the address: the index's own keys first (the shortlist form sends its first 200 characters), then whatever else the
@@ -8822,9 +8887,22 @@ CSS;
     if(s!==lastKey){lastKey=s;try{history.replaceState(history.state,'',url);}catch(e){}}
     C.listLabel='new developments';C.ctxBeds=f.beds==='studio'?'studio':f.beds;
   }
+  /* index_no_results once per search: when a change made in the bar settles, or when the sheet is applied */
+  function noneSeen(){if(!lastEmpty||!lastF){return;}var ph=phrase(lastF);if(ph!==lastNone){lastNone=ph;track('index_no_results',{filters:ph});}}
+  /* a change applies at once, but is counted once it settles: when its select loses focus, after a pause, or before the
+     visitor's next step. Arrow keys step through a closed select one option at a time, and each step is not a search */
+  var pend=null;
+  function flush(){if(!pend){return;}var p=pend,s=p.s;pend=null;clearTimeout(p.t);
+    if(s.name==='sort'){track('index_sort',{sort:s.value||'recommended'});}else{track('index_filter',{filter:s.name,value:s.value||'any'});}
+    if(!p.sheet){noneSeen();}}
   form.addEventListener('change',function(e){var t=e.target;if(!t.name){return;}n=page;
-    if(t.name==='sort'){track('index_sort',{sort:t.value||'recommended'});}else{track('index_filter',{filter:t.name,value:t.value||'any'});}apply(true);if(!sheetOpen()){toResults();}});
-  form.addEventListener('submit',function(e){e.preventDefault();apply(true,true);closeSheet();toResults();});
+    if(pend&&pend.s!==t){flush();}
+    apply();
+    if(pend){clearTimeout(pend.t);}pend={s:t,sheet:sheetOpen(),t:setTimeout(flush,600)};
+    if(!sheetOpen()){toResults();}});
+  form.addEventListener('focusout',function(e){if(pend&&e.target===pend.s){flush();}});
+  window.addEventListener('pagehide',flush);
+  form.addEventListener('submit',function(e){e.preventDefault();flush();apply();noneSeen();closeSheet();toResults();});
   root.addEventListener('click',function(e){
     var m=e.target.closest&&e.target.closest('[data-bkn-more]');
     if(m){e.preventDefault();var key=m.getAttribute('data-bkn-more'),g=m.closest('.bkn-group');if(open.indexOf(key)<0){open.push(key);open=gkeys.filter(function(k){return open.indexOf(k)>-1;});}apply();
@@ -8846,23 +8924,35 @@ CSS;
   document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeSheet();}});
   var wide=window.matchMedia?window.matchMedia('(min-width:1000px)'):null,onWide=function(){if(wide.matches){closeSheet(false);}}; /* the Filters button is gone at this width, so focus stays put */
   if(wide){if(wide.addEventListener){wide.addEventListener('change',onWide);}else if(wide.addListener){wide.addListener(onWide);}}
-  clear.addEventListener('click',function(e){e.preventDefault();['area','beds','price','completion','sort'].forEach(function(k){var s=form.querySelector('[name="'+k+'"]');if(s){s.value='';}});open=[];n=page;apply(true);track('index_filter',{filter:'clear',value:''});});
-  apply(false);
+  /* Clear filters: in the bar, every filter and the sort, then the list from its start, with the focus on its first card
+     (the link hides itself); in the sheet, the four filters, and the focus on the first of them */
+  function reset(keys){flush();keys.forEach(function(k){var s=form.querySelector('[name="'+k+'"]');if(s){s.value='';}});open=[];n=page;apply();track('index_filter',{filter:'clear',value:''});}
+  clear.addEventListener('click',function(e){e.preventDefault();reset(['area','beds','price','completion','sort']);toResults();var a=firstCard();if(a){a.focus({preventScroll:true});}});
+  if(sclear){sclear.addEventListener('click',function(e){e.preventDefault();reset(['area','beds','price','completion']);var s=fields.querySelector('select');if(s){s.focus();}});}
+  apply();
 })();
 JS;
 	}
 
-	/** The index's description for search engines: counts and the lowest price, computed. */
+	/**
+	 * The index's description for search engines: counts and the lowest price, computed, and short enough (about 150
+	 * characters) that results show it whole: "204 off-plan developments from KES 1.87M, 200 of them in and around Nairobi,
+	 * with prices and completion dates for each. Independent advice from Block." The lowest price is of all of them.
+	 */
 	function blockke_index_seo() {
 		$x     = blockke_index_data();
 		$froms = array();
 		foreach ( $x['grid'] as $c ) {
 			$froms[] = $c['from'];
 		}
-		$cfg = blockke_dev_config();
+		$cfg  = blockke_dev_config();
+		$n    = count( $x['grid'] );
+		$far  = isset( $x['far'] ) ? (int) $x['far'] : 0;
+		$from = $froms ? ' from ' . blockke_bkn_money( min( $froms ) ) : '';
+		$desc = $n . ' off-plan ' . ( 1 === $n ? 'development' : 'developments' ) . ( $far ? $from . ( $n > $far ? ', ' . ( $n - $far ) . ' of them in and around Nairobi' : '' ) : ' in and around Nairobi' . $from );
 		return array(
 			'title' => 'Off-Plan & New Developments in Nairobi | ' . $cfg['brand_full'],
-			'desc'  => blockke_index_where( $x, 'off-plan developments' ) . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . ', with bedrooms, prices and completion dates for each. Independent advice from ' . $cfg['brand'] . '.',
+			'desc'  => $desc . ', with prices and completion dates for each. Independent advice from ' . $cfg['brand'] . '.',
 			'url'   => get_permalink( blockke_index_page_id() ),
 			'img'   => '' !== $x['lead'] && ! empty( $x['grid'][ $x['lead'] ]['cover'] ) ? (int) $x['grid'][ $x['lead'] ]['cover'] : 0, // og:image: the lead's cover
 		);
