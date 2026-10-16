@@ -9945,7 +9945,7 @@ CSS;
       else if(cy!==+f.completion||d>=999999){return false;}}
     return true;}
   /* "KES 6.06M", "KES 25.3M", "KES 180K": rounded up, as the server writes them */
-  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*Math.pow(10,dp)*1e6)/1e6)/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}return 'KES '+Math.ceil(Math.round(v/1e3*1e6)/1e6)+'K';}
+  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*Math.pow(10,dp)*1e6)/1e6)/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}var k=Math.ceil(Math.round(v/1e3*1e6)/1e6);return 'KES '+(k>=1000?'1M':k+'K');}
   /* with a price filter a card shows the range of its homes ("KES 6.2M–19.8M"), else "From KES 6.2M"; the page arrives drawn for its own filter */
   var priced=null;
   function prices(on){if(priced===on){return;}var first=priced===null;priced=on;
