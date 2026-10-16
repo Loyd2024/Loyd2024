@@ -11143,8 +11143,21 @@ JS;
 	 * there can never break the page: the additions just stay out until the anchors are updated.
 	 */
 	function blockke_bkn_dev_js( $js ) {
-		if ( blockke_dev_lp_target() || ! ( blockke_bkn_ctx_on() || blockke_bkn_vt_on() ) ) {
+		if ( blockke_dev_lp_target() ) {
 			return $js;
+		}
+		// While prefetch is on, a development page opened from a prefetched copy (our card prefetch, or any other speculation
+		// rules) was not counted when it was fetched (blockke_dev_count_view()), so it counts now that it is shown, once,
+		// through blockke_bkn_view(). Reloads and history visits are fetched again and counted there. Its own script, after
+		// the page's, so it needs no anchor.
+		$view = '';
+		if ( blockke_bkn_on( 'prefetch' ) && is_singular( 'estate_property' ) ) {
+			$view = "\n(function(){var C=window.BKDEV,n;try{n=performance.getEntriesByType('navigation')[0];if(C&&!C.lp&&n&&n.deliveryType==='navigational-prefetch'&&n.type==='navigate'&&navigator.sendBeacon){navigator.sendBeacon("
+				. wp_json_encode( esc_url_raw( rest_url( 'block/v1/view' ) ), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS )
+				. ',new URLSearchParams({id:String(C.id)}));}}catch(e){}})();';
+		}
+		if ( ! ( blockke_bkn_ctx_on() || blockke_bkn_vt_on() ) ) {
+			return $js . $view;
 		}
 		$ctx = <<<'JS'
   /* v1.6: the card the visitor clicked to get here (sessionStorage bkn_ctx): their bedrooms preset, then the way back */
@@ -11171,14 +11184,6 @@ JS;
   })();
 
 JS;
-		if ( blockke_bkn_on( 'prefetch' ) && is_singular( 'estate_property' ) ) {
-			// A page opened from a prefetched copy was not counted when it was fetched (blockke_dev_count_view()), so it counts
-			// now that it is shown: once, through blockke_bkn_view(). Reloads and history visits are fetched again and counted there.
-			$ctx .= "  /* v1.6: opened from a prefetched copy: count the view now */\n"
-				. "  (function(){try{var n=performance.getEntriesByType('navigation')[0];if(!C.lp&&n&&n.deliveryType==='navigational-prefetch'&&n.type==='navigate'&&navigator.sendBeacon){navigator.sendBeacon("
-				. wp_json_encode( esc_url_raw( rest_url( 'block/v1/view' ) ), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS )
-				. ",new URLSearchParams({id:String(C.id)}));}}catch(e){}})();\n\n";
-		}
 		$back = <<<'JS'
 
     /* v1.6: back to the list the card was on, by its name ("Back to new developments"); the history.back() path stays */
@@ -11199,10 +11204,10 @@ JS;
 		);
 		foreach ( array_keys( $swap ) as $anchor ) {
 			if ( 1 !== substr_count( $js, $anchor ) ) {
-				return $js;
+				return $js . $view;
 			}
 		}
-		return strtr( $js, $swap );
+		return strtr( $js, $swap ) . $view;
 	}
 
 	/**
