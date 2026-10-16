@@ -7864,8 +7864,15 @@ CSS;
 		// the page reveals; a card already in view then stays where it is (on a long list the page can be too short to centre
 		// it at that moment, and a second move would undo the photo's landing). The focus ring shows only to visitors who
 		// opened the card from the keyboard (or a screen reader), not after a tap or a click.
+		// A plain click only (not a new tab); the URL stays clean. Scroll restoration is paused only when leaving by a card,
+		// so other ways back keep the browser's own scroll. Only the card's own photo moves, and not one that failed. Back
+		// without the back/forward cache: the card in view and focused, else where the visitor was; when the card is not
+		// there yet (a list script adds it), once the page is parsed.
+		// A card photo that fails leaves the plain photo box, not the broken-image icon and alt text: one that failed before
+		// any script could listen (a first-row photo loads at once) and one on a card the list adds later. The development
+		// page script's own handler (blockke_dev_js()) sees data-bkd-failed and leaves it alone.
 		// window.bknVT exists only while the photo transition is on. Print this after the list's own script, so the cards
-		// are in place.
+		// are in place. Comments stay up here: the script is sent as written.
 		$js = <<<'JS'
 (function(){
   'use strict';
@@ -7879,22 +7886,21 @@ CSS;
   function all(id){return Array.prototype.slice.call(document.querySelectorAll('[id="d-'+(+id)+'"]'));}
   function seen(c){return c&&c.getClientRects().length>0;}
   function beds(){var b='';try{b=new URLSearchParams(L.search).get('beds')||'';}catch(e){}b=String(b||B.ctxBeds||'').toLowerCase();return /^(studio|\d)$/.test(b)?b:'';}
-  /* a plain click on a card: remember the list, its place on it and the visitor's bedrooms; the URL stays clean */
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[data-bkn]'),c,im,vt,x;
     if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||(a.target&&a.target!=='_self')||a.hasAttribute('download')||a.origin!==L.origin){return;}
     c=a.closest('[data-id]');vt=!!(c&&a.classList.contains('bkn-a')&&c.getAttribute('data-vt')==='1');im=vt?c.querySelector('.bkn-img img'):null;
+    if(im&&im.hasAttribute('data-bkd-failed')){vt=im=null;}
     x={id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,im:im?String(im.currentSrc||im.src||''):'',k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()};
     put(x);mark({id:x.id,n:x.n,y:x.y,k:x.k});
-    manual(true); /* only when leaving by a card, so other ways back keep the browser's own scroll */
-    if(V&&im){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;} /* only the card's own photo moves */
+    manual(true);
+    if(V&&im){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;}
   });
-  /* back without the back/forward cache: the card in view and focused (its ring only after a keyboard Enter), else where the visitor was */
   function done(){var x=get();if(x&&x.from===L.href&&!x.r){x.r=1;put(x);}}
   function restore(late){
     var r=st().bkn,x=get(),l,c,f,s;if(!r){r=x&&x.from===L.href?x:null;}if(!r||r.r){return;}
     l=all(r.id);c=seen(l[r.n])?l[r.n]:l.filter(seen)[0];
-    if(!c&&!late&&document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){restore(1);});return;} /* cards a list script adds later */
+    if(!c&&!late&&document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){restore(1);});return;}
     if(c){s=c.getBoundingClientRect();if(s.top<0||s.bottom>innerHeight){c.scrollIntoView({block:'center'});}f=c.querySelector('a[data-bkn]');
       if(f){if(!r.k){s=document.createElement('style');s.textContent='#bkd .bkn-quiet:focus-visible,#bkd .bkn-quiet:focus-visible::after{outline:0}';document.head.appendChild(s);f.classList.add('bkn-quiet');f.addEventListener('blur',function(){f.classList.remove('bkn-quiet');},{once:true});}
         try{f.focus({preventScroll:true});}catch(e){}}}else{window.scrollTo(0,+r.y||0);}
@@ -7902,6 +7908,9 @@ CSS;
     var auto=function(){setTimeout(function(){manual(false);},0);};
     if(document.readyState==='complete'){auto();}else{window.addEventListener('load',auto);}
   }
+  function gone(im){if(im.closest('.bkn-img')){im.setAttribute('data-bkd-failed',1);im.style.visibility='hidden';}}
+  document.addEventListener('error',function(e){if(e.target.tagName==='IMG'){gone(e.target);}},true);
+  [].forEach.call(document.querySelectorAll('.bkn-img img'),function(im){if(im.complete&&im.currentSrc&&!im.naturalWidth){gone(im);}});
   var nv=window.performance&&performance.getEntriesByType?performance.getEntriesByType('navigation')[0]:null;
   if(nv&&nv.type==='back_forward'){restore();}
   window.addEventListener('pageshow',function(e){if(!e.persisted){return;}if(V){V.c();}var r=st().bkn;if(r&&!r.r){r.r=1;mark(r);}done();manual(false);});
@@ -11551,15 +11560,32 @@ JS;
 	 * photo-first 3:2 hero while the transition is on.
 	 */
 	function blockke_bkn_dev_css( $vt ) {
-		// The way back (from a card, or the older "Back to results"): 44px to tap. From 700px it heads the breadcrumb on a line
-		// of its own, without the "/" after it, so a long "Back to homes for sale in Westlands" never breaks the trail; where
-		// :has() works, that line runs above Search and Share too, so the label keeps to one line beside a photo.
+		// The way back (from a card, or the older "Back to results"): 44px to tap, always on one line.
+		// - Phones: it is the only link left of Search and Share, which become 40px icons (as under 380px) so a label like
+		//   "Back to homes for sale in Kilimani" keeps to one line; a longer one ends in "…" (where :has() works).
+		// - 700-999px: it heads the breadcrumb on a line of its own, without the "/" after it; where :has() works, that line
+		//   runs above Search and Share too.
+		// - From 1000px the text column beside the photo is too narrow for the breadcrumb and Search and Share (the trail
+		//   stacked into four lines at 1024px), so the whole row becomes one bar across the hero, above the text and the
+		//   photo: the way back, a hairline, the trail on one line (the page's own name shortened with "…" if need be),
+		//   Search and Share at the right.
 		$css = '#bkd .bkd-ctxb{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;margin:-8px 0 8px;font-size:14px;line-height:1.5;color:var(--slate)}'
 			. '#bkd .bkd-ctxb button{display:inline-flex;align-items:center;min-height:44px;margin:0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;font:600 14px/1.4 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;cursor:pointer}'
-			. '@media (max-width:699px){#bkd .bkd-crumbs .bkd-cr-back{min-height:44px;margin:-2px 0}}'
+			. '@media (max-width:699px){#bkd .bkd-crumbs .bkd-cr-back{min-height:44px;margin:-2px 0}'
+			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-crumbs{flex:1 1 auto}'
+			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{display:block;max-width:100%;height:44px;min-height:0;line-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-srch{width:40px;padding:0!important;justify-content:center}#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-srch>span,#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-share span{display:none}#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-share{width:40px;justify-content:center}}'
 			. '@media (min-width:700px){#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back{display:flex;align-items:center;width:100%;min-height:44px;margin:-10px 0 -4px}#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:none}'
 			. '#bkd .bkd-hero-top:has(.bkd-has-back){position:relative;padding-top:24px}'
-			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{position:absolute;top:-20px;left:0;display:block;width:auto;max-width:100%;height:44px;min-height:0;margin:0;padding-top:20px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}';
+			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{position:absolute;top:-20px;left:0;display:block;width:auto;max-width:100%;height:44px;min-height:0;margin:0;padding-top:20px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+			// the trail on one line: the page's own name gives way first, then the page above it (the way back keeps up to
+			// 32em); 6px inside its edge so focus rings are not cut off
+			. '#bkd .bkd-crumbs{flex-wrap:nowrap;align-items:center;margin:-6px;padding:6px;overflow:hidden;white-space:nowrap}#bkd .bkd-crumbs>*{flex:none}'
+			. '#bkd .bkd-crumbs span[aria-current],#bkd .bkd-crumbs a.bkd-cr-up{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}#bkd .bkd-crumbs a.bkd-cr-up{flex-shrink:.001}}'
+			. '@media (min-width:1000px){#bkd .bkd-hero-grid{position:relative;padding-top:68px}'
+			. '#bkd .bkd-hero-top,#bkd .bkd-hero-top:has(.bkd-has-back){position:absolute;top:0;left:var(--gutter);right:var(--gutter);height:44px;margin:0;padding:0;flex-wrap:nowrap}'
+			. '#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back,#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{position:static;display:block;flex:none;width:auto;min-width:0;max-width:32em;height:44px;min-height:0;margin:0;padding:0;line-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+			. '#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:block;width:1px;height:16px;margin:0 8px;overflow:hidden;color:transparent;background:var(--line-2)}}';
 		if ( $vt ) {
 			// Photo first and full-bleed on phones, 7 of 12 columns from 1000px (held in view beside the text, with photos 2
 			// and 3 under it so that column is not left half empty), 3:2 throughout like the cards
@@ -11575,9 +11601,56 @@ JS;
 	}
 
 	/**
+	 * True when $ip is one of Cloudflare's own addresses, as published at cloudflare.com/ips (the same lists since 2021).
+	 * If Cloudflare adds a range, visitors reaching the site through it are counted by Cloudflare's address until it is
+	 * added here: one count per listing every 10 minutes for everyone on that range, never more counts.
+	 */
+	function blockke_bkn_is_cf( $ip ) {
+		$bin = filter_var( $ip, FILTER_VALIDATE_IP ) ? inet_pton( $ip ) : false;
+		if ( false === $bin ) {
+			return false;
+		}
+		if ( 16 === strlen( $bin ) && 0 === strpos( $bin, str_repeat( "\0", 10 ) . "\xff\xff" ) ) {
+			$bin = substr( $bin, 12 ); // an IPv4 address written as IPv6 (::ffff:1.2.3.4) by a dual-stack server
+		}
+		$ranges = array(
+			'173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
+			'190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+			'104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+			'2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+		);
+		foreach ( $ranges as $r ) {
+			list( $net, $bits ) = explode( '/', $r );
+			$net  = inet_pton( $net );
+			$bits = (int) $bits;
+			$full = intdiv( $bits, 8 );
+			$rest = $bits % 8;
+			if ( strlen( $net ) !== strlen( $bin ) || substr( $net, 0, $full ) !== substr( $bin, 0, $full ) ) {
+				continue;
+			}
+			if ( ! $rest || 0 === ( ( ord( $net[ $full ] ) ^ ord( $bin[ $full ] ) ) & ( 0xff << ( 8 - $rest ) ) & 0xff ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The address the view count's limit is kept per: the visitor's own (CF-Connecting-IP) only when the request came
+	 * through Cloudflare, else the connection's (REMOTE_ADDR), so a client that reaches the server directly can't name a
+	 * new address on every request. Hosts that already put the visitor's address in REMOTE_ADDR need nothing more.
+	 */
+	function blockke_bkn_client_ip() {
+		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$cf     = isset( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) : '';
+		return filter_var( $cf, FILTER_VALIDATE_IP ) && blockke_bkn_is_cf( $remote ) ? $cf : $remote;
+	}
+
+	/**
 	 * POST block/v1/view (id): a development page opened from a prefetched copy counts its view (see blockke_bkn_dev_js()).
 	 * Only a published listing on the development layout; not an editor's own visit (as on the page itself); one count per
-	 * connection and listing every 10 minutes. Always answers 204, so nothing can be learned from it.
+	 * visitor address and listing every 10 minutes (blockke_bkn_client_ip()). Always answers 204, so nothing can be
+	 * learned from it.
 	 */
 	function blockke_bkn_view( $req ) {
 		$id = absint( $req->get_param( 'id' ) );
@@ -11589,14 +11662,7 @@ JS;
 		if ( $uid && user_can( $uid, 'edit_post', $id ) ) {
 			return new WP_REST_Response( null, 204 );
 		}
-		$ip = '';
-		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR' ) as $h ) {
-			if ( ! empty( $_SERVER[ $h ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $h ] ) );
-				break;
-			}
-		}
-		$rk = 'bkd_rl_v_' . md5( $ip . '|' . $id );
+		$rk = 'bkd_rl_v_' . md5( blockke_bkn_client_ip() . '|' . $id );
 		if ( get_transient( $rk ) ) {
 			return new WP_REST_Response( null, 204 );
 		}
