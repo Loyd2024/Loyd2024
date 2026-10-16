@@ -213,6 +213,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'index_ready_singles' => false, // single ready listings (often resales) in "Ready to move into"
 			'index_new_days'     => 30,    // "New on Block" tag
 			'index_advisor'      => array( 'name' => '', 'photo' => 0, 'line' => '', 'phone' => '' ), // shown in the shortlist band once filled in
+			'index_metro'        => array( 'Nairobi', 'Kiambu', 'Machakos', 'Kajiado' ), // cities counted as "Nairobi and nearby" on the index; others are "elsewhere in Kenya"
 			'search_layout'      => false, // v1.6: /advanced-search/ results on the new layout (preview: ?bke_search=1)
 			'search_redirect'    => false, // v1.6: simple searches go to the matching area or segment page, or the index
 			'search_params'      => array( 'area' => array( 'location', 'property_area', 'advanced_area', 'adv_location' ), 'beds' => array( 'componentsbeds', 'beds', 'bedrooms' ), 'min' => array( 'price_low', 'price_min' ), 'max' => array( 'price_max' ) ),
@@ -5250,8 +5251,8 @@ JS;
 		$purpose  = $get( 'purpose', 20 );
 		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ) );
 		$contact  = $get( 'contact', 20 );
-		$source   = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'source', 30 ) ) );
-		$intent   = preg_replace( '/[^a-z0-9-]/', '', strtolower( $get( 'intent', 30 ) ) );
+		$source   = preg_replace( '/[^a-z0-9_-]/', '', strtolower( $get( 'source', 30 ) ) ); // keeps "dev_index", so its form label is found
+		$intent   = preg_replace( '/[^a-z0-9_-]/', '', strtolower( $get( 'intent', 30 ) ) );
 		$message  = isset( $p['message'] ) && is_scalar( $p['message'] ) ? mb_substr( sanitize_textarea_field( (string) $p['message'] ), 0, 1500 ) : '';
 		$page     = esc_url_raw( $get( 'page', 300 ) );
 		$attr     = array();
@@ -7689,7 +7690,7 @@ JS;
 		}
 		$cfg  = blockke_dev_config();
 		$all  = blockke_bkn_devs();
-		$ver  = blockke_bkn_ver() . '|ix1|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'] ) ) );
+		$ver  = blockke_bkn_ver() . '|ix2|' . gmdate( 'o-W' ) . '|' . md5( wp_json_encode( array( $cfg['index_picks'], $cfg['index_min_photos'], $cfg['index_ready_singles'], $cfg['index_new_days'], $cfg['neighbours'], $cfg['index_metro'] ) ) );
 		$hit  = get_transient( 'bkn_index' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			$x = $hit['data'];
@@ -7698,6 +7699,7 @@ JS;
 		$grid  = array();
 		$ready = array();
 		$az    = array();
+		$skip  = array();
 		$other = array( 'commercial' => 0, 'land' => 0 );
 		foreach ( $all['devs'] as $k => $c ) {
 			if ( ! in_array( 'sale', $c['acts'], true ) ) {
@@ -7708,7 +7710,8 @@ JS;
 				continue;
 			}
 			if ( '' === $c['area'] && '' === $c['st'] ) {
-				continue; // no area and no status: nowhere until it is tagged
+				$skip[ (int) $c['id'] ] = $c['name']; // no area and no status: nowhere until it is tagged (the admin bar lists them)
+				continue;
 			}
 			$az[ $k ] = $c;
 			$ok       = $c['cover'] && $c['photos'] >= (int) $cfg['index_min_photos'] && $c['from'] > 0 && '' !== $c['area'];
@@ -7808,9 +7811,14 @@ JS;
 			}
 		);
 		$new = array_slice( array_keys( $fresh ), 0, (int) floor( count( $grid ) / 5 ) );
-		$mod = 0;
+		$mod  = 0;
+		$far  = 0; // off-plan developments outside index_metro (Diani, Nyali, Nanyuki...): not "Nairobi and nearby"
+		$rows = blockke_bkn_rows();
+		$near = array_map( 'strtolower', (array) $cfg['index_metro'] );
 		foreach ( $grid as $c ) {
 			$mod = max( $mod, (int) get_post_modified_time( 'U', true, $c['id'] ) );
+			$cy  = isset( $rows[ $c['id'] ]['cy'] ) ? strtolower( $rows[ $c['id'] ]['cy'] ) : '';
+			$far += '' !== $cy && ! in_array( $cy, $near, true ) ? 1 : 0;
 		}
 		$x = array(
 			'grid'  => $grid,
@@ -7821,6 +7829,8 @@ JS;
 			'picks' => $picks,
 			'new'   => $new,
 			'mod'   => $mod,
+			'far'   => $far,
+			'skip'  => $skip,
 		);
 		set_transient( 'bkn_index', array( 'ver' => $ver, 'data' => $x ), DAY_IN_SECONDS );
 		return $x;
@@ -7845,7 +7855,8 @@ JS;
 		$price = $g( 'price' );
 		$comp  = $g( 'completion' );
 		$sort  = $g( 'sort' );
-		$open  = array_values( array_intersect( array_keys( blockke_index_years() + array( 'tbc' => 1 ) ), explode( ',', $g( 'open' ) ) ) );
+		// group keys as strings: PHP turns the keys '2026', '2027'... into integers, which the strict checks below would miss
+		$open  = array_values( array_intersect( array_map( 'strval', array_keys( blockke_index_years() + array( 'tbc' => 1 ) ) ), explode( ',', $g( 'open' ) ) ) );
 		return array(
 			'area'       => sanitize_title( $g( 'area' ) ),
 			'beds'       => in_array( $beds, array( 'studio', '1', '2', '3', '4' ), true ) ? $beds : '',
@@ -7890,6 +7901,29 @@ JS;
 		return true;
 	}
 
+	/** A flat grid's order for a sort, as the script sorts it (ties keep the recommended order, on any PHP version). */
+	function blockke_index_sort( $list, $sort ) {
+		$pos = array_flip( array_keys( $list ) );
+		uksort(
+			$list,
+			function ( $a, $b ) use ( $list, $sort, $pos ) {
+				$x = $list[ $a ];
+				$y = $list[ $b ];
+				if ( 'soonest' === $sort ) {
+					$d = blockke_bkn_done_key( $x ) - blockke_bkn_done_key( $y );
+				} elseif ( 'price-asc' === $sort ) {
+					$d = $x['from'] - $y['from'];
+				} elseif ( 'price-desc' === $sort ) {
+					$d = $y['from'] - $x['from'];
+				} else {
+					$d = $y['d'] - $x['d'];
+				}
+				return $d ? ( $d < 0 ? -1 : 1 ) : $pos[ $a ] - $pos[ $b ];
+			}
+		);
+		return $list;
+	}
+
 	/** Areas offered in the filter: those with at least three developments in the grid, busiest first. */
 	function blockke_index_areas( $grid ) {
 		$n = array();
@@ -7924,6 +7958,14 @@ JS;
 		return $s;
 	}
 
+	/** "200 developments selling off-plan in Nairobi and nearby, and 4 elsewhere in Kenya": only index_metro counts as nearby. */
+	function blockke_index_where( $x, $what ) {
+		$far  = isset( $x['far'] ) ? (int) $x['far'] : 0;
+		$near = count( $x['grid'] ) - $far;
+		$s    = $near . ' ' . ( 1 === $near ? str_replace( 'developments', 'development', $what ) : $what ) . ' in Nairobi and nearby';
+		return $far ? $s . ', and ' . $far . ' elsewhere in Kenya' : $s;
+	}
+
 	/** The index page. */
 	function blockke_index_render() {
 		$cfg   = blockke_dev_config();
@@ -7943,14 +7985,44 @@ JS;
 		foreach ( $grid as $c ) {
 			$froms[] = $c['from'];
 		}
-		$wa = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hello ' . $cfg['brand'] . ", I'm looking at new developments on block.ke. Please send current options and price lists. " . $url );
+		// What matches, as the script will work it out: the grid, or for "Ready now" the Ready set; a flat view in its sort
+		// order (the recommended order without one), so a reload, Back or no JavaScript shows the same list
+		$match = array();
+		foreach ( $grid as $k => $c ) {
+			if ( blockke_index_match( $c, $f, '', array_keys( $areas ) ) ) {
+				$match[ $k ] = $c;
+			}
+		}
+		$fl = array();
+		if ( 'ready-now' === $f['completion'] ) {
+			foreach ( $x['ready'] as $k => $c ) {
+				if ( blockke_index_match( $c, $f, '', array_keys( $areas ) ) ) {
+					$fl[ $k ] = $c;
+				}
+			}
+		} elseif ( $flat ) {
+			$fl = $match;
+		}
+		if ( $fl && '' !== $f['sort'] ) {
+			$fl = blockke_index_sort( $fl, $f['sort'] );
+		}
+		$found = 'ready-now' === $f['completion'] ? count( $fl ) : count( $match );
+		// every cover's attachment and its meta in one go, rather than a query or two per card
+		$covers = array();
+		foreach ( array_merge( array_values( $grid ), array_values( $x['ready'] ) ) as $c ) {
+			$covers[] = (int) $c['cover'];
+		}
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_filter( $covers ), false, true );
+		}
+		$wa = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm looking at new developments on block.ke. Please send current options and price lists. " . $url );
 		$o  = array();
 		$o[] = '<div id="bkd" class="bkd bkn" data-bkn-page="index">' . blockke_dev_sprite();
 
 		// Head: what this is, how many, as of when
 		$o[] = '<header class="bkn-head"><div class="bkd-wrap"><nav class="bkn-crumbs" aria-label="Breadcrumb"><a href="' . esc_url( home_url( '/' ) ) . '">Home</a><span aria-hidden="true">/</span><span aria-current="page">New developments</span></nav>'
 			. '<h1 class="bkn-h1">New developments in Nairobi</h1>'
-			. '<p class="bkn-stand">' . $e( count( $grid ) . ' developments selling off-plan in Nairobi and nearby' . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . '. Prices and dates are as published by each developer; updated ' . wp_date( 'j M Y', $x['mod'] ? $x['mod'] : time() ) . '.' ) . '</p>'
+			. '<p class="bkn-stand">' . $e( blockke_index_where( $x, 'developments selling off-plan' ) . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . '. Prices and dates are as published by each developer; updated ' . wp_date( 'j M Y', $x['mod'] ? $x['mod'] : time() ) . '.' ) . '</p>'
 			. '<p class="bkn-ask-top"><a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>Ask an advisor on WhatsApp</a></p></div></header>';
 
 		// Filter bar: a plain GET form; the script filters in place and keeps the address up to date
@@ -7975,7 +8047,7 @@ JS;
 			. $sel( 'price', 'Price', $bopt, $f['price'] )
 			. $sel( 'completion', 'Completion', array( '' => 'Any completion' ) + $years, $f['completion'] )
 			. '<div class="bkn-sheet-foot"><button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit" data-bkn-show>Show developments</button></div></div>'
-			. '<p class="bkn-count" data-bkn-count aria-live="polite"' . ( $set ? '' : ' hidden' ) . '></p>'
+			. '<p class="bkn-count" data-bkn-count aria-live="polite"' . ( $set ? '>' . $e( $found . ( 1 === $found ? ' development' : ' developments' ) ) : ' hidden>' ) . '</p>'
 			. '<a class="bkn-clear" href="' . esc_url( $url ) . '" data-bkn-clear' . ( $set || '' !== $f['sort'] ? '' : ' hidden' ) . '>Clear filters</a>'
 			. $sel( 'sort', 'Sort', array( '' => 'Recommended', 'soonest' => 'Completion, soonest', 'price-asc' => 'Price, lowest first', 'price-desc' => 'Price, highest first', 'newest' => 'Newest on Block' ), $f['sort'] )
 			. '<noscript><button class="bkn-apply" type="submit">Apply</button></noscript></div></form>';
@@ -7995,14 +8067,8 @@ JS;
 			$o[] = '</div></section>';
 		}
 
-		// The grid: completion years, or one flat grid for a sort or "ready now"
-		$match = array();
-		foreach ( $grid as $k => $c ) {
-			if ( blockke_index_match( $c, $f, '', array_keys( $areas ) ) ) {
-				$match[ $k ] = $c;
-			}
-		}
-		$y      = (int) current_time( 'Y' );
+		// The grid: completion years, or one flat grid for a sort or "ready now". Each card is printed once: in the flat grid
+		// when the flat view shows it, else in its year (or in Ready); the script moves cards between them in place.
 		$labels = array();
 		foreach ( $years as $k => $l ) {
 			if ( 'ready-now' !== $k ) {
@@ -8014,14 +8080,22 @@ JS;
 		foreach ( $grid as $k => $c ) {
 			$byg[ blockke_index_group( $c ) ][ $k ] = $c;
 		}
-		$pos  = 10;
-		$card = function ( $k, $c, $hide ) use ( $x, &$pos ) {
-			$h = blockke_card_html( $c, 'dev', array( 'src' => 'index', 'pos' => $pos++, 'tag' => in_array( $k, $x['new'], true ) ) );
+		$pos   = 10;
+		$page  = (int) $cfg['index_page_size'];
+		$range = '' !== $f['price']; // with a price filter, cards show their price range ("KES 6.2M–19.8M")
+		$card  = function ( $k, $c, $hide, $ctx = array() ) use ( $x, &$pos, $range ) {
+			$h = blockke_card_html( $c, 'dev', array_merge( array( 'src' => 'index', 'pos' => $pos++, 'range' => $range, 'tag' => in_array( $k, $x['new'], true ) ), $ctx ) );
 			return $hide ? preg_replace( '/^<article /', '<article hidden ', $h ) : $h;
 		};
-		$o[] = '<div class="bkn-body" data-bkn-body data-size="' . $size . '" data-page="' . (int) $cfg['index_page_size'] . '">';
-		$o[] = '<section class="bkn-flat" data-bkn-flat' . ( $flat ? '' : ' hidden' ) . ' aria-label="Developments"><div class="bkd-wrap"><div class="bkn-grid" data-bkn-flatgrid></div>'
-			. '<a class="bkn-more" href="' . esc_url( add_query_arg( array_filter( array( 'area' => $f['area'], 'beds' => $f['beds'], 'price' => $f['price'], 'completion' => $f['completion'], 'sort' => $f['sort'], 'n' => $f['n'] + (int) $cfg['index_page_size'] ) ), $url ) ) . '" data-bkn-flatmore hidden>Show more</a></div></section>';
+		$o[] = '<div class="bkn-body" data-bkn-body data-size="' . $size . '" data-page="' . $page . '">';
+		$o[] = '<section class="bkn-flat" data-bkn-flat' . ( $flat ? '' : ' hidden' ) . ' aria-label="Developments"><div class="bkd-wrap"><div class="bkn-grid" data-bkn-flatgrid>';
+		$i   = 0;
+		foreach ( $fl as $k => $c ) {
+			$o[] = $card( $k, $c, $i++ >= $f['n'] );
+		}
+		$left = count( $fl ) - $f['n']; // kept in the page for the script, shown only when more remain; paging stops at 240
+		$o[]  = '</div><a class="bkn-more" href="' . esc_url( add_query_arg( array_filter( array( 'area' => $f['area'], 'beds' => $f['beds'], 'price' => $f['price'], 'completion' => $f['completion'], 'sort' => $f['sort'], 'n' => min( 240, $f['n'] + $page ) ) ), $url ) ) . '" rel="nofollow" data-bkn-flatmore' . ( $left > 0 && $f['n'] < 240 ? '' : ' hidden' ) . '>'
+			. $e( 'Show ' . min( $page, max( 0, $left ) ) . ' more' ) . '</a></div></section>';
 		foreach ( $labels as $g => $l ) {
 			$cards = $byg[ $g ];
 			if ( ! $cards ) {
@@ -8035,10 +8109,13 @@ JS;
 			}
 			$head = 'tbc' === $g
 				? '<div class="bkn-gh"><h2 class="bkn-gy bkn-gy-tbc">Completion date to be confirmed</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development whose' : ' developments whose' ) . ' published date has passed or was never given.' ) . '</p></div>'
-				: '<div class="bkn-gh"><p class="bkn-gk">Completing in</p><h2 class="bkn-gy">' . $e( $l ) . '</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development' : ' developments' ) . ( $fr ? ', from ' . blockke_bkn_money( min( $fr ) ) : '' ) ) . '</p></div>';
+				: '<div class="bkn-gh"><h2 class="bkn-gy"><span class="bkn-gk">Completing in</span> ' . $e( $l ) . '</h2><p class="bkn-gn" data-bkn-gn>' . $e( count( $m ) . ( 1 === count( $m ) ? ' development' : ' developments' ) . ( $fr ? ', from ' . blockke_bkn_money( min( $fr ) ) : '' ) ) . '</p></div>';
 			$o[]  = '<section class="bkn-group" id="g-' . esc_attr( $g ) . '" data-g="' . esc_attr( $g ) . '"' . ( $m && ! $flat ? '' : ' hidden' ) . '><div class="bkd-wrap"><div class="bkn-grid">' . $head;
 			$i    = 0;
 			foreach ( $cards as $k => $c ) {
+				if ( isset( $fl[ $k ] ) ) {
+					continue; // in the flat grid
+				}
 				$show = isset( $m[ $k ] ) && ( $open || $i < $size );
 				if ( isset( $m[ $k ] ) ) {
 					$i++;
@@ -8046,21 +8123,27 @@ JS;
 				$o[] = $card( $k, $c, ! $show );
 			}
 			$rest = count( $m ) - $size;
-			$o[]  = '</div><a class="bkn-more" href="' . esc_url( add_query_arg( array_filter( array( 'area' => $f['area'], 'beds' => $f['beds'], 'price' => $f['price'], 'completion' => $f['completion'], 'open' => implode( ',', array_unique( array_merge( $f['open'], array( (string) $g ) ) ) ) ) ), $url ) . '#g-' . $g ) . '" data-bkn-more="' . esc_attr( $g ) . '"' . ( $rest > 0 && ! $open ? '' : ' hidden' ) . '>'
+			$opn  = implode( ',', array_values( array_intersect( array_map( 'strval', array_keys( $labels ) ), array_merge( $f['open'], array( (string) $g ) ) ) ) ); // page order, so each set of open years has one address
+			$o[]  = '</div><a class="bkn-more" href="' . esc_url( add_query_arg( array_filter( array( 'area' => $f['area'], 'beds' => $f['beds'], 'price' => $f['price'], 'completion' => $f['completion'], 'open' => $opn ) ), $url ) . '#g-' . $g ) . '" rel="nofollow" data-bkn-more="' . esc_attr( $g ) . '"' . ( $rest > 0 && ! $open ? '' : ' hidden' ) . '>'
 				. $e( 'Show ' . max( 0, $rest ) . ' more ' . ( 'tbc' === $g ? 'without a confirmed date' : 'completing in ' . $l ) ) . '</a></div></section>';
 		}
-		// Ready to move into (its own set; "Ready now" in the filter shows it as the grid)
-		$rd  = array_slice( $x['ready'], 0, max( 1, (int) $cfg['index_ready_max'] ), true );
-		$all = get_term_link( 'ready-now', 'property_completion' );
-		$o[] = '<section class="bkn-ready" data-bkn-ready' . ( $set ? ' hidden' : '' ) . '><div class="bkd-wrap"><h2 class="bkn-h2">Ready to move into</h2><p class="bkn-sub">Completed buildings with homes for sale.</p><div class="bkn-grid bkn-grid-4">';
-		foreach ( $rd as $k => $c ) {
-			$o[] = blockke_card_html( $c, 'dev', array( 'src' => 'index', 'pos' => $pos++, 'sizes' => '(min-width:1000px) 279px, (min-width:768px) calc(50vw - 52px), calc(100vw - 40px)' ) );
+		// Ready to move into: the first index_ready_max of the Ready set; the rest are in the page, hidden, for "Ready now"
+		$rmax = max( 1, (int) $cfg['index_ready_max'] );
+		$all  = get_term_link( 'ready-now', 'property_completion' );
+		$o[]  = '<section class="bkn-ready" data-bkn-ready data-max="' . $rmax . '"' . ( $set ? ' hidden' : '' ) . '><div class="bkd-wrap"><h2 class="bkn-h2">Ready to move into</h2><p class="bkn-sub">Completed buildings with homes for sale.</p><div class="bkn-grid bkn-grid-4">';
+		$i    = 0;
+		foreach ( $x['ready'] as $k => $c ) {
+			if ( ! isset( $fl[ $k ] ) ) {
+				$o[] = $card( $k, $c, $i >= $rmax, array( 'tag' => false, 'sizes' => '(min-width:1000px) 279px, (min-width:768px) calc(50vw - 52px), calc(100vw - 40px)' ) );
+			}
+			$i++;
 		}
 		$o[] = '</div>' . ( is_wp_error( $all ) ? '' : '<a class="bkn-link" href="' . esc_url( $all ) . '">See all ready homes</a>' ) . '</div></section>';
 		$o[] = '</div>';
 
 		// Nothing (or almost nothing) matches: say so, and offer the nearest ways out
-		$o[] = '<section class="bkn-none" data-bkn-none hidden><div class="bkd-wrap"><p class="bkn-none-t" data-bkn-none-t></p><ul class="bkn-relax" data-bkn-relax></ul>'
+		$none = $set && ! $found;
+		$o[]  = '<section class="bkn-none" data-bkn-none' . ( $none ? '' : ' hidden' ) . '><div class="bkd-wrap"><p class="bkn-none-t" data-bkn-none-t>' . ( $none ? $e( 'No ' . blockke_index_phrase( $f, $areas ) . '.' ) : '' ) . '</p><ul class="bkn-relax" data-bkn-relax></ul>'
 			. '<p><a class="bkn-link" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa data-bkn-wa>Send this search to an advisor</a></p></div></section></div>'; // the bar stays in view only over the listings
 
 		// The one navy band: ask for a shortlist
@@ -8073,17 +8156,28 @@ JS;
 			. '<a href="tel:' . esc_attr( $tel ? '+' . $tel : $ag['phone'] ) . '">Call ' . $e( $tel ? blockke_dev_phone_display( $tel ) : $ag['phone_display'] ) . '</a></p></div>'
 			. '<div class="bkn-ask-f">' . blockke_index_form() . '</div></div></section>';
 
-		// A-Z: every development we list, by neighbourhood
+		// A-Z: every development we list, by neighbourhood, busiest first. An area with one development, and developments
+		// without an area, go together under "Other areas" at the end, each name followed by its area.
 		$byarea = array();
+		$single = array();
 		foreach ( $x['az'] as $c ) {
 			$byarea[ '' !== $c['area'] ? $c['area'] : 'other' ][] = $c;
 		}
-		uasort(
+		foreach ( $byarea as $slug => $list ) {
+			if ( 'other' === $slug || 1 === count( $list ) ) {
+				$single = array_merge( $single, $list );
+				unset( $byarea[ $slug ] );
+			}
+		}
+		uksort(
 			$byarea,
-			function ( $a, $b ) {
-				return count( $b ) - count( $a );
+			function ( $a, $b ) use ( $byarea ) {
+				return count( $byarea[ $b ] ) - count( $byarea[ $a ] ) ? count( $byarea[ $b ] ) - count( $byarea[ $a ] ) : strcmp( $a, $b );
 			}
 		);
+		if ( $single ) {
+			$byarea['other'] = $single;
+		}
 		$o[] = '<section class="bkn-az"><div class="bkd-wrap"><h2 class="bkn-h2">Every development we list, by neighbourhood</h2><div class="bkn-az-cols">';
 		foreach ( $byarea as $slug => $list ) {
 			usort(
@@ -8097,7 +8191,8 @@ JS;
 			$o[]  = '<details class="bkn-azg"><summary>' . $e( $nm ) . ' <span>(' . count( $list ) . ')</span></summary><ul>';
 			foreach ( $list as $c ) {
 				$p   = blockke_bkn_price( $c['from'], $c['to'] );
-				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="index">' . $e( $c['name'] ) . '</a>' . ( '' !== $p ? '<span>' . $e( $p ) . '</span>' : '' ) . '</li>';
+				$in  = ! $t && '' !== $c['area'] ? get_term_by( 'slug', $c['area'], 'property_area' ) : null;
+				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="index">' . $e( $c['name'] . ( $in ? ', ' . blockke_dev_text( $in->name ) : '' ) ) . '</a>' . ( '' !== $p ? '<span>' . $e( $p ) . '</span>' : '' ) . '</li>';
 			}
 			if ( $t ) {
 				$to  = function_exists( 'blockke_area_on' ) && blockke_area_on( $t ) ? blockke_area_url( $t, 'homes-for-sale' ) : get_term_link( $t );
@@ -8129,11 +8224,12 @@ JS;
 	/** The shortlist form: name, phone, budget, message; posted to the development-lead endpoint as an index enquiry. */
 	function blockke_index_form() {
 		$cfg = blockke_dev_config();
-		$h   = '<form class="bkd-form" data-bkd-lead="dev_index" data-unit="New developments" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$h   = '<form class="bkd-form" data-bkd-lead="dev_index" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
 		$h  .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h  .= '<label class="bkd-f"><span>Budget <small>(optional)</small></span><select name="budget"><option value="">Not sure yet</option>';
 		foreach ( isset( $cfg['budget_bands']['sale'] ) ? (array) $cfg['budget_bands']['sale'] : array() as $b ) {
-			$h .= '<option>' . esc_html( $b[2] ) . '</option>';
+			// the filter's words ("KES 8–12M"), so the email reads like the search the visitor made
+			$h .= '<option>' . esc_html( function_exists( 'blockke_search_band_label' ) ? blockke_search_band_label( (float) $b[0], (float) $b[1], false ) : $b[2] ) . '</option>';
 		}
 		$h .= '</select></label><label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="Bedrooms, areas, when you would like to move in."></textarea></label>';
 		$h .= '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send</button>';
@@ -8142,12 +8238,14 @@ JS;
 		return $h;
 	}
 
-	/** Rows the script filters on: one per grid card, plus the filter labels. */
+	/** Rows the script filters on: one per grid and Ready card, in the page's order, plus the filter labels. */
 	function blockke_index_json() {
 		$x    = blockke_index_data();
 		$rows = array();
-		foreach ( $x['grid'] as $k => $c ) {
-			$rows[] = array( (int) $c['id'], $c['areas'], $c['area'], $c['beds'], (int) $c['from'], (int) ( $c['to'] > 0 ? $c['to'] : $c['from'] ), blockke_index_group( $c ), blockke_bkn_done_key( $c ), (int) $c['d'], $c['ft'] ? 1 : 0, $c['vt'] ? 1 : 0, (int) $c['photos'] );
+		foreach ( array( 'grid', 'ready' ) as $set ) { // grid rows carry their completion group, Ready rows the group 'ready'
+			foreach ( $x[ $set ] as $k => $c ) {
+				$rows[] = array( (int) $c['id'], $c['areas'], $c['area'], $c['beds'], (int) $c['from'], (int) ( $c['to'] > 0 ? $c['to'] : $c['from'] ), 'ready' === $set ? 'ready' : blockke_index_group( $c ), blockke_bkn_done_key( $c ), (int) $c['d'], $c['ft'] ? 1 : 0, $c['vt'] ? 1 : 0, (int) $c['photos'] );
+			}
 		}
 		$bands = array();
 		foreach ( blockke_index_bands() as $k => $b ) {
@@ -8170,17 +8268,19 @@ JS;
 #bkd.bkn em{font-style:normal}
 #bkd .bkn-head{padding:40px 0 48px}
 #bkd .bkn-crumbs{display:flex;flex-wrap:wrap;gap:8px;font-size:13px;line-height:1.5;color:var(--muted)}
-#bkd .bkn-crumbs a{color:var(--slate)!important;text-decoration:none}
+#bkd .bkn-crumbs a{display:inline-block;padding:13px 0;margin:-13px 0;color:var(--slate)!important;text-decoration:none}
 #bkd .bkn-crumbs a:hover{text-decoration:underline;text-underline-offset:3px}
 #bkd :is(.bkn-h1,.bkn-h2,.bkn-gy,.bkn-none-t){font-family:var(--display)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;text-transform:none!important}
-#bkd .bkn-h1{margin:24px 0 0;max-width:15ch;font-size:64px!important;line-height:1.05!important;color:var(--navy)!important}
+#bkd .bkn-h1{margin:24px 0 0;max-width:20ch;font-size:64px!important;line-height:1.05!important;color:var(--navy)!important}
 #bkd .bkn-stand{margin:20px 0 0;max-width:52ch;font-size:18px;line-height:1.6;color:var(--ink)}
 #bkd .bkn-ask-top{margin:16px 0 0;font-size:15px}
+#bkd .bkn-ask-top a,#bkd .bkn-none .bkn-link,#bkd .bkn-also a{display:inline-block;padding:11px 0;margin:-11px 0}
 #bkd .bkn-ask-top a,#bkd .bkn-link,#bkd .bkn-more,#bkd .bkn-also a{color:var(--navy)!important;font-weight:500;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
 #bkd .bkn-link:hover,#bkd .bkn-more:hover,#bkd .bkn-also a:hover{text-decoration-thickness:2px}
 #bkd .bkn-h2{margin:0;font-size:40px!important;line-height:1.1!important;color:var(--navy)!important}
 #bkd .bkn-sub{margin:10px 0 0;font-size:16px;color:var(--slate)}
 #bkd .bkn-top{padding:48px 0 0}
+#bkd .bkn-top[hidden]{display:none}
 @media (max-width:767px){#bkd .bkn-top{padding-top:0}}
 #bkd .bkn-lead-card .bkn-name{font-size:48px!important;line-height:1.05!important;margin-top:20px}
 #bkd .bkn-lead-card .bkn-place{margin-top:10px;font-size:15px}
@@ -8199,6 +8299,7 @@ JS;
 @media (max-width:767px){#bkd .bkn-lead-card .bkn-img{margin:0 calc(var(--gutter) * -1)}#bkd .bkn-lead-card .bkn-name{font-size:34px!important}}
 @media (min-width:768px) and (max-width:999px){#bkd .bkn-lead-card .bkn-name{font-size:40px!important}}
 #bkd .bkn-bar{position:sticky;top:var(--top);z-index:30;margin:0;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#bkd .bkn-bar.bkn-up{z-index:100050}
 #bkd .bkn-bar-in{display:flex;align-items:center;gap:8px 28px;min-height:60px}
 #bkd .bkn-fields{display:flex;align-items:center;gap:8px 28px;flex-wrap:wrap}
 #bkd .bkn-f{position:relative;display:block;margin:0}
@@ -8207,7 +8308,7 @@ JS;
 #bkd .bkn-bar select.on{border-bottom:2px solid var(--brass)!important}
 #bkd .bkn-count{margin:0 0 0 auto;font-size:14px;color:var(--slate);white-space:nowrap}
 #bkd .bkn-count:not([hidden])+.bkn-clear{margin-left:0}
-#bkd .bkn-clear{margin-left:auto;font-size:14px;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;white-space:nowrap}
+#bkd .bkn-clear{display:inline-flex;align-items:center;min-height:44px;margin-left:auto;font-size:14px;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;white-space:nowrap}
 #bkd .bkn-bar-in>.bkn-f:last-of-type{margin-left:0}
 #bkd .bkn-count[hidden]+.bkn-clear[hidden]+.bkn-f{margin-left:auto}
 #bkd .bkn-fbtn,#bkd .bkn-sheet-head,#bkd .bkn-sheet-foot{display:none}
@@ -8233,22 +8334,22 @@ JS;
 @media (min-width:768px){#bkd .bkn-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 24px}#bkd .bkn-gh{grid-column:1/-1}}
 @media (min-width:1000px){#bkd .bkn-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:56px 32px}#bkd .bkn-gh{grid-column:auto}#bkd .bkn-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}#bkd .bkn-grid-4 .bkn-name{font-size:22px}}
 #bkd .bkn-gh{padding-top:2px}
-#bkd .bkn-gk{margin:0;font-size:14px;color:var(--slate)}
-#bkd .bkn-gy{margin:6px 0 0;font-size:72px!important;line-height:.95!important;letter-spacing:-.02em!important;color:var(--navy)!important}
+#bkd .bkn-gy{margin:0;font-size:72px!important;line-height:.95!important;letter-spacing:-.02em!important;color:var(--navy)!important}
 #bkd .bkn-gy-tbc{font-size:40px!important;line-height:1.1!important}
+#bkd .bkn-gy .bkn-gk{display:block;margin:0 0 6px;font:400 14px/1.5 var(--font);letter-spacing:normal;color:var(--slate)}
 #bkd .bkn-gn{margin:14px 0 0;max-width:30ch;font-size:14px;line-height:1.5;color:var(--ink)}
 @media (max-width:999px){#bkd .bkn-gy{font-size:56px!important}#bkd .bkn-h1{font-size:52px!important}#bkd .bkn-h2{font-size:34px!important}}
 @media (max-width:639px){#bkd .bkn-gy{font-size:44px!important}#bkd .bkn-h1{font-size:40px!important}#bkd .bkn-h2{font-size:30px!important}#bkd .bkn-stand{font-size:16px}#bkd .bkn-name{font-size:24px!important}#bkd .bkn-head{padding:24px 0 32px}#bkd .bkn-group{padding-top:48px}}
-#bkd .bkn-more{display:inline-block;margin-top:32px;font-size:15px}
+#bkd .bkn-more{display:inline-flex;align-items:center;min-height:44px;margin-top:22px;font-size:15px}
 #bkd .bkn-flat{padding-top:48px}
 #bkd .bkn-ready{padding-top:var(--sec)}
 #bkd .bkn-ready .bkn-grid{margin-top:32px}
-#bkd .bkn-ready .bkn-link{display:inline-block;margin-top:32px;font-size:15px}
+#bkd .bkn-ready .bkn-link{display:inline-flex;align-items:center;min-height:44px;margin-top:22px;font-size:15px}
 #bkd .bkn-none{padding:56px 0 var(--sec)}
 #bkd .bkn-none-t{margin:0;max-width:40ch;font-size:32px!important;line-height:1.2!important;color:var(--navy)!important}
 #bkd .bkn-relax{margin:20px 0 24px}
 #bkd .bkn-relax li{margin:0 0 8px}
-#bkd .bkn-relax button{padding:0;border:0;background:none;font:500 15px var(--font);color:var(--navy);text-decoration:underline;text-underline-offset:4px;cursor:pointer;min-height:40px}
+#bkd .bkn-relax button{padding:0;border:0;background:none;font:500 15px var(--font);color:var(--navy);text-decoration:underline;text-underline-offset:4px;cursor:pointer;min-height:44px}
 #bkd .bkn-ask{padding:var(--sec) 0;background:var(--navy);color:var(--on-navy)}
 #bkd .bkn-ask .bkn-h2{color:#fff!important}
 #bkd .bkn-ask-t,#bkd .bkn-ask-t p{color:var(--on-navy)!important}
@@ -8263,21 +8364,25 @@ JS;
 #bkd .bkn-adv b{display:block;font-weight:600;color:#fff!important}
 #bkd .bkn-adv span{display:block;font-size:14px}
 #bkd .bkn-ask-f{padding:32px;background:#fff;color:var(--ink)}
-@media (max-width:639px){#bkd .bkn-ask-f{margin:0 calc(var(--gutter) * -1);padding:24px var(--gutter)}}
+@media (max-width:639px){#bkd[data-bkn-page="index"] .bkn-ask{padding-bottom:0}#bkd .bkn-ask-f{margin:0 calc(var(--gutter) * -1);padding:24px var(--gutter)}}
 #bkd .bkn-az{padding:var(--sec) 0}
-#bkd .bkn-az-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 40px;margin-top:32px;border-top:1px solid var(--line)}
+#bkd .bkn-az-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 40px;align-items:start;margin-top:32px;border-top:1px solid var(--line)}
 @media (min-width:768px){#bkd .bkn-az-cols{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1000px){#bkd .bkn-az-cols{grid-template-columns:repeat(3,minmax(0,1fr))}}
 #bkd .bkn-azg{border-bottom:1px solid var(--line)}
 #bkd .bkn-azg summary{display:flex;align-items:center;justify-content:space-between;min-height:52px;cursor:pointer;list-style:none;font-size:16px;font-weight:600;color:var(--navy)}
 #bkd .bkn-azg summary::-webkit-details-marker{display:none}
 #bkd .bkn-azg summary span{font-weight:400;color:var(--muted)}
+#bkd .bkn-azg[open]{grid-column:1/-1}
 #bkd .bkn-azg ul{padding:0 0 16px}
+#bkd .bkn-azg[open] ul{columns:3 240px;column-gap:40px}
+#bkd .bkn-azg li{break-inside:avoid}
 #bkd .bkn-azg li{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px;line-height:1.4}
 #bkd .bkn-azg li a{color:var(--ink)!important;text-decoration:none}
 #bkd .bkn-azg li a:hover{text-decoration:underline;text-underline-offset:3px}
 #bkd .bkn-azg li span{flex:none;color:var(--muted);font-variant-numeric:tabular-nums}
 #bkd .bkn-azall a{color:var(--navy)!important;font-weight:500;text-decoration:underline!important;text-underline-offset:4px}
+@media (pointer:coarse){#bkd .bkn-azg li{align-items:center;padding:0}#bkd .bkn-azg li a{display:block;min-height:44px;padding:12px 0;box-sizing:border-box}}
 #bkd .bkn-also{margin:32px 0 0;font-size:15px}
 #bkd .bkn-disc{margin:32px 0 0;max-width:90ch;font-size:13px;line-height:1.6;color:var(--muted)}
 CSS;
@@ -8295,52 +8400,83 @@ CSS;
   var R={};D.rows.forEach(function(r){R[r[0]]={areas:r[1],area:r[2],beds:r[3],from:r[4],to:r[5],g:r[6],done:r[7],d:r[8]};});
   var form=root.querySelector('[data-bkn-bar]'),body=root.querySelector('[data-bkn-body]'),size=+body.getAttribute('data-size')||8,page=+body.getAttribute('data-page')||18;
   var flatSec=root.querySelector('[data-bkn-flat]'),flatGrid=root.querySelector('[data-bkn-flatgrid]'),flatMore=root.querySelector('[data-bkn-flatmore]');
-  var groups=[].slice.call(root.querySelectorAll('.bkn-group')),ready=root.querySelector('[data-bkn-ready]');
-  var cards=[];groups.forEach(function(g){[].slice.call(g.querySelectorAll('.bkn-card')).forEach(function(c){c._home=c.parentNode;cards.push(c);});});
+  var groups=[].slice.call(root.querySelectorAll('.bkn-group')),ready=root.querySelector('[data-bkn-ready]'),top=root.querySelector('.bkn-top');
+  /* every grid and Ready card in the recommended order (the rows' order), each knowing its own section; Ready cards their place in it */
+  var home={},byId={},cards=[],ri=0,rmax=ready?+ready.getAttribute('data-max')||8:8;
+  groups.forEach(function(g){home[g.getAttribute('data-g')]=g.querySelector('.bkn-grid');});
+  if(ready){home.ready=ready.querySelector('.bkn-grid');}
+  [].slice.call(root.querySelectorAll('.bkn-group .bkn-card,.bkn-flat .bkn-card,.bkn-ready .bkn-card')).forEach(function(c){byId[c.getAttribute('data-id')]=c;});
+  D.rows.forEach(function(r){var c=byId[r[0]];if(c&&r[6]==='ready'){c._ri=ri;}if(r[6]==='ready'){ri++;}if(c&&home[r[6]]){c._home=home[r[6]];cards.push(c);}});
+  var gkeys=groups.map(function(g){return g.getAttribute('data-g');});
   var none=root.querySelector('[data-bkn-none]'),count=root.querySelector('[data-bkn-count]'),clear=root.querySelector('[data-bkn-clear]');
   var fields=root.querySelector('[data-bkn-fields]'),fbtn=root.querySelector('[data-bkn-sheet]'),show=root.querySelector('[data-bkn-show]');
-  var q=new URLSearchParams(location.search),open=(q.get('open')||'').split(',').filter(Boolean),n=Math.max(page,+q.get('n')||page);
+  var KEYS=['area','beds','price','completion','sort','n','open'];
+  var q=new URLSearchParams(location.search),want=(q.get('open')||'').split(','),open=gkeys.filter(function(k){return want.indexOf(k)>-1;}),n=Math.max(page,+q.get('n')||page);
   function read(){var f={};['area','beds','price','completion','sort'].forEach(function(k){var s=form.querySelector('[name="'+k+'"]');f[k]=s?s.value:'';});return f;}
   function inAreas(a){return Object.prototype.hasOwnProperty.call(D.areas,a);}
   function match(r,f,skip){
     if(skip!=='area'&&f.area){if(f.area==='other'?inAreas(r.area):r.areas.indexOf(f.area)<0){return false;}}
     if(skip!=='beds'&&f.beds){var b=f.beds==='studio'?0:+f.beds,ok=false;r.beds.forEach(function(x){ok=ok||(b===4?x>=4:x===b);});if(!ok){return false;}}
     if(skip!=='price'&&f.price){var bd=D.bands[f.price];if(!bd||!r.from||r.to<bd[0]||(bd[1]>0&&r.from>=bd[1])){return false;}}
-    if(skip!=='completion'&&f.completion&&f.completion!=='ready-now'&&r.g!==f.completion){return false;}
+    var w=skip==='completion'?'':f.completion; /* "Ready now" takes the Ready set; any other completion the grid */
+    if(w==='ready-now'?r.g!=='ready':(r.g==='ready'||(w&&r.g!==w))){return false;}
     return true;
   }
   function plural(k,w){return k+' '+w+(k===1?'':'s');}
-  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*1e6)/1e6*Math.pow(10,dp))/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}return 'KES '+Math.ceil(v/1e3)+'K';}
+  function money(v){if(v>=1e6){var dp=v>=1e7?1:2,x=Math.ceil(Math.round(v/1e6*Math.pow(10,dp)*1e6)/1e6)/Math.pow(10,dp);return 'KES '+(+x.toFixed(dp))+'M';}return 'KES '+Math.ceil(Math.round(v/1e3*1e6)/1e6)+'K';}
   function phrase(f){var b=f.beds?(f.beds==='studio'?'studio ':(f.beds==='4'?'4+ bed ':f.beds+' bed ')):'',s=b+'developments';
     if(f.area){s+=' in '+(f.area==='other'?'other areas':(D.areas[f.area]||f.area));}
     if(f.price){var l=D.bands[f.price][2];s+=' '+(/^Under/.test(l)?'under '+l.replace(/^Under /,''):(/and above$/.test(l)?'from '+l.replace(/ and above$/,''):'at '+l));}
     if(f.completion){s+=f.completion==='ready-now'?' ready now':' completing in '+(D.years[f.completion]||f.completion);}
     return s;}
+  /* the search as a list for the WhatsApp message: "Westlands, 2 bed, KES 8–12M, completing 2027" */
+  function said(f){var p=[];if(f.area){p.push(f.area==='other'?'other areas':(D.areas[f.area]||f.area));}
+    if(f.beds){p.push(f.beds==='studio'?'studios':(f.beds==='4'?'4+':f.beds)+' bed');}
+    if(f.price){p.push(D.bands[f.price][2].replace(/^Under /,'under '));}
+    if(f.completion){p.push(f.completion==='ready-now'?'ready now':'completing '+(D.years[f.completion]||f.completion));}
+    return p.join(', ');}
   function cmp(s){return function(a,b){var x=R[a.getAttribute('data-id')],y=R[b.getAttribute('data-id')];
     if(s==='soonest'){return x.done-y.done;}if(s==='price-asc'){return x.from-y.from;}if(s==='price-desc'){return y.from-x.from;}return y.d-x.d;};}
-  var lastKey='';
-  function apply(user){
+  /* with a price filter a card shows its price range ("KES 6.2M–19.8M"), else "From KES 6.2M"; the page arrives drawn for its own filter */
+  var priced=null;
+  function prices(on){if(priced===on){return;}var first=priced===null;priced=on;
+    cards.forEach(function(c){var b=c.querySelector('.bkn-data b'),r=R[c.getAttribute('data-id')],k=on?1:0;if(!b||!(r.to>r.from)){return;}
+      if(first){b._t=[];b._t[k]=b.textContent;return;}
+      if(!b._t[k]){b._t[k]=on?money(r.from)+'–'+money(r.to).replace(/^\D+/,''):'From '+money(r.from);}b.textContent=b._t[k];});}
+  /* cards go back to their own section in the recommended order; in a flat view only those that are not shown there */
+  function place(flat){var out=cards.some(function(c){return (!flat||!c._m)&&c.parentNode!==c._home;});
+    if(out){cards.forEach(function(c){if(!flat||!c._m){c._home.appendChild(c);}});}}
+  function sheetOpen(){return !!fields&&fields.classList.contains('on');}
+  /* after a change the results start just under the bar, not above the screen */
+  function toResults(){var t=(top&&!top.hidden?top:body).getBoundingClientRect().top-form.getBoundingClientRect().bottom;if(t<0){window.scrollBy(0,t);}}
+  function link(o){var u=new URLSearchParams();Object.keys(o).forEach(function(k){if(o[k]){u.set(k,o[k]);}});var s=u.toString();return location.pathname+(s?'?'+s:'');}
+  var lastKey='',lastNone='';
+  function apply(user,sent){
     var f=read(),set=!!(f.area||f.beds||f.price||f.completion),flat=!!f.sort||f.completion==='ready-now',matched=[],nset=0;
+    var base={area:f.area,beds:f.beds,price:f.price,completion:f.completion};
     ['area','beds','price','completion'].forEach(function(k){if(f[k]){nset++;}var s=form.querySelector('[name="'+k+'"]');if(s){s.classList.toggle('on',!!f[k]);}});
     var so=form.querySelector('[name="sort"]');if(so){so.classList.toggle('on',!!f.sort);}
-    cards.forEach(function(c){if(match(R[c.getAttribute('data-id')],f)){matched.push(c);}});
-    if(f.completion==='ready-now'){matched=[];}
+    cards.forEach(function(c){c._m=match(R[c.getAttribute('data-id')],f);if(c._m){matched.push(c);}});
+    if(top){top.hidden=set||flat;}
+    place(flat);
     if(!flat){
-      cards.forEach(function(c){if(c.parentNode!==c._home){c._home.appendChild(c);}});
       groups.forEach(function(g){var key=g.getAttribute('data-g'),grid=g.querySelector('.bkn-grid'),i=0,fr=[],isOpen=open.indexOf(key)>-1;
-        [].slice.call(grid.querySelectorAll('.bkn-card')).forEach(function(c){var ok=matched.indexOf(c)>-1;if(ok){i++;fr.push(R[c.getAttribute('data-id')].from);}c.hidden=!ok||(!isOpen&&i>size);});
+        [].slice.call(grid.querySelectorAll('.bkn-card')).forEach(function(c){if(c._m){i++;fr.push(R[c.getAttribute('data-id')].from);}c.hidden=!c._m||(!isOpen&&i>size);});
         g.hidden=i===0;var gn=g.querySelector('[data-bkn-gn]');
-        if(gn){gn.textContent=key==='tbc'?plural(i,'development')+(i===1?' whose':' whose')+' published date has passed or was never given.':plural(i,'development')+(fr.length?', from '+money(Math.min.apply(null,fr)):'');}
-        var mo=g.querySelector('[data-bkn-more]');if(mo){mo.hidden=isOpen||i<=size;mo.textContent='Show '+(i-size)+' more '+(key==='tbc'?'without a confirmed date':'completing in '+(D.years[key]||key));}});
-      flatSec.hidden=true;
+        if(gn){gn.textContent=key==='tbc'?plural(i,'development')+' whose published date has passed or was never given.':plural(i,'development')+(fr.length?', from '+money(Math.min.apply(null,fr)):'');}
+        var mo=g.querySelector('[data-bkn-more]');if(mo){mo.hidden=isOpen||i<=size;mo.textContent='Show '+(i-size)+' more '+(key==='tbc'?'without a confirmed date':'completing in '+(D.years[key]||key));
+          base.open=gkeys.filter(function(k){return k===key||open.indexOf(k)>-1;}).join(',');mo.href=link(base)+'#g-'+key;delete base.open;}});
+      flatSec.hidden=true;flatMore.hidden=true;
     }else{
       groups.forEach(function(g){g.hidden=true;});
-      matched.sort(cmp(f.sort||'soonest'));
-      matched.forEach(function(c,i){flatGrid.appendChild(c);c.hidden=i>=n;});
-      flatSec.hidden=f.completion==='ready-now';flatMore.hidden=matched.length<=n;flatMore.textContent='Show '+Math.min(page,matched.length-n)+' more';
+      if(f.sort){matched.sort(cmp(f.sort));}
+      matched.forEach(function(c,i){if(flatGrid.children[i]!==c){flatGrid.insertBefore(c,flatGrid.children[i]||null);}c.hidden=i>=n;});
+      flatSec.hidden=false;flatMore.hidden=matched.length<=n;flatMore.textContent='Show '+Math.min(page,matched.length-n)+' more';
+      base.sort=f.sort;base.n=Math.min(240,n+page);flatMore.href=link(base);delete base.sort;delete base.n;
     }
-    if(ready){ready.hidden=set&&f.completion!=='ready-now';}
-    var empty=!matched.length&&f.completion!=='ready-now';
+    if(ready){ready.hidden=set;cards.forEach(function(c){if(c._ri!==undefined&&c.parentNode===c._home){c.hidden=c._ri>=rmax;}});}
+    prices(!!f.price);
+    var empty=!matched.length;
     none.hidden=!empty;
     if(empty){
       root.querySelector('[data-bkn-none-t]').textContent='No '+phrase(f)+'.';
@@ -8348,37 +8484,50 @@ CSS;
       var opts=[];['completion','beds','price','area'].forEach(function(k){if(!f[k]){return;}var c=0;cards.forEach(function(el){if(match(R[el.getAttribute('data-id')],f,k)){c++;}});
         if(c){opts.push([c,k]);}});
       opts.sort(function(a,b){return b[0]-a[0];}).slice(0,3).forEach(function(o){var li=document.createElement('li'),b=document.createElement('button');b.type='button';
-        b.textContent={completion:'Any completion',beds:'Any bedrooms',price:'Any price',area:'Any area'}[o[1]]+' ('+o[0]+')';b.addEventListener('click',function(){form.querySelector('[name="'+o[1]+'"]').value='';apply(true);track('index_relax',{removed:o[1]});});li.appendChild(b);rl.appendChild(li);});
-      var wa=root.querySelector('[data-bkn-wa]');if(wa){wa.href=wa.href.split('?')[0]+'?text='+encodeURIComponent('Hello Block, I\'m looking at new developments: '+phrase(f)+'. Please send current options and price lists. '+location.href);}
-      if(user){track('index_no_results',{filters:phrase(f)});}
-    }
-    count.hidden=!set;count.textContent=plural(f.completion==='ready-now'?root.querySelectorAll('.bkn-ready .bkn-card').length:matched.length,'development');
+        b.textContent={completion:'Any completion',beds:'Any bedrooms',price:'Any price',area:'Any area'}[o[1]]+' ('+o[0]+')';
+        b.addEventListener('click',function(){form.querySelector('[name="'+o[1]+'"]').value='';n=page;apply(true);track('index_relax',{removed:o[1]});toResults();
+          var a=root.querySelector('[data-bkn-flat]:not([hidden]) .bkn-card:not([hidden]) a.bkn-a,.bkn-group:not([hidden]) .bkn-card:not([hidden]) a.bkn-a');if(a){a.focus({preventScroll:true});}});
+        li.appendChild(b);rl.appendChild(li);});
+      var wa=root.querySelector('[data-bkn-wa]');if(wa){wa.href=wa.href.split('?')[0]+'?text='+encodeURIComponent('Hi '+(C.brand||'Block')+', I\'m looking at new developments: '+said(f)+'. Please send current options and price lists. '+location.origin+link(base));}
+      var ph=phrase(f);if(user&&ph!==lastNone&&(sent||!sheetOpen())){lastNone=ph;track('index_no_results',{filters:ph});} /* once per search; from the phone sheet only when it is applied */
+    }else{lastNone='';}
+    count.hidden=!set;count.textContent=plural(matched.length,'development');
     clear.hidden=!set&&!f.sort;
     if(fbtn){fbtn.textContent='Filters'+(nset?' · '+nset:'');}
-    if(show){show.textContent=f.completion==='ready-now'?'Show ready homes':'Show '+plural(matched.length,'development');}
+    if(show){show.textContent='Show '+plural(matched.length,'development');}
+    /* the address: the index's own keys first (the shortlist form sends its first 200 characters), then whatever else the
+       visitor arrived with, such as campaign tags, untouched */
     var u=new URLSearchParams();['area','beds','price','completion','sort'].forEach(function(k){if(f[k]){u.set(k,f[k]);}});
     if(flat&&n>page){u.set('n',n);}if(!flat&&open.length){u.set('open',open.join(','));}
-    var s=u.toString(),url=location.pathname+(s?'?'+s:'')+location.hash;
+    var s=u.toString(),x=new URLSearchParams(location.search);KEYS.forEach(function(k){x.delete(k);});
+    var all=[s,x.toString()].filter(Boolean).join('&'),url=location.pathname+(all?'?'+all:'')+location.hash;
     if(s!==lastKey){lastKey=s;try{history.replaceState(history.state,'',url);}catch(e){}}
     C.listLabel='new developments';C.ctxBeds=f.beds==='studio'?'studio':f.beds;
   }
   form.addEventListener('change',function(e){var t=e.target;if(!t.name){return;}n=page;
-    if(t.name==='sort'){track('index_sort',{sort:t.value||'recommended'});}else{track('index_filter',{filter:t.name,value:t.value||'any'});}apply(true);});
-  form.addEventListener('submit',function(e){e.preventDefault();apply(true);closeSheet();var top=root.querySelector('[data-bkn-body]');if(top&&fields.classList.contains('was')){top.scrollIntoView({block:'start'});}});
+    if(t.name==='sort'){track('index_sort',{sort:t.value||'recommended'});}else{track('index_filter',{filter:t.name,value:t.value||'any'});}apply(true);if(!sheetOpen()){toResults();}});
+  form.addEventListener('submit',function(e){e.preventDefault();apply(true,true);closeSheet();toResults();});
   root.addEventListener('click',function(e){
     var m=e.target.closest&&e.target.closest('[data-bkn-more]');
-    if(m){e.preventDefault();var key=m.getAttribute('data-bkn-more');if(open.indexOf(key)<0){open.push(key);}apply();track('index_more',{group:key,shown:'all'});return;}
-    if(e.target===flatMore){e.preventDefault();n+=page;apply();track('index_more',{group:'flat',shown:n});return;}
+    if(m){e.preventDefault();var key=m.getAttribute('data-bkn-more'),g=m.closest('.bkn-group');if(open.indexOf(key)<0){open.push(key);open=gkeys.filter(function(k){return open.indexOf(k)>-1;});}apply();
+      var nx=g?g.querySelectorAll('.bkn-card:not([hidden]) a.bkn-a')[size]:null;if(nx){nx.focus({preventScroll:true});} /* the first card it revealed */
+      track('index_more',{group:key,shown:'all'});return;}
+    if(e.target.closest&&e.target.closest('[data-bkn-flatmore]')){e.preventDefault();var was=n;n+=page;apply();var nf=flatGrid.querySelectorAll('.bkn-card:not([hidden]) a.bkn-a')[was];if(nf){nf.focus({preventScroll:true});}track('index_more',{group:'flat',shown:n});return;}
     var a=e.target.closest&&e.target.closest('a[data-bkn]');
-    if(a){var card=a.closest('.bkn-card,.bkn-row'),sec=a.closest('.bkn-group,.bkn-top,.bkn-ready,.bkn-az,.bkn-flat');
-      track('index_card_click',{target_id:card?card.getAttribute('data-id'):'',position:+(a.getAttribute('data-pos')||0),slot:sec?(sec.classList.contains('bkn-top')?(a.closest('.bkn-lead-card')?'lead':'pick'):sec.classList.contains('bkn-ready')?'ready':sec.classList.contains('bkn-az')?'az':'group'):'',group:sec&&sec.getAttribute('data-g')||'',vt:('onpagereveal' in window)?1:0,transport_type:'beacon'});}
+    if(a){var card=a.closest('.bkn-card,.bkn-row'),sec=a.closest('.bkn-group,.bkn-top,.bkn-ready,.bkn-az,.bkn-flat'),rr=card?R[card.getAttribute('data-id')]:null;
+      track('index_card_click',{target_id:card?card.getAttribute('data-id'):'',position:+(a.getAttribute('data-pos')||0),slot:sec?(sec.classList.contains('bkn-top')?(a.closest('.bkn-lead-card')?'lead':'pick'):sec.classList.contains('bkn-ready')||(rr&&rr.g==='ready'&&!sec.classList.contains('bkn-az'))?'ready':sec.classList.contains('bkn-az')?'az':'group'):'',group:sec&&sec.getAttribute('data-g')||'',vt:('onpagereveal' in window)?1:0,transport_type:'beacon'});}
     if(e.target.closest&&e.target.closest('[data-bkd-wa]')){track('index_whatsapp',{filters:phrase(read())});}
   });
-  function openSheet(){fields.classList.add('on','was');fbtn.setAttribute('aria-expanded','true');document.documentElement.classList.add('bkd-lock');var s=fields.querySelector('select');if(s){s.focus();}}
-  function closeSheet(){if(!fields.classList.contains('on')){return;}fields.classList.remove('on');fbtn.setAttribute('aria-expanded','false');document.documentElement.classList.remove('bkd-lock');fbtn.focus();}
+  /* the phone and tablet sheet: a dialog above the theme's header, Tab kept inside it; it closes itself if the screen widens */
+  function trap(e){if(e.key!=='Tab'||!sheetOpen()){return;}var f=[].slice.call(fields.querySelectorAll('button,select,a[href]')).filter(function(x){return x.offsetParent!==null&&!x.disabled;});if(!f.length){return;}
+    if(!fields.contains(document.activeElement)){e.preventDefault();f[0].focus();}else if(e.shiftKey&&document.activeElement===f[0]){e.preventDefault();f[f.length-1].focus();}else if(!e.shiftKey&&document.activeElement===f[f.length-1]){e.preventDefault();f[0].focus();}}
+  function openSheet(){form.classList.add('bkn-up');fields.classList.add('on');fields.setAttribute('role','dialog');fields.setAttribute('aria-modal','true');fields.setAttribute('aria-label','Filters');fbtn.setAttribute('aria-expanded','true');document.documentElement.classList.add('bkd-lock');document.addEventListener('keydown',trap);var s=fields.querySelector('select');if(s){s.focus();}}
+  function closeSheet(back){if(!sheetOpen()){return;}fields.classList.remove('on');form.classList.remove('bkn-up');['role','aria-modal','aria-label'].forEach(function(k){fields.removeAttribute(k);});fbtn.setAttribute('aria-expanded','false');document.documentElement.classList.remove('bkd-lock');document.removeEventListener('keydown',trap);if(back!==false){fbtn.focus();}}
   if(fbtn){fbtn.addEventListener('click',openSheet);}
   root.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-bkn-close]')){closeSheet();}});
   document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeSheet();}});
+  var wide=window.matchMedia?window.matchMedia('(min-width:1000px)'):null,onWide=function(){if(wide.matches){closeSheet(false);}}; /* the Filters button is gone at this width, so focus stays put */
+  if(wide){if(wide.addEventListener){wide.addEventListener('change',onWide);}else if(wide.addListener){wide.addListener(onWide);}}
   clear.addEventListener('click',function(e){e.preventDefault();['area','beds','price','completion','sort'].forEach(function(k){var s=form.querySelector('[name="'+k+'"]');if(s){s.value='';}});open=[];n=page;apply(true);track('index_filter',{filter:'clear',value:''});});
   apply(false);
 })();
@@ -8395,9 +8544,39 @@ JS;
 		$cfg = blockke_dev_config();
 		return array(
 			'title' => 'Off-Plan & New Developments in Nairobi | ' . $cfg['brand_full'],
-			'desc'  => count( $x['grid'] ) . ' off-plan developments in Nairobi and nearby' . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . ', with bedrooms, prices and completion dates for each. Independent advice from ' . $cfg['brand'] . '.',
+			'desc'  => blockke_index_where( $x, 'off-plan developments' ) . ( $froms ? ', from ' . blockke_bkn_money( min( $froms ) ) : '' ) . ', with bedrooms, prices and completion dates for each. Independent advice from ' . $cfg['brand'] . '.',
 			'url'   => get_permalink( blockke_index_page_id() ),
+			'img'   => '' !== $x['lead'] && ! empty( $x['grid'][ $x['lead'] ]['cover'] ) ? (int) $x['grid'][ $x['lead'] ]['cover'] : 0, // og:image: the lead's cover
 		);
+	}
+
+	/**
+	 * Rank Math's graph on the index: our BreadcrumbList in place of its own (same @id, so WebPage.breadcrumb still points
+	 * at it), the page as a CollectionPage, no Article node from the page defaults, and our ItemList.
+	 */
+	function blockke_index_rank_math_graph( $data ) {
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+		$seo = blockke_index_seo();
+		foreach ( $data as $k => $node ) {
+			if ( is_array( $node ) && isset( $node['@type'] ) && is_string( $node['@type'] ) && in_array( $node['@type'], array( 'Article', 'BlogPosting', 'NewsArticle' ), true ) ) {
+				unset( $data[ $k ] );
+			}
+		}
+		if ( isset( $data['WebPage'] ) && is_array( $data['WebPage'] ) ) {
+			$data['WebPage']['@type'] = 'CollectionPage';
+		}
+		foreach ( blockke_index_jsonld() as $node ) {
+			unset( $node['@context'] );
+			if ( 'BreadcrumbList' === $node['@type'] ) {
+				$id                     = isset( $data['BreadcrumbList']['@id'] ) ? $data['BreadcrumbList']['@id'] : $seo['url'] . '#breadcrumb';
+				$data['BreadcrumbList'] = array( '@id' => $id ) + $node;
+			} else {
+				$data['bknItemList'] = $node;
+			}
+		}
+		return $data;
 	}
 
 	/** ItemList (the lead, the picks and the first cards of each year) and BreadcrumbList, without prices. */
@@ -8488,22 +8667,29 @@ JS;
 				},
 				99
 			);
-			add_filter(
-				'rank_math/json_ld',
-				function ( $data ) {
-					foreach ( blockke_index_jsonld() as $i => $node ) {
-						unset( $node['@context'] );
-						$data[ 'bkn' . $i ] = $node;
-					}
-					return $data;
-				},
-				99
-			);
+			add_filter( 'rank_math/json_ld', 'blockke_index_rank_math_graph', 99 );
+			if ( $seo['img'] ) { // share previews show the lead's cover, not an image Rank Math found in the old page's content
+				foreach ( array( 'facebook', 'twitter' ) as $net ) {
+					add_action(
+						'rank_math/opengraph/' . $net . '/add_additional_images',
+						function ( $images ) use ( $seo ) {
+							if ( is_object( $images ) && method_exists( $images, 'add_image_by_id' ) ) {
+								$images->add_image_by_id( $seo['img'] );
+							}
+						}
+					);
+				}
+				add_filter( 'rank_math/opengraph/pre_set_content_image', '__return_true' );
+			}
+			if ( ! defined( 'RANK_MATH_VERSION' ) ) {
+				remove_action( 'wp_head', 'rel_canonical' ); // ours below is the one canonical
+			}
 			add_action(
 				'wp_head',
 				function () use ( $seo ) {
 					if ( ! defined( 'RANK_MATH_VERSION' ) ) {
-						echo '<meta name="description" content="' . esc_attr( $seo['desc'] ) . '">' . "\n" . '<link rel="canonical" href="' . esc_url( $seo['url'] ) . '">' . "\n";
+						$og = $seo['img'] ? wp_get_attachment_image_url( $seo['img'], 'large' ) : '';
+						echo '<meta name="description" content="' . esc_attr( $seo['desc'] ) . '">' . "\n" . '<link rel="canonical" href="' . esc_url( $seo['url'] ) . '">' . "\n" . ( $og ? '<meta property="og:image" content="' . esc_url( $og ) . '">' . "\n" : '' );
 						foreach ( blockke_index_jsonld() as $node ) {
 							echo '<script type="application/ld+json">' . wp_json_encode( $node, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG ) . "</script>\n";
 						}
@@ -8522,7 +8708,7 @@ JS;
 						'id'        => 0,
 						'slug'      => '',
 						'name'      => 'New developments',
-						'leadName'  => 'new developments on block.ke',
+						'leadName'  => 'new developments', // the message adds " on block.ke" itself
 						'title'     => 'New developments in Nairobi',
 						'url'       => get_permalink( blockke_index_page_id() ),
 						'brand'     => $cfg['brand'],
@@ -8595,6 +8781,13 @@ JS;
 			$bar->add_node( array( 'parent' => 'bkn', 'id' => 'bkn-late', 'title' => esc_html( count( $late ) . ' off-plan ' . ( 1 === count( $late ) ? 'date has' : 'dates have' ) . ' passed' ) ) );
 			foreach ( array_slice( $late, 0, 10 ) as $c ) {
 				$bar->add_node( array( 'parent' => 'bkn-late', 'id' => 'bkn-late-' . (int) $c['id'], 'title' => esc_html( $c['name'] ), 'href' => get_edit_post_link( $c['id'] ) ) );
+			}
+			$skip = isset( $x['skip'] ) ? (array) $x['skip'] : array(); // homes for sale with no area and no status: on no list until tagged
+			if ( $skip ) {
+				$bar->add_node( array( 'parent' => 'bkn', 'id' => 'bkn-skip', 'title' => esc_html( 'Not shown: ' . count( $skip ) . ' (no area or status)' ) ) );
+				foreach ( array_slice( $skip, 0, 10, true ) as $id => $name ) {
+					$bar->add_node( array( 'parent' => 'bkn-skip', 'id' => 'bkn-skip-' . (int) $id, 'title' => esc_html( $name . ' (' . (int) $id . ')' ), 'href' => get_edit_post_link( $id ) ) );
+				}
 			}
 		},
 		91
