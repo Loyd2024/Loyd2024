@@ -6218,17 +6218,21 @@ JS;
 		return '' !== $p && $data['segs'][ $slug ]['n'] > 0 && $data['segs'][ $slug ]['n'] === $data['segs'][ $p ]['n'];
 	}
 
-	/** "from KES 4.2M to KES 23.5M a month", "at KES 13M" (one listing at one price), "from KES 25M", or ''. */
-	function blockke_area_range( $x, $rent ) {
+	/**
+	 * "from KES 4.2M to KES 23.5M a month", "at KES 13M" (one listing at one price), "from KES 25M", or ''. $v16: the v1.6
+	 * pages round up as their cards do (blockke_bkn_money()) and say "at" only for one home at one price.
+	 */
+	function blockke_area_range( $x, $rent, $v16 = false ) {
 		if ( $x['min'] <= 0 ) {
 			return '';
 		}
-		$m = $rent ? ' a month' : '';
+		$m   = $rent ? ' a month' : '';
+		$fmt = $v16 ? 'blockke_bkn_money' : 'blockke_dev_short';
 		if ( $x['max'] > $x['min'] ) {
-			return 'from ' . blockke_dev_short( $x['min'] ) . ' to ' . blockke_dev_short( $x['max'] ) . $m;
+			return 'from ' . $fmt( $x['min'] ) . ' to ' . $fmt( $x['max'] ) . $m;
 		}
-		$one = 1 === (int) $x['n'] && ( isset( $x['cards'][0]['ptxt'] ) ? 0 !== strpos( $x['cards'][0]['ptxt'], 'From' ) : count( (array) $x['cards'][0]['beds'] ) < 2 ); // a v1.6 card with one price (min = max) and one size
-		return ( $one ? 'at ' : 'from ' ) . blockke_dev_short( $x['min'] ) . $m;
+		$one = $v16 ? blockke_area_v16_one( $x ) : 1 === (int) $x['n'] && ( isset( $x['cards'][0]['ptxt'] ) ? 0 !== strpos( $x['cards'][0]['ptxt'], 'From' ) : count( (array) $x['cards'][0]['beds'] ) < 2 );
+		return ( $one ? 'at ' : 'from ' ) . $fmt( $x['min'] ) . $m;
 	}
 
 	/** Everything one area page or segment page needs. */
@@ -6253,7 +6257,7 @@ JS;
 		$tag   = '';
 		$desc  = '';
 		if ( $seg ) {
-			$rg = blockke_area_range( $sd, 'rent' === $seg[1] );
+			$rg = blockke_area_range( $sd, 'rent' === $seg[1], $v16 );
 			if ( $sd['n'] ) {
 				$tag  = $noun( $sd['n'] ) . ( '' !== $rg ? ( 0 === strpos( $rg, 'at ' ) ? ' ' : ', ' ) . $rg : '' ) . '.';
 				$desc = $label . ' in ' . $where . ': ' . $noun( $sd['n'] ) . ( '' !== $rg ? ' ' . $rg : '' ) . '. Compare photos and prices, then speak to a ' . $cfg['brand_full'] . ' advisor.';
@@ -6265,7 +6269,8 @@ JS;
 			foreach ( array( 'homes-for-sale' => 'homes for sale', 'homes-for-rent' => 'homes for rent', 'commercial-for-sale' => 'commercial property for sale', 'commercial-for-rent' => 'commercial property for rent', 'land-for-sale' => 'land for sale', 'land-for-rent' => 'land for lease' ) as $s => $w ) {
 				$x = $data['segs'][ $s ];
 				if ( $x['n'] ) {
-					$bits[] = $w . ( $x['min'] > 0 ? ' from ' . blockke_dev_short( $x['min'] ) . ( 'rent' === $segs[ $s ][1] ? ' a month' : '' ) : '' );
+					// v1.6: rounded up and "at" for one home, as the section line under it says ("Homes for sale at KES 22M.")
+					$bits[] = $w . ( $x['min'] > 0 ? ( $v16 && blockke_area_v16_one( $x ) ? ' at ' : ' from ' ) . ( $v16 ? blockke_bkn_money( $x['min'] ) : blockke_dev_short( $x['min'] ) ) . ( 'rent' === $segs[ $s ][1] ? ' a month' : '' ) : '' );
 				}
 			}
 			$last = array_pop( $bits );
@@ -6439,9 +6444,15 @@ JS;
 			. ( $privacy ? ' <a href="' . esc_url( $privacy ) . '" target="_blank" rel="noopener">Privacy policy</a>' : '' ) . '</div>';
 	}
 
-	/** Name and phone. $arrow: the v1.5 pages' arrow after the button's words (the v1.6 pages have none). */
-	function blockke_area_quick_form( $source, $cta, $p, $arrow = true ) {
-		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '" data-unit="' . esc_attr( $p['name'] ) . '" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+	/**
+	 * Name and phone. $arrow: the v1.5 pages' arrow after the button's words (the v1.6 pages have none). $unit: what the
+	 * enquiry is about (default the page's name; '' for none, as on the v1.6 pages, where it would only repeat the page's
+	 * name: the WhatsApp text after sending already says "about homes for sale in Westlands", and the lead carries the area
+	 * and segment).
+	 */
+	function blockke_area_quick_form( $source, $cta, $p, $arrow = true, $unit = null ) {
+		$unit = null === $unit ? $p['name'] : $unit;
+		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '"' . ( '' !== $unit ? ' data-unit="' . esc_attr( $unit ) . '"' : '' ) . ' novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
 			. '<div class="bkd-qgrid">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>'
 			. '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">' . esc_html( $cta ) . ( $arrow ? blockke_dev_icon( 'arrow' ) : '' ) . '</button>' . blockke_area_consent( $p ) . '</form>' . blockke_dev_ok();
 	}
@@ -9179,7 +9190,33 @@ JS;
 		return (int) $n . ' ' . $w . ( 1 === (int) $n ? '' : 's' );
 	}
 
-	/** A segment page's filters, mid-sentence: "2 bed homes for sale in Westlands at KES 8–12M completing in 2027". */
+	/** One home at one price and one size: the hero, the standfirst and the section line then say "at KES 22M", never "from". */
+	function blockke_area_v16_one( $sd ) {
+		return 1 === (int) $sd['homes'] && $sd['max'] <= $sd['min'] && ( ! $sd['cards'] || count( $sd['cards'][0]['beds'] ) < 2 );
+	}
+
+	/**
+	 * A development's card lines, for the area page's photo strip, escaped: array( place line, data line ), as its card
+	 * (blockke_card_html()) would print them: "5 bed villa" (the area left out when it is this one), "<b>KES 150M</b> ·
+	 * Completion Jun 2028". No price reads "Price on request", so the line is never empty.
+	 */
+	function blockke_area_v16_lines( $c, $rent, $scope ) {
+		$e     = 'esc_html';
+		$many  = count( $c['beds'] ) > 1;
+		$price = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, false, $many ) : blockke_bkn_price( $c['from'], $c['to'], false, false, $many );
+		$place = $c['area'] === $scope ? '' : $c['place'];
+		$bd    = blockke_bkn_beds( $c['beds'], $c['types'] );
+		$done  = $rent ? '' : blockke_bkn_done_text( $c );
+		return array(
+			implode( ' · ', array_filter( array( $e( $place ), '' !== $bd ? '<span class="bkn-nw">' . $e( $bd ) . '</span>' : '' ) ) ),
+			implode( ' · ', array_filter( array( '<b>' . $e( '' !== $price ? $price : 'Price on request' ) . '</b>', '' !== $done ? '<span class="bkn-nw">' . $e( $done ) . '</span>' : '' ) ) ),
+		);
+	}
+
+	/**
+	 * A segment page's filters, mid-sentence: "2 bed homes for sale in Westlands at KES 8–12M completing in 2027"; the top band
+	 * reads "from KES 60M", as on search and the new developments page.
+	 */
 	function blockke_area_v16_phrase( $p, $f ) {
 		$what = strtolower( $p['label'] );
 		if ( 'studio' === $f['beds'] ) {
@@ -9189,8 +9226,9 @@ JS;
 		}
 		$s = $what . ' in ' . $p['area'];
 		if ( '' !== $f['price'] ) {
-			$l  = blockke_area_v16_bands( 'rent' === $p['action'] )[ $f['price'] ][2];
-			$s .= 0 === strpos( $l, 'Under ' ) ? ' under ' . substr( $l, 6 ) : ' at ' . $l;
+			$b  = blockke_area_v16_bands( 'rent' === $p['action'] )[ $f['price'] ];
+			$l  = $b[2];
+			$s .= 0 === strpos( $l, 'Under ' ) ? ' under ' . substr( $l, 6 ) : ( $b[1] > 0 ? ' at ' . $l : ' from ' . preg_replace( '/ and above$/', '', $l ) );
 		}
 		if ( '' !== $f['completion'] ) {
 			$s .= 'ready-now' === $f['completion'] ? ' ready to move into' : ' completing in ' . blockke_index_years()[ $f['completion'] ];
@@ -9270,12 +9308,13 @@ JS;
 		$card  = function ( $c, $i, $rent, $extra = array() ) use ( $term ) {
 			return blockke_card_html( $c, 'dev', array_merge( array( 'src' => 'area', 'scope' => $term->slug, 'pos' => $i + 1, 'rent' => $rent ), $extra ) );
 		};
-		// developments listed without a photo: by name and price, never a placeholder tile ($h: a heading, when a grid is above)
+		// developments listed without a photo: by name and price ("Price on request" without one, as on the cards), never a
+		// placeholder tile ($h: a heading, when a grid is above)
 		$names = function ( $list, $rent, $h ) use ( $e ) {
 			$x = '<div class="bka16-text">' . ( $h ? '<' . $h . ' class="bka16-h3">' . $e( 'Also listed (' . count( $list ) . ')' ) . '</' . $h . '>' : '' ) . '<ul>';
 			foreach ( $list as $c ) {
 				$pr = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, false, count( $c['beds'] ) > 1 ) : blockke_bkn_price( $c['from'], $c['to'], false, false, count( $c['beds'] ) > 1 );
-				$x .= '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area">' . $e( $c['name'] ) . '</a>' . ( '' !== $pr ? '<span>' . $e( $pr ) . '</span>' : '' ) . '</li>';
+				$x .= '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area">' . $e( $c['name'] ) . '</a><span>' . $e( '' !== $pr ? $pr : 'Price on request' ) . '</span></li>';
 			}
 			return $x . '</ul></div>';
 		};
@@ -9307,16 +9346,20 @@ JS;
 		}
 		$o[] = '</div></header>';
 
-		// Area page: photos of its leading developments (three, or one when its first kind has few), captioned and linked; the
-		// first section's grid starts after them, so no photo shows twice
+		// Area page: photos of its leading developments (three, or one when its first kind has few), linked; the first
+		// section's grid starts after them, so no photo shows twice. Each is captioned as its card would be (name, bedrooms,
+		// price, completion), since it is not in the grid below. On phones the first is full width and the others are rows.
 		$lead = $secs ? reset( $secs )['strip'] : array();
 		if ( $lead ) {
+			$lr  = 'rent' === $segs[ array_keys( $secs )[0] ][1];
 			// sizes as drawn: the large photo 7/12 of the 1200px wrap (790px), 448px at 768, the page width on phones; the
-			// small ones beside it 395px, 224px, half the page on phones; one photo alone spans the wrap
-			$sz  = 1 === count( $lead ) ? array( '(min-width:1240px) 1200px, (min-width:768px) calc(100vw - 80px), calc(100vw - 40px)' ) : array( '(min-width:1000px) 790px, (min-width:768px) 448px, calc(100vw - 40px)', '(min-width:1000px) 395px, (min-width:768px) 224px, calc(50vw - 26px)' );
+			// small ones beside it 395px, 224px, and 112px rows on phones; one photo alone spans the wrap
+			$sz  = 1 === count( $lead ) ? array( '(min-width:1240px) 1200px, (min-width:768px) calc(100vw - 80px), calc(100vw - 40px)' ) : array( '(min-width:1000px) 790px, (min-width:768px) 448px, calc(100vw - 40px)', '(min-width:1000px) 395px, (min-width:768px) 224px, 112px' );
 			$o[] = '<div class="bkd-wrap"><ul class="bka16-strip bka16-n' . count( $lead ) . '">';
 			foreach ( array_values( $lead ) as $i => $c ) {
-				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area" data-pos="' . ( $i + 1 ) . '"><span class="bkn-img">' . wp_get_attachment_image( $c['cover'], 0 === $i ? 'large' : 'medium_large', false, array( 'alt' => $c['name'], 'sizes' => $sz[ min( $i, count( $sz ) - 1 ) ], 'loading' => 0 === $i ? 'eager' : 'lazy', 'decoding' => 'async' ) ) . '</span><span class="bka16-cap">' . $e( $c['name'] ) . '</span></a></li>';
+				$ln  = blockke_area_v16_lines( $c, $lr, $term->slug );
+				$o[] = '<li id="d-' . (int) $c['id'] . '" data-id="' . (int) $c['id'] . '"><a href="' . esc_url( $c['url'] ) . '" data-bkn="area" data-pos="' . ( $i + 1 ) . '"><span class="bkn-img">' . wp_get_attachment_image( $c['cover'], 0 === $i ? 'large' : 'medium_large', false, array( 'alt' => $c['name'], 'sizes' => $sz[ min( $i, count( $sz ) - 1 ) ], 'loading' => 0 === $i ? 'eager' : 'lazy', 'decoding' => 'async' ) ) . '</span>'
+					. '<span class="bka16-cap"><span class="bka16-capn">' . $e( $c['name'] ) . '</span>' . ( '' !== $ln[0] ? '<span class="bkn-place">' . $ln[0] . '</span>' : '' ) . '<span class="bkn-data">' . $ln[1] . '</span></span></a></li>';
 			}
 			$o[] = '</ul></div>';
 		}
@@ -9372,16 +9415,16 @@ JS;
 					$o[] = preg_replace( '/^<article /', '<article data-r="' . (int) $r . '"' . ( isset( $list[ $r ] ) && $i < $f['n'] ? '' : ' hidden' ) . ' ', $h, 1 );
 					$i++;
 				}
-				// nothing matches: the search in words ("No studios for sale in Westlands at KES 60M and above."); the script
+				// nothing matches: the search in words ("No studios for sale in Westlands from KES 60M."); the script
 				// adds the ways out, the filter that frees most first
 				$o[] = '</div><div class="bkn-none bka16-none" data-bka-none data-what="' . esc_attr( strtolower( $p['label'] ) ) . '" data-where="' . esc_attr( $area ) . '"' . ( $list ? ' hidden' : '' ) . '><p class="bkn-none-t" data-bka-none-t>' . ( $list ? '' : $e( 'No ' . blockke_area_v16_phrase( $p, $f ) . '.' ) ) . '</p><ul class="bkn-relax" data-bka-relax></ul>'
-					. '<p><button class="bkd-inline" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div>'
+					. '<p><button class="bkd-inline" type="button" data-bkd-enquire="find">Ask an advisor to find one</button></p></div>'
 					. '<a class="bkn-more" href="' . esc_url( add_query_arg( 'n', $f['n'] + $f['page'] ) ) . '" rel="nofollow" data-bka-more' . ( count( $list ) > $f['n'] ? '' : ' hidden' ) . '>Show ' . min( $f['page'], max( 0, count( $list ) - $f['n'] ) ) . ' more</a>';
 			} else {
 				$o[] = '<div class="bkd-wrap">';
 				if ( ! $text ) { // nothing at all; a development listed without photos is still listed, below
 					$o[] = '<div class="bka16-empty"><h2 class="bkn-h2">' . $e( 'No ' . strtolower( $p['label'] ) . ' in ' . $area . ' listed right now' ) . '</h2><p class="bkn-sub">Tell us what you need and an advisor will send you matches as they come up.</p>'
-						. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div>';
+						. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find">Ask an advisor to find one</button></p></div>';
 				} else {
 					$o[] = '<h2 class="bkd-sr">Listings</h2>';
 				}
@@ -9407,10 +9450,11 @@ JS;
 				$r     = 'rent' === $seg[1];
 				$cards = $x['grid'];
 				$all   = 'See all ' . strtolower( $seg[0] ) . ' in ' . $area;
-				$one   = 1 === (int) $sd['homes'] && $sd['max'] <= $sd['min'] && ( ! $sd['cards'] || count( $sd['cards'][0]['beds'] ) < 2 ); // one home at one price
-				$sub   = blockke_area_v16_count( $sd['homes'], $seg[2] ) . ( $sd['min'] > 0 ? ( $one ? ' at ' : ', from ' ) . blockke_bkn_money( $sd['min'] ) . ( $r ? ' a month' : '' ) : '' );
+				// its segment page is linked at every width unless that page's canonical is this one (all it has, all shown here)
+				$see   = blockke_area_page( $term, $s )['canon'] !== blockke_area_url( $term, '', false );
+				$sub   = blockke_area_v16_count( $sd['homes'], $seg[2] ) . ( $sd['min'] > 0 ? ( blockke_area_v16_one( $sd ) ? ' at ' : ', from ' ) . blockke_bkn_money( $sd['min'] ) . ( $r ? ' a month' : '' ) : '' );
 				$o[]   = '<section class="bka16-sec" id="bka-' . esc_attr( $s ) . '"><div class="bkd-wrap"><div class="bka16-sh"><div><h2 class="bkn-h2">' . $e( $seg[0] ) . '</h2><p class="bkn-sub">' . $e( $sub ) . '</p></div>'
-					. ( $x['all'] ? '' : '<a class="bkn-link bka16-all-top" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a>' ) . '</div>'
+					. ( $see ? '<a class="bkn-link bka16-all-top" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a>' : '' ) . '</div>'
 					. blockke_area_v16_tabs( $p, $s );
 				if ( $cards ) {
 					$o[] = '<div class="bkn-grid bka16-cards">';
@@ -9426,16 +9470,16 @@ JS;
 				if ( $x['text'] ) {
 					$o[] = $names( $x['text'], $r, $cards ? 'h3' : '' );
 				}
-				$o[] = ( $x['phone'] ? '' : '<a class="bkn-link bka16-all" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a>' ) . '</div></section>';
+				$o[] = ( $see ? '<a class="bkn-link bka16-all" href="' . esc_url( blockke_area_url( $term, $s ) ) . '">' . $e( $all ) . '</a>' : '' ) . '</div></section>';
 				if ( $first ) { // after the first grid: a short way to ask, as a noun ("Price lists for Westlands")
 					$ask = 'sale' === $seg[1] ? array( 'Price lists for ' . $area, 'Tell us what you need and an advisor sends them by WhatsApp.' ) : array( 'New listings in ' . $area, 'Tell us what you need and an advisor sends matches by WhatsApp.' );
-					$o[] = '<aside class="bka16-ask"><div class="bkd-wrap bka16-ask-in"><div><h2 class="bka16-h3">' . $e( $ask[0] ) . '</h2><p>' . $e( $ask[1] ) . '</p></div>' . blockke_area_quick_form( 'inline', 'Send', $p, false ) . '</div></aside>';
+					$o[] = '<aside class="bka16-ask"><div class="bkd-wrap bka16-ask-in"><div><h2 class="bka16-h3">' . $e( $ask[0] ) . '</h2><p>' . $e( $ask[1] ) . '</p></div>' . blockke_area_quick_form( 'inline', 'Send', $p, false, '' ) . '</div></aside>';
 				}
 				$first = false;
 			}
 			if ( $first ) {
 				$o[] = '<section class="bka16-sec"><div class="bkd-wrap bka16-empty"><h2 class="bkn-h2">' . $e( 'Nothing listed in ' . $area . ' right now' ) . '</h2><p class="bkn-sub">Tell us what you need and an advisor will send you matches as they come up.</p>'
-					. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor to find one</button></p></div></section>';
+					. '<p><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="find">Ask an advisor to find one</button></p></div></section>';
 			}
 		}
 
@@ -9464,11 +9508,11 @@ JS;
 			. '<div class="bkd-wrap"><p class="bkn-disc bka16-disc">' . $e( $cfg['area_disclaimer'] ) . '</p></div></section>';
 
 		$o[] = '<nav class="bkd-mb" id="bkd-mb" aria-label="Quick contact"><a class="bkd-mb-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '</a>'
-			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar" data-unit="' . esc_attr( $p['name'] ) . '">Ask an advisor</button></nav>';
+			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar">Ask an advisor</button></nav>';
 		$o[] = '<div class="bkd-md" id="bkd-md" hidden role="dialog" aria-modal="true" aria-labelledby="bkd-md-t" aria-describedby="bkd-md-sub"><div class="bkd-md-box">'
 			. '<button class="bkd-md-x" type="button" data-bkd-close aria-label="Close">' . blockke_dev_icon( 'close' ) . '</button>'
 			. '<h2 class="bkd-h2" id="bkd-md-t">' . $e( 'Get matching ' . $p['things'] ) . '</h2><p class="bkd-md-sub" id="bkd-md-sub"></p>'
-			. '<div id="bkd-md-form">' . blockke_area_quick_form( 'modal', 'Send me matches', $p, false ) . '</div></div></div>';
+			. '<div id="bkd-md-form">' . blockke_area_quick_form( 'modal', 'Send me matches', $p, false, '' ) . '</div></div></div>';
 		if ( ! empty( $cfg['search'] ) && $homes ) {
 			$o[] = blockke_dev_search_sheet( $stub );
 		}
@@ -9564,11 +9608,15 @@ JS;
 			. '<script type="application/json" data-bka-bands>' . wp_json_encode( blockke_area_v16_bands( $rent ), JSON_HEX_TAG ) . '</script></form>';
 	}
 
-	/** The full enquiry form on v1.6 area pages: name, phone, email, budget, message; the qualifying questions come after. */
+	/**
+	 * The full enquiry form on v1.6 area pages: name, phone, email, budget, message; the qualifying questions come after. Like
+	 * every enquiry button on these pages it names no unit: the lead carries the area and segment, and the WhatsApp text
+	 * after sending already says what it is about.
+	 */
 	function blockke_area_v16_form( $p ) {
 		$cfg  = blockke_dev_config();
 		$rent = 'rent' === $p['action'];
-		$h    = '<form class="bkd-form" data-bkd-lead="contact" data-unit="' . esc_attr( $p['name'] ) . '" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$h    = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
 		$h   .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h   .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
 		$h   .= '<label class="bkd-f"><span>Budget <small>(optional)</small></span><select name="budget"><option value="">Not sure yet</option>';
@@ -9611,9 +9659,15 @@ JS;
 #bkd .bka16-strip.bka16-n3 li:first-child{grid-row:1/span 2}
 #bkd .bka16-strip.bka16-n3 li:first-child a{display:grid;grid-template-rows:minmax(0,1fr) auto;height:100%}
 #bkd .bka16-strip.bka16-n3 li:first-child .bkn-img{aspect-ratio:auto;height:100%}
-#bkd .bka16-cap{display:block;margin-top:10px;font-size:14px;color:var(--slate)}
-#bkd .bka16-strip a:hover .bka16-cap{text-decoration:underline;text-underline-offset:3px}
-@media (max-width:767px){#bkd .bka16-strip,#bkd .bka16-strip.bka16-n2{grid-template-columns:1fr 1fr;gap:16px 12px}#bkd .bka16-strip li:first-child,#bkd .bka16-strip.bka16-n3 li:first-child{grid-column:1/-1;grid-row:auto}#bkd .bka16-strip.bka16-n3 li:first-child a{display:block;height:auto}#bkd .bka16-strip.bka16-n3 li:first-child .bkn-img,#bkd .bka16-strip.bka16-n1 .bkn-img{aspect-ratio:3/2;height:auto}#bkd .bka16-strip.bka16-n2 li:last-child{grid-column:1/-1}}
+#bkd .bka16-cap{display:block;margin-top:14px}
+#bkd .bka16-capn{display:block;font-family:var(--display);font-weight:var(--display-w);font-size:26px;line-height:1.15;letter-spacing:var(--display-ls);color:var(--navy);text-wrap:pretty}
+#bkd .bka16-strip.bka16-n3 li+li .bka16-capn{font-size:22px}
+#bkd .bka16-cap .bkn-place,#bkd .bka16-cap .bkn-data{display:block}
+@media (hover:hover){#bkd .bka16-strip a:hover img{filter:brightness(.94)}#bkd .bka16-strip a:hover .bka16-capn{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}}
+@media (min-width:768px) and (max-width:999px){#bkd .bka16-strip.bka16-n3 li+li .bka16-capn{font-size:20px}#bkd .bka16-strip.bka16-n3 li+li .bkn-data{font-size:14px}}
+@media (max-width:767px){#bkd .bka16-strip,#bkd .bka16-strip.bka16-n2{grid-template-columns:minmax(0,1fr);gap:0}#bkd .bka16-strip.bka16-n3 li:first-child{grid-row:auto}#bkd .bka16-strip.bka16-n3 li:first-child a{display:block;height:auto}#bkd .bka16-strip.bka16-n3 li:first-child .bkn-img,#bkd .bka16-strip.bka16-n1 .bkn-img{aspect-ratio:3/2;height:auto}#bkd .bka16-capn{font-size:24px}
+#bkd .bka16-strip li+li{border-bottom:1px solid var(--line)}#bkd .bka16-strip li:nth-child(2){margin-top:24px;border-top:1px solid var(--line)}
+#bkd .bka16-strip li+li a{display:grid;grid-template-columns:112px minmax(0,1fr);gap:16px;align-items:center;padding:14px 0}#bkd .bka16-strip li+li .bka16-cap{margin:0}#bkd .bka16-strip.bka16-n3 li+li .bka16-capn{font-size:18px;line-height:1.2}#bkd .bka16-strip li+li .bkn-place,#bkd .bka16-strip li+li .bkn-data{margin-top:4px;font-size:14px}}
 #bkd .bka16-main{display:block}
 #bkd .bka16-sec{padding:var(--sec) 0 0}
 #bkd .bka16-sh{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:32px}
@@ -9703,12 +9757,12 @@ CSS;
     cards.forEach(function(c){var b=c.querySelector('.bkn-data b'),fr=num(c,'from'),to=num(c,'to'),k=on?1:0,m=rent?' a month':'';if(!b||!(to>fr)){return;}
       if(first){b._t=[];b._t[k]=b.textContent;return;}
       if(!b._t[k]){b._t[k]=on?money(fr)+'–'+money(to).replace(/^\D+/,'')+m:'From '+money(fr)+m;}b.textContent=b._t[k];});}
-  /* the search in words: "studios for sale in Westlands at KES 60M and above" */
+  /* the search in words: "studios for sale in Westlands from KES 60M", "2 bed homes for sale in Westlands at KES 8–12M" */
   function said(f,k){var s=form.querySelector('[name="'+k+'"]'),o=s?[].filter.call(s.options,function(x){return x.value===f[k];})[0]:null;return o?o.textContent:f[k];}
   function phrase(f){var w=none.getAttribute('data-what')||'';
     if(f.beds==='studio'){w=/^(homes|studios) /.test(w)?w.replace(/^\w+/,'studios'):'studio '+w;}else if(f.beds){w=(f.beds==='4'?'4+':f.beds)+' bed '+w;}
     var s=w+' in '+(none.getAttribute('data-where')||'');
-    if(f.price&&bands[f.price]){var l=bands[f.price][2];s+=/^Under /.test(l)?' under '+l.slice(6):' at '+l;}
+    if(f.price&&bands[f.price]){var bd=bands[f.price],l=bd[2];s+=/^Under /.test(l)?' under '+l.slice(6):(bd[1]>0?' at '+l:' from '+l.replace(/ and above$/,''));}
     if(f.completion){s+=f.completion==='ready-now'?' ready to move into':' completing in '+said(f,'completion');}
     return s;}
   function sheetOpen(){return !!fields&&fields.classList.contains('on');}
