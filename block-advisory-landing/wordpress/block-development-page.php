@@ -9734,7 +9734,10 @@ JS;
 		return rtrim( rtrim( number_format( (float) $v, 2, '.', '' ), '0' ), '.' );
 	}
 
-	/** "Under KES 8M", "KES 8–12M", "KES 60M and above"; rents "KES 80–150K a month". Built from the numbers, not the config labels. */
+	/**
+	 * "Under KES 8M", "KES 8–12M", "KES 60M and above"; rents "KES 80–150K a month", "KES 300K a month and above". Built from the
+	 * numbers, not the config labels.
+	 */
 	function blockke_search_band_label( $lo, $hi, $rent ) {
 		$cur  = blockke_dev_config()['currency'];
 		$unit = $rent ? 1000 : 1000000;
@@ -9744,7 +9747,7 @@ JS;
 			return 'Under ' . $cur . ' ' . blockke_search_num( $hi / $unit ) . $sfx . $m;
 		}
 		if ( $hi <= 0 ) {
-			return $cur . ' ' . blockke_search_num( $lo / $unit ) . $sfx . ' and above' . $m;
+			return $cur . ' ' . blockke_search_num( $lo / $unit ) . $sfx . $m . ' and above';
 		}
 		return $cur . ' ' . blockke_search_num( $lo / $unit ) . '–' . blockke_search_num( $hi / $unit ) . $sfx . $m;
 	}
@@ -10281,12 +10284,16 @@ JS;
 		return $out;
 	}
 
-	/** One card: 'unit' for a single home (price first), else 'group' with the development's homes that match. */
+	/**
+	 * One card: a single home, else 'group' with the development's homes that match. A single home is set like every other card
+	 * (its building's name, then what it is, then the price), so a row never mixes two kinds of card. With one area searched,
+	 * the place line leaves that area out, as on the area pages.
+	 */
 	function blockke_search_card_html( $card, $sec, $q, $pos, $tag, $lazy ) {
 		$d    = blockke_bkn_devs()['devs'][ $card['g'] ];
 		$rent = 'rent' === $sec['act'];
 		$home = 'home' === $sec['kind'];
-		$ctx  = array( 'src' => 'search', 'pos' => $pos, 'rent' => $rent, 'tag' => $tag, 'lazy' => $lazy );
+		$ctx  = array( 'src' => 'search', 'scope' => 1 === count( $q['area'] ) && 'other' !== $q['area'][0] ? $q['area'][0] : '', 'pos' => $pos, 'rent' => $rent, 'tag' => $tag, 'lazy' => $lazy );
 		$c    = $d;
 		if ( 'unit' === $card['v'] ) {
 			$r           = $card['units'][0];
@@ -10304,7 +10311,13 @@ JS;
 			$c['areas']  = $r['areas'] ? $r['areas'] : $d['areas'];
 			$c['vt']     = (bool) $r['lo'];
 			$c['d']      = (int) $r['d'];
-			return blockke_card_html( $c, 'unit', $ctx );
+			$h           = blockke_card_html( $c, 'dev', $ctx );
+			// its size after the bedrooms: "Kilimani · 1 bed · 60 m²" (a place line of its own when the area is left out and there are no bedrooms)
+			if ( $c['sqm'] > 0 ) {
+				$sq = '<span class="bkn-nw">' . esc_html( blockke_dev_num( $c['sqm'] ) . ' m²' ) . '</span>';
+				$h  = false !== strpos( $h, '<p class="bkn-place">' ) ? preg_replace( '#(<p class="bkn-place">.*?)</p>#', '$1 · ' . $sq . '</p>', $h, 1 ) : preg_replace( '#</a>#', '</a><p class="bkn-place">' . $sq . '</p>', $h, 1 );
+			}
+			return preg_replace( '/^<article class="bkn-card"/', '<article class="bkn-card bks-home"', $h ); // bks-home: the click event's kind 'unit'
 		}
 		if ( ! $home ) {
 			$c['beds'] = array();
@@ -10327,6 +10340,9 @@ JS;
 		$match      = $card['units'];
 		$c['match'] = $match;
 		$h          = blockke_card_html( $c, 'group', $ctx );
+		if ( '' !== $q['beds'] && '4' !== $q['beds'] && 'min' !== blockke_dev_config()['beds_mode'] ) { // "2 homes match", not ": 2 bed" again under "2 bed homes for sale"
+			$h = preg_replace( '#(<p class="bkn-mh">[^<:]*):[^<]*</p>#', '$1</p>', $h, 1 );
+		}
 		foreach ( array_slice( $match, 0, 3 ) as $i => $r ) { // the home's ID, for search_match_click
 			$h = preg_replace( '/data-row="' . ( $i + 1 ) . '"/', 'data-row="' . ( $i + 1 ) . '" data-unit="' . (int) $r['id'] . '"', $h, 1 );
 		}
@@ -10355,8 +10371,9 @@ JS;
 	}
 
 	/**
-	 * The query in words: "2 bed apartments for sale in Westlands", "studios to rent", "property for sale". $kinds and $acts: what
-	 * the results hold (they name a query that asked for any kind or either action).
+	 * The query in words: "2 bed apartments for sale in Westlands", "studios for rent", "land for lease", "property for sale". The
+	 * same phrases as the area pages and their addresses (homes-for-rent). $kinds and $acts: what the results hold (they name a
+	 * query that asked for any kind or either action).
 	 */
 	function blockke_search_words( $q, $kinds, $acts, $beds = true, $area = true ) {
 		$tt    = blockke_search_types();
@@ -10378,7 +10395,7 @@ JS;
 			$noun = 'studio' === $q['beds'] && in_array( $noun, array( 'homes', 'apartments', 'studios', 'property' ), true ) ? 'studios' : strtolower( blockke_search_beds_label( $q['beds'] ) ) . ' ' . $noun;
 		}
 		$a   = $q['for'] ? $q['for'] : $acts;
-		$act = 2 === count( $a ) ? 'for sale and to rent' : ( 1 === count( $a ) ? ( 'rent' === $a[0] ? ( 'land' === $noun ? 'to lease' : 'to rent' ) : 'for sale' ) : '' );
+		$act = 2 === count( $a ) ? ( 'land' === $noun ? 'for sale and lease' : 'for sale and rent' ) : ( 1 === count( $a ) ? ( 'rent' === $a[0] ? ( 'land' === $noun ? 'for lease' : 'for rent' ) : 'for sale' ) : '' );
 		$in  = '';
 		if ( $area && $q['area'] ) {
 			$names = array();
@@ -10391,15 +10408,18 @@ JS;
 		return implode( ' ', array_filter( array( $noun, $act, $in ) ) );
 	}
 
-	/** The price and completion asked for, mid-sentence: " at KES 8–12M completing in 2027", " under KES 8M ready to move into". */
+	/**
+	 * The price and completion asked for, mid-sentence, as the index says them: " at KES 8–12M completing in 2027", " from KES 60M",
+	 * " under KES 8M ready to move into", " completing in 2029 and later".
+	 */
 	function blockke_search_tail( $q ) {
 		$t = '';
 		if ( $q['lo'] > 0 || $q['hi'] > 0 ) {
 			$l  = blockke_search_band_label( $q['lo'], $q['hi'], array( 'rent' ) === $q['for'] );
-			$t .= 0 === strpos( $l, 'Under' ) ? ' under' . substr( $l, 5 ) : ' at ' . $l;
+			$t .= 0 === strpos( $l, 'Under' ) ? ' under' . substr( $l, 5 ) : ( $q['hi'] <= 0 ? ' from ' . preg_replace( '/ and above$/', '', $l ) : ' at ' . $l );
 		}
 		if ( '' !== $q['completion'] ) {
-			$t .= 'ready-now' === $q['completion'] ? ' ready to move into' : ' completing in ' . ( '-plus' === substr( $q['completion'], 4 ) ? substr( $q['completion'], 0, 4 ) . ' or later' : $q['completion'] );
+			$t .= 'ready-now' === $q['completion'] ? ' ready to move into' : ' completing in ' . blockke_search_done_label( $q['completion'] );
 		}
 		return $t;
 	}
@@ -10546,15 +10566,17 @@ JS;
 	}
 
 	/**
-	 * Where a simple search belongs (config search_redirect), or '': one action and one area whose area page is on, at most one
-	 * type, a price band or none → that area's segment page; buying anywhere with a completion year → the new developments index.
+	 * Where a simple search belongs (config search_redirect), or '': one action and one area whose area page is on, one type (or
+	 * bedrooms or a completion, which mean homes), a price band or none → that area's segment page; buying anywhere with a
+	 * completion year → the new developments index. A search with no type stays on the results, which show every kind: a
+	 * header search for "all types", or "Search property" on a commercial page, never lands on homes.
 	 */
 	function blockke_search_redirect_url( $q, $get = null ) {
 		$cfg = blockke_dev_config();
 		if ( $q['cats'] || count( $q['types'] ) > 1 || count( $q['area'] ) > 1 ) {
 			return '';
 		}
-		$type = $q['types'] ? $q['types'][0] : 'homes';
+		$type = $q['types'] ? $q['types'][0] : ( '' !== $q['beds'] || '' !== $q['completion'] ? 'homes' : '' );
 		$keep = array(); // campaign tags survive the redirect
 		foreach ( (array) ( null === $get ? wp_unslash( $_GET ) : $get ) as $k => $v ) { // phpcs:ignore WordPress.Security.NonceVerification
 			if ( is_string( $v ) && preg_match( '/^(?:utm_[a-z]+|gclid|gbraid|wbraid|fbclid|_gl)$/', (string) $k ) ) {
@@ -10563,6 +10585,9 @@ JS;
 		}
 		$args = array();
 		if ( 1 === count( $q['for'] ) && 1 === count( $q['area'] ) ) {
+			if ( '' === $type ) {
+				return '';
+			}
 			$term  = 'other' === $q['area'][0] ? null : get_term_by( 'slug', $q['area'][0], 'property_area' );
 			$segs  = blockke_area_segments();
 			$seg   = $type . '-for-' . $q['for'][0];
@@ -10635,7 +10660,7 @@ JS;
 				'kind'  => $ka[0],
 				'act'   => $ka[1],
 				'cards' => $cards,
-				'h2'    => $noun . ( 'rent' === $ka[1] ? ( 'land' === $ka[0] ? ' to lease' : ' to rent' ) : ' for sale' ),
+				'h2'    => $noun . ( 'rent' === $ka[1] ? ( 'land' === $ka[0] ? ' for lease' : ' for rent' ) : ' for sale' ),
 			);
 		}
 		$acts  = array_values( array_intersect( array( 'sale', 'rent' ), array_keys( $acts ) ) );
@@ -10645,23 +10670,34 @@ JS;
 			return $n . ' ' . ( 1 === (int) $n ? $one : $many );
 		};
 		$url   = blockke_search_url( $q, array(), false );
-		// WhatsApp: the search in words, then the link ("Hello Block, I'm looking for apartments for sale: Westlands, 2 bed, KES 8–12M, completing 2027. ...")
+		// WhatsApp: the search in words, then the link, worded as the index's ("Hi Block, I'm looking for apartments for sale:
+		// Westlands, 2 bed, KES 8–12M, completing 2027. ..."; "studios", "under KES 8M", "completing 2029 and later", "ready now")
 		$parts = array();
 		foreach ( $q['area'] as $s ) {
 			$t       = 'other' === $s ? null : get_term_by( 'slug', $s, 'property_area' );
 			$parts[] = $t instanceof WP_Term ? blockke_dev_text( $t->name ) : 'other areas';
 		}
 		if ( '' !== $q['beds'] ) {
-			$parts[] = blockke_search_beds_label( $q['beds'] );
+			$parts[] = 'studio' === $q['beds'] ? 'studios' : strtolower( blockke_search_beds_label( $q['beds'] ) );
 		}
 		if ( '' !== $q['price'] ) {
-			$parts[] = blockke_search_band_label( $q['lo'], $q['hi'], array( 'rent' ) === $q['for'] );
+			$parts[] = preg_replace( '/^Under /', 'under ', blockke_search_band_label( $q['lo'], $q['hi'], array( 'rent' ) === $q['for'] ) );
 		}
 		if ( '' !== $q['completion'] ) {
-			$parts[] = 'ready-now' === $q['completion'] ? 'ready to move into' : 'completing ' . ( '-plus' === substr( $q['completion'], 4 ) ? substr( $q['completion'], 0, 4 ) . ' or later' : $q['completion'] );
+			$parts[] = 'ready-now' === $q['completion'] ? 'ready now' : 'completing ' . blockke_search_done_label( $q['completion'] );
 		}
 		$ag    = blockke_dev_agent( 0 );
-		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hello ' . $cfg['brand'] . ", I'm looking for " . blockke_search_words( $q, $kinds, $acts, false, false ) . ( $parts ? ': ' . implode( ', ', $parts ) : '' ) . '. Please send current options and price lists. ' . $url );
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm looking for " . blockke_search_words( $q, $kinds, $acts, false, false ) . ( $parts ? ': ' . implode( ', ', $parts ) : '' ) . '. Please send current options and price lists. ' . $url );
+		// The count once, under the H1: "39 homes in 35 developments" only when some cards hold several homes; when each card is
+		// one home (single rentals, resales, one flat per building), just "5 homes". Land is in projects, as on the index
+		$count = '';
+		if ( $devs ) {
+			$count = $num( $homes, $only ? 'home' : 'listing', $only ? 'homes' : 'listings' );
+			if ( $homes > $devs ) {
+				$land   = array( 'land' ) === array_keys( $kinds );
+				$count .= ' in ' . $num( $devs, $land ? 'project' : 'development', $land ? 'projects' : 'developments' );
+			}
+		}
 		$filt  = array();
 		foreach ( array( 'for' => implode( ',', $q['for'] ), 'type' => implode( ',', array_merge( $q['types'], $q['cats'] ) ), 'area' => implode( ',', $q['area'] ), 'beds' => $q['beds'], 'price' => $q['price'], 'completion' => $q['completion'] ) as $k => $v ) {
 			if ( '' !== $v ) {
@@ -10679,7 +10715,7 @@ JS;
 			'words'  => $words,
 			'h1'     => ucfirst( $words ),
 			'title'  => ucfirst( $words ) . ' | ' . $cfg['brand_full'],
-			'count'  => $devs ? $num( $homes, $only ? 'home' : 'listing', $only ? 'homes' : 'listings' ) . ' in ' . $num( $devs, 'development', 'developments' ) : '',
+			'count'  => $count,
 			'none'   => 'No ' . $words . blockke_search_tail( $q ) . '.',
 			'url'    => $url,
 			'wa'     => $wa,
@@ -10799,7 +10835,8 @@ JS;
 		foreach ( $s['tabs'] as $t ) {
 			$tabs .= '<a href="' . esc_url( $t[1] ) . '"' . ( $t[2] ? ' aria-current="page"' : '' ) . '>' . $e( $t[0] ) . '</a>';
 		}
-		$o[] = '<div class="bks-head"><div class="bkd-wrap"><nav class="bks-crumbs" aria-label="Breadcrumb"><a href="' . esc_url( home_url( '/' ) ) . '">Home</a><span aria-hidden="true">/</span><span aria-current="page">Search</span></nav>'
+		// bks-head-end: no type tabs to close the head (no or one kind of result), so it ends with its own space and the bar's hairline
+		$o[] = '<div class="bks-head' . ( '' === $tabs ? ' bks-head-end' : '' ) . '"><div class="bkd-wrap"><nav class="bks-crumbs" aria-label="Breadcrumb"><a href="' . esc_url( home_url( '/' ) ) . '">Home</a><span aria-hidden="true">/</span><span aria-current="page">Search</span></nav>'
 			. '<h1 class="bks-h1">' . $e( $s['h1'] ) . '</h1>'
 			. ( $s['devs'] ? '<p class="bks-count"><span>' . $e( $s['count'] ) . '</span>' . ( '' !== $s['map'] ? '<a class="bks-map" href="' . esc_url( $s['map'] ) . '">Map</a>' : '' ) . '</p>' : '' )
 			. ( '' !== $tabs ? '<nav class="bks-types" aria-label="Type of property">' . $tabs . '</nav>' : '' ) . '</div></div>';
@@ -10868,7 +10905,7 @@ JS;
 				$o[]  = '<p class="bks-more-w"><a class="bks-more" href="' . esc_url( blockke_search_url( $q, array( 'n' => $s['show'] + $s['step'] ) ) . '#d-' . (int) $cards[ $s['show'] ]['aid'] ) . '" rel="nofollow">' . $e( 'Show ' . $more . ' more' ) . '</a></p>';
 			}
 			if ( $text ) {
-				$o[] = '<div class="bks-also"><h3 class="bks-also-h">Also listed</h3><ul>';
+				$o[] = '<div class="bks-also"><h3 class="bks-also-h">' . $e( 'Also listed (' . count( $text ) . ')' ) . '</h3><ul>';
 				foreach ( $text as $c ) {
 					$o[] = blockke_search_text_item( $c, $sec );
 				}
@@ -10894,12 +10931,14 @@ JS;
 #bkd.bks .bkd-ph{display:none}
 #bkd.bks-fade .bkn-img img:not(.bks-in){opacity:0}
 #bkd .bks-head{padding:24px 0 0}
+#bkd .bks-head-end{padding-bottom:24px}
+#bkd .bks-head-end+.bks-bar{border-top:1px solid var(--line)}
 #bkd .bks-crumbs{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:13px;line-height:1.5;color:var(--muted)}
-#bkd .bks-crumbs a{display:inline-block;padding:11px 0;margin:-11px 0;color:var(--slate)!important}
+#bkd .bks-crumbs a{display:inline-block;padding:13px 0;margin:-13px 0;color:var(--slate)!important}
 #bkd .bks-crumbs a:hover{text-decoration:underline}
-#bkd .bks-h1{margin:14px 0 0!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:40px!important;line-height:1.05!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
+#bkd .bks-h1{margin:14px 0 0!important;max-width:20ch;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:40px!important;line-height:1.05!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
 #bkd .bks-count{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 24px;margin:12px 0 0;font-size:16px;line-height:1.5;color:var(--slate)}
-#bkd .bks-map{display:inline-block;padding:10px 0;margin:-10px 0;font-size:14px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+#bkd .bks-map{display:inline-block;padding:12px 0;margin:-12px 0;font-size:14px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
 #bkd .bks-types{display:flex;gap:24px;margin:16px 0 0;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line)}
 #bkd .bks-types::-webkit-scrollbar{display:none}
 #bkd .bks-types a{position:relative;flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;line-height:1.2;color:var(--slate)!important;white-space:nowrap}
@@ -10945,7 +10984,7 @@ JS;
 #bkd .bks-rl{font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
 #bkd .bks-rn{color:var(--muted)}
 #bkd .bks-near{margin:12px 0 0;font-size:15px;line-height:1.7;color:var(--slate)}
-#bkd .bks-near a{display:inline-block;padding:8px 0;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bks-near a{display:inline-block;padding:10px 0;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px}
 #bkd .bks-also{margin:48px 0 0;max-width:720px}
 #bkd .bks-grid+.bks-also,#bkd .bks-more-w+.bks-also{padding-top:24px;border-top:1px solid var(--line)}
 #bkd .bks-also-h{margin:0 0 4px!important;font:600 15px/1.4 var(--font)!important;letter-spacing:0!important;color:var(--ink)!important}
@@ -10958,10 +10997,19 @@ JS;
 #bkd .bks-ask{margin:40px 0 0}
 #bkd .bks-none .bks-ask,#bkd .bks-close .bks-ask{margin-top:24px}
 #bkd .bks-disc{margin:48px 0 0;padding:24px 0 48px;border-top:1px solid var(--line);font-size:13px;line-height:1.6;color:var(--muted)}
+@media (min-width:640px){#bkd .bks-h1{font-size:52px!important}}
 @media (min-width:768px){
 #bkd .bks-head{padding-top:32px}
-#bkd .bks-h1{font-size:52px!important}
+#bkd .bks-head-end{padding-bottom:32px}
 #bkd .bks-count{font-size:17px}
+#bkd .bks-sec{padding-top:40px}
+#bkd .bks-sec+.bks-sec{padding-top:72px}
+#bkd .bks-h2{font-size:34px!important;margin-bottom:28px!important}
+#bkd .bks-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 24px}
+#bkd .bks-disc{margin-top:72px}
+}
+/* the bar inline from 1000px, as on the new developments page; phones and tablets get "Filters" and the sheet */
+@media (min-width:1000px){
 #bkd .bks-ftog,#bkd .bks-fh{display:none}
 #bkd .bks-bar-in{flex-wrap:nowrap;align-items:flex-start;gap:24px;min-height:64px}
 #bkd .bks-f,#bkd .bks-f:target{display:flex;flex-wrap:wrap;order:0;flex:0 1 auto;align-items:center;gap:0 24px;min-width:0;padding:10px 0}
@@ -10974,13 +11022,6 @@ JS;
 #bkd .bks-bar select.on{border-bottom:2px solid var(--brass)!important}
 #bkd .bks-apply{flex:none;min-height:44px;padding:0!important;background:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:5px}
 #bkd.bkd-js .bks-apply{display:none}
-#bkd .bks-sec{padding-top:40px}
-#bkd .bks-sec+.bks-sec{padding-top:72px}
-#bkd .bks-h2{font-size:34px!important;margin-bottom:28px!important}
-#bkd .bks-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:48px 24px}
-#bkd .bks-disc{margin-top:72px}
-}
-@media (min-width:1000px){
 #bkd .bks-head{padding-top:48px}
 #bkd .bks-h1{font-size:64px!important}
 #bkd .bks-count{font-size:18px}
@@ -11006,29 +11047,40 @@ CSS;
   function fade(box){[].forEach.call(box.querySelectorAll('.bkn-img img'),function(im){var on=function(){im.classList.add('bks-in');};if(im.complete){on();}else{im.addEventListener('load',on,{once:true});im.addEventListener('error',on,{once:true});}});}
   fade(root);root.classList.add('bks-fade');
   track('search_view',{count_devs:+at(root,'data-devs'),count_homes:+at(root,'data-homes'),segments:at(root,'data-segs')});
-  if(root.hasAttribute('data-none')){track('index_no_results',{filters:at(root,'data-filters')});}
+  /* once per search: not again when the same empty search is reloaded or comes back from history */
+  var nav=null;try{nav=performance.getEntriesByType('navigation')[0];}catch(x){}
+  if(root.hasAttribute('data-none')&&(!nav||nav.type==='navigate')){track('index_no_results',{filters:at(root,'data-filters')});}
   root.addEventListener('click',function(e){
     var a=e.target&&e.target.closest?e.target.closest('a'):null;if(!a){return;}
     var card=a.closest('.bkn-card');
     if(card&&a.hasAttribute('data-row')){track('search_match_click',{target_id:at(card,'data-id'),unit_id:at(a,'data-unit'),row:+at(a,'data-row'),transport_type:'beacon'});}
     else if(card&&a.classList.contains('bkn-mall')){track('search_match_click',{target_id:at(card,'data-id'),unit_id:'',row:'all',transport_type:'beacon'});}
-    else if(card&&a.classList.contains('bkn-a')){track('search_card_click',{target_id:at(card,'data-id'),position:+at(a,'data-pos'),kind:card.classList.contains('bkn-unit')?'unit':(card.querySelector('.bkn-match')?'group':'dev'),segment:at(a.closest('[data-seg]'),'data-seg'),vt:vt,transport_type:'beacon'});}
+    else if(card&&a.classList.contains('bkn-a')){track('search_card_click',{target_id:at(card,'data-id'),position:+at(a,'data-pos'),kind:card.classList.contains('bks-home')?'unit':(card.querySelector('.bkn-match')?'group':'dev'),segment:at(a.closest('[data-seg]'),'data-seg'),vt:vt,transport_type:'beacon'});}
     else if(a.hasAttribute('data-relax')){track('index_relax',{removed:at(a,'data-relax'),filters:at(root,'data-filters'),transport_type:'beacon'});}
     else if(a.hasAttribute('data-bks-text')){track('search_card_click',{target_id:at(a,'data-bks-text'),position:0,kind:'text',segment:at(a.closest('[data-seg]'),'data-seg'),vt:0,transport_type:'beacon'});}
   });
-  /* the bar: changes apply at once on wider screens; on phones the sheet applies them together */
+  /* the bar: changes apply at once from 1000px (and Sort everywhere); on phones and tablets the sheet applies them together.
+     A change made from the keyboard (arrow keys step through a closed select) waits for Enter or for the select to lose focus,
+     so each key press doesn't reload the page */
   var form=document.getElementById('bks-bar');
   if(form){
-    var box=document.getElementById('bks-f'),tog=form.querySelector('.bks-ftog'),wide=window.matchMedia('(min-width:768px)'),last=null;
+    var box=document.getElementById('bks-f'),tog=form.querySelector('.bks-ftog'),wide=window.matchMedia('(min-width:1000px)'),last=null,kb=0,dirty=0;
     var all=function(){return [].slice.call(form.querySelectorAll('select,input'));};
     var go=function(){all().forEach(function(x){if(x.name&&x.value===''){x.disabled=true;}});form.submit();};
+    var now=function(t){return wide.matches||!box||!box.contains(t);};
     form.addEventListener('submit',function(e){e.preventDefault();go();});
-    window.addEventListener('pageshow',function(){all().forEach(function(x){x.disabled=false;});});
+    window.addEventListener('pageshow',function(){all().forEach(function(x){x.disabled=false;});kb=0;dirty=0;});
+    form.addEventListener('keydown',function(e){var t=e.target;if(!t||t.tagName!=='SELECT'){return;}
+      if(e.key==='Enter'){setTimeout(function(){if(dirty){kb=0;dirty=0;if(now(t)){go();}}},0);}
+      else if(e.key!=='Tab'&&e.key!=='Shift'&&e.key!=='Escape'){kb=1;}});
+    form.addEventListener('pointerdown',function(){kb=0;});
+    form.addEventListener('focusout',function(e){var t=e.target;if(t&&t.tagName==='SELECT'){kb=0;if(dirty){dirty=0;if(now(t)){go();}}}});
     form.addEventListener('change',function(e){var t=e.target;
       if(t.name==='for'){var p=form.querySelector('select[name="price"]'),c=form.querySelector('[data-bks-done]');
         if(p){var b={};try{b=JSON.parse(p.getAttribute('data-bands')||'{}');}catch(x){b={};}p.length=1;(b[t.value==='rent'?'rent':'sale']||[]).forEach(function(o){p.add(new Option(o[1],o[0]));});p.value='';p.classList.remove('on');}
         if(c){c.hidden=t.value==='rent';if(c.hidden){c.querySelector('select').value='';}}}
-      if(wide.matches||!box||!box.contains(t)){go();}
+      if(kb){dirty=1;return;}
+      if(now(t)){go();}
     });
     var trap=function(e){if(e.key==='Escape'){shut();return;}if(e.key!=='Tab'){return;}
       var f=[].slice.call(box.querySelectorAll('a[href],button,select')).filter(function(x){return x.offsetParent!==null&&!x.disabled;});if(!f.length){return;}
