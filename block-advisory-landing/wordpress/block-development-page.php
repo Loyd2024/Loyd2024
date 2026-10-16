@@ -55,6 +55,20 @@
  *    kind (/property_area/lavington/villas-for-sale/, /offices-for-rent/ ...): every grid holds one kind, never mixed.
  *    Turn it on: config area_pages (area slugs, or true); preview while logged in: any area URL + ?bke_area=1.
  *
+ * 4) NEW DEVELOPMENTS, SEARCH RESULTS AND ONE CARD FAMILY (v1.6, every part switched off): one card for a development
+ *    wherever a list of them appears, the same filters and address parameters, and a calmer way from a card to the
+ *    development and back. Each part has its own switch and an editor preview:
+ *    - card_v16 (?bke_cards=1): area and segment pages on the new cards, with a filter bar that also works without script;
+ *    - dev_index (?bke_index=1): /new-developments/ by completion year, with Ready to move into and an A-Z of every
+ *      development by neighbourhood;
+ *    - search_layout (?bke_search=1): /advanced-search/ grouped by development, one section per kind; search_redirect
+ *      sends simple searches to segment pages (off until the search form's real fields are confirmed);
+ *    - view_transitions (?bke_vt=1) and prefetch: the card's photo grows into the development's (photo-first) hero and
+ *      back in Chrome and Edge, "Back to {the list}", the visitor's bedrooms preset on the residences table, and the
+ *      development fetched while the pointer rests on its card.
+ *    Turn on in that order (card_v16, view_transitions and prefetch, dev_index, search_layout, search_redirect), and
+ *    purge Cloudflare for the pages concerned after each. With every switch off, pages are as in v1.5.
+ *
  * Config: option blockke_dev_page (array) overrides any key of blockke_dev_config().
  * Rollback: deactivate this snippet; every page returns to the theme's own template and calculator.
  * Created by Claude session 2026-10-07.
@@ -114,6 +128,9 @@
  * v1.5 (2026-10-16): area pages (3 above). Sections and segment pages never mix homes, commercial and land, or sale and
  * rent; one card per development; bedroom filter, sort and "Show more"; segment pages with their own title, description
  * and canonical, noindex under 3 listings; area enquiries ("[Block] Area enquiry: ...") with what the visitor is looking for.
+ * v1.6 (2026-10-16): new developments, search results and one card family (4 above), all switched off. Built from one
+ * cached read of every listing (transients bkn_rows, bkn_devs, bkn_index, rebuilt when a listing changes); every
+ * number on a card traces to a listing; filtered views are noindex with the canonical on the plain page.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
