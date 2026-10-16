@@ -73,6 +73,40 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 The landing page (`?lp=1`) of a land listing for sale uses the same words. Switching `land_layout` off returns every page to the v1.6 wording.
 
+**Construction progress (v1.7).** A development page can show what is happening on site, for buyers who cannot visit. Everything shown comes from a dated site report that the team has entered: the developer's photos and notes for each part of the site, and the report PDF.
+
+- **Where it shows.** Under the photos, before Residences: "On site", *Construction progress* (*Work on site* on land pages). The latest report is shown as cards: each card has a photo, the part of the site and what was done. Tap a photo to open all the report's photos in the viewer, each captioned "Block D1 — 15 October 2026". On phones the viewer uses the full screen width, with the arrows over the photo's edges. Older reports sit under *Earlier updates*, closed. A *Site update · 15 October 2026* link appears under the hero facts, and *Progress* appears in the section bar. The hero link is not shown on the landing page's phone cover, where it would push the form off the first screen. On phones, a report with more than four parts shows the first three and a *Show all 8 parts* button; without JavaScript, all parts show.
+- **Who says so.** The section names the source ("Tatu City Limited's site report of 15 October 2026") and adds: "Photos and notes are the developer's; Block has not inspected the site."
+- **Freshness.** A report older than 120 days loses the hero link. The section then reads *Last report* instead of *Updated*, its button reads *Ask for a newer site report*, and the line beside it reads "We'll ask the developer for their latest report and send it, with photos, to your WhatsApp."
+- **No report yet.** An off-plan page shows a short panel instead: its completion date and *Ask for site photos*. Ready homes and land show nothing.
+- **Enquiries.** *Get the next site update on WhatsApp* (under a current report) opens the pop-up headed *The next site update*; the lead email's form line reads *Site progress request (next report)*, and the buyer is waiting for the developer's next report. *Ask for a newer site report* and *Ask for site photos* open *Site photos and progress*; the form line reads *Site progress request*, and the buyer wants the latest photos now.
+
+**Add a report.**
+
+1. Upload the photos and the PDF in **Media → Add New**, not from the listing's edit screen. A PDF attached to the listing becomes its brochure when the *Brochure* field is empty.
+2. Note each file's ID: the number after `post=` in the address when you open the file.
+3. Edit the property. In the **Development page** box, write the report in **Site progress** (custom field `bke_dev_progress`). Only administrators see this field.
+
+Write one report per block of lines. A blank line ends a report, so leave none inside one:
+
+- First line: the date, then `|` who reported it, then `|` `PDF` and a Media ID or URL. The last two are optional and can come in either order.
+- Then one line per part of the site: `name | what was done | photo IDs or URLs`, with the photos separated by commas (or semicolons) and optional.
+- A line with no `|` is a note for that report (two at most).
+- Lines starting with `#` are ignored.
+
+```
+15 October 2026 | Tatu City Limited | PDF 45120
+Block D1 | First-floor slab (parking) and ground-floor slab (apartments) cast; ready for the aluminium formwork. | 45101
+Block A1 | Ground-floor slab cast; waterproofing of the retaining walls in progress. | 45102
+Show house | Façade about 95% done; landscaping almost done. | 45110, 45111, 45112
+```
+
+- **Dates** can be written "15 October 2026", "15 Oct 2026", "October 15, 2026", "2026-10-15", "15/10/2026", "15.10.2026" or "15-10-2026" (day first), or "October 2026". Day first, a two-digit year is read as 20xx: "15/10/26", "15.10.26", "15-10-26", "15 Oct 26" or "15-Oct-26". A label before the date ("Report:", "Update:", "Site report:", "Date:") and "of" after the day ("15th of October 2026") are ignored. Reports can be in any order; the newest is shown first. A date line the page cannot read (a typo such as "15 Septmber 2026", or "10/15/2026") is left out with all its lines up to the next date line. So is a block after a blank line that does not start with a date ("Week 38, 2026", "September 2026 report"). Nothing is ever shown under another report's date.
+- **Limits.** At most 12 reports, 24 parts per report and 6 photos per part. A name is cut at 60 characters, a description at 400 and a note at 300.
+- **What is left out.** Photos must be images in this site's Media Library. Files from other sites, private or binned media, unknown IDs and dates still ahead are left out. A bare number in the second cell ("Block D1 | 40") is the description, never a photo. Anything the page cannot read is skipped and never breaks the page.
+- **Check after saving.** Under the field, the edit screen says what the page shows (the latest report's date, parts, photos and PDF) and lists, by line number, every line, photo or PDF it could not read.
+- **Units.** A unit listing with an empty field shows its development's reports.
+
 ## 4. Ad landing pages (for Google Ads and other campaigns)
 
 Every for-sale listing has a landing page for paid campaigns, with nothing to set up: its URL plus `?lp=1`, for example `https://block.ke/property/santorini-residences-westlands-1-4-bed-apartments-lofts/?lp=1`. For a tidier address, create a page under the private page *Landing pages* (slug `lp`) and add a custom field `bke_lp_listing` holding the listing's ID. Santorini's is ready as a draft: `https://block.ke/lp/santorini-residences/` (page 42708, listing 40401); publish it once the v1.3 snippet is on. On these pages, tick Rank Math's *No Index* so they stay out of the sitemap, and set the listing's main photo as the featured image so WhatsApp and Facebook link previews show it. The page's own text appears only if the snippet is switched off, so a line linking to the listing is a good fallback.
@@ -194,6 +228,8 @@ If the listing has a brochure, either a PDF link in the box or a PDF attached to
 
 **Spam and AutoFill.** Each form has a hidden field that people never see and bots fill in. A send that fills it is answered as if it worked, but nothing is emailed or saved as a lead; the last 30 are kept in `blockke_dev_spam` in case one was a person. Before v1.3.1 the field was called `company`, which browsers' AutoFill fills in, so enquiries from visitors using AutoFill were dropped without a trace. It now has a name AutoFill leaves alone and isn't drawn at all. When a send fails, the form shows the error code (for example "error 403") before the WhatsApp link, so the cause can be traced.
 
+**Pages built outside the snippet (lead topics).** A page that is not a listing, an area page or the new developments page, such as the land-and-build page, can post to the same endpoint with a `topic` instead of a listing. The topic must be a key of `lead_topics` in the settings (by default `'land-build' => 'Land and build'`; setting `lead_topics` in the option `blockke_dev_page` replaces that list, so keep `land-build` in it). The lead is saved in `blockke_dev_leads` (the inbox shows "Development page (land-build page: …)"), sent to Zoho with `where` as its area, and emailed as "[Block] Land and build enquiry: Jane - A plot and a house", with any `stage`, `where` and `budget` lines the page sends. The follow-up answers work as on other pages, and there is no brochure. A lead with an unknown topic or none still gets "This listing is no longer available.", and a topic sent with a listing, an area or `index` is ignored, so those leads are unchanged. The page should not use the development pages' form names (`hero`, `modal`, `contact`, `progress` and so on) as its `source` or `intent`, because those print the development page's form labels.
+
 ## Getting around: search, similar homes and the unit switcher (v1.4)
 
 **Search homes.** A "Search" button sits next to Share at the top of every development page, and a search icon sits in the desktop section bar. It opens a short search already filled in from the listing, for example Buy · Westlands · 2 bed · KES 12M–18M. "Show homes" opens the site's own search results (`/advanced-search/?location=Westlands&property_action_category[]=for-sale&componentsbeds=2&price_low=…&price_max=…`, plus `completion` for sales). "Or ask an advisor to shortlist for me" turns the same search into an enquiry. On phones the browser's back button closes the search. Without JavaScript the button is a plain link to the filled-in search.
@@ -270,6 +306,7 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `land_layout` | `true` | Land estates on the development layout read as land (v1.6.1); `false` keeps the v1.6 wording everywhere |
 | `land_why`, `land_disclaimer` | | *Why Block* and the disclaimer on land pages |
 | `land_neighbours` | Juja, Ruiru, Thika | Nearby areas for a land page's *Also consider*: area slug => (nearest areas, the next ring); other areas use `neighbours` |
+| `lead_topics` | `array( 'land-build' => 'Land and build' )` | Pages outside the snippet that may send enquiries with a `topic` and no listing (v1.6.2); setting it replaces the list, so keep `land-build` |
 
 ## Install and roll back
 
@@ -309,6 +346,22 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
 
 - v1.6.1 land estates: Zuri Springs on the test copy with block.ke's live text and with its rewrite, at 320, 390 and 1440px, page and `?lp=1`: every section's land wording, the plot table and lead labels, the calculator (KES 3M at 10% over 36 months: KES 300,000, then 36 × KES 75,000 or 12 × KES 225,000), every pop-up and lead email, no PHP notices, no sideways scroll. The gate on nine land listings, Pazuri at Vipingo (land category, homes with bedrooms) staying homes, and both overrides. Byte for byte, about 2,900 pages (every listing and its `?lp=1`, every area and segment page, the new developments page, search and the home page) with the v1.6 code, with `land_layout` off and with it on: the only pages that change are the land listings' own pages and landing pages. The earlier suites give the same results on both codes.
+- v1.7 construction progress: Porini Point on the test copy, with the developer's 15 October 2026 report (13 photos and the 1.6 MB PDF imported into the Media Library), on the page and `?lp=1` at 320, 390, 768 and 1440px. Checked:
+  - the section after the photos;
+  - 8 cards, with "+1" and "+4" on the parts that have more photos;
+  - the viewer: 13 photos in report order with their captions, arrow keys, swipe, Escape, focus back on the photo, and the gallery's own photos afterwards;
+  - the PDF link, the hero link and *Progress* in the section bar;
+  - *Earlier updates* with their thumbnails;
+  - freshness at 120 and 121 days, a report without photos, and Block's own note (no "not inspected" line);
+  - a unit using its development's reports, the off-plan panel (with its completion date) on the page and its landing page, nothing on a ready development, and Zuri Springs with and without a report;
+  - the landing page form still fitting 390×664;
+  - the progress enquiry end to end: pop-up words, *Send them to me*, the thank-you line, the follow-up questions, and the *Site progress request* email.
+
+  There was no sideways scroll, no JavaScript error and no PHP notice. The parser has 53 unit tests: every date form, PDF by ID and URL, bad IDs, foreign URLs, resized-copy URLs, limits, notes, comments and order. After review, 99 more cover unreadable date lines, "<10%" in text, bare numbers, separators, private and "-scaled" media, the edit-screen check and query counts (3 queries for a report, whatever its number of photos). A third round adds 132 for two-digit years, labelled dates and the blank-line rule, and 12 for the field's save path ("<95%" and "<https://…>" survive saving). The browser checks also cover the viewer fitting tall photos at 1280×720 to 320×568 (full width on phones), Tab staying inside it, the phone *Show all* button and the next-update enquiry.
+
+  Byte for byte on every URL of the zbyte copy (2,909: every listing and landing page, area and segment pages, the new developments page, search and the home page), the pages were compared with the v1.6.1 code once the `<!--bkd-progress-->` and `/*bkd-progress*/` blocks were removed. This was run with no reports anywhere, and again with reports on a development, a land estate (via its landing page) and a 121-day-old report.
+
+  Every page was byte for byte the same in both runs. Development pages and landing pages carry the marked style and script blocks; area, segment, index and search pages carry none and are unchanged even before the blocks are removed. In the run with no reports, 746 pages also carried the off-plan panel. There were no PHP notices.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.
 

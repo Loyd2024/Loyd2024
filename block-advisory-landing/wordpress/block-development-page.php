@@ -135,6 +135,16 @@
  * no bedrooms; bke_dev_kind overrides). Plots, servicing, tenure, the developer's payment plan without a mortgage
  * calculator, infrastructure first, other land nearby, land wording in the forms and leads. Every other page is byte for
  * byte as in v1.6; config land_layout = false turns it off.
+ * v1.7 (2026-10-16): construction progress. The team's dated site reports (Development page box, "Site progress"; custom
+ * field bke_dev_progress; units use their development's) show after the gallery as "Construction progress": what was
+ * done on each part of the site with the developer's photos, the report PDF, earlier reports, a "Site update" link in the
+ * hero and "Progress" in the section bar. Off-plan pages with no report offer the latest site photos instead. Enquiries
+ * from it are labelled "Site progress request". Under the field, the edit screen lists any line or photo the page could
+ * not read. Every other part of a development page is byte for byte as in v1.6.1; area, index and search pages are
+ * wholly unchanged.
+ * v1.7 also carries v1.6.2's lead topics: land-build. A lead with no listing, area or index whose topic is a key of config
+ * lead_topics ('land-build' => 'Land and build') is saved, sent to Zoho and emailed as "[Block] Land and build enquiry:
+ * {name} - {unit}"; without a known topic it still gets the 400, and every other lead is unchanged.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -261,6 +271,9 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				array( 'One advisor to handover', 'From reservation and payments to construction updates and handover, the same advisor stays with you.', 'From reservation and payments to transfer and handover, the same advisor stays with you.' ), // third: ready homes
 			),
 			'disclaimer'         => "All information is provided in good faith from the developer's published material and is subject to change without notice. Prices, sizes, availability, payment terms and completion dates should be confirmed before you commit. Images may include project renders. Block Real Estate does not provide financial or legal advice.",
+			'lead_topics'        => array( // v1.6.2: pages built outside the snippet that send enquiries with no listing: topic => name in the email
+				'land-build' => 'Land and build',
+			),
 			'land_layout'        => true,  // land mode: a plot estate's own development page reads as land (blockke_dev_is_land()); false: every page as before
 			'land_why'           => $land['land_why'],
 			'land_disclaimer'    => $land['land_disclaimer'],
@@ -3196,6 +3209,699 @@ JS;
 	}
 
 	/* =====================================================================
+	   Construction progress (v1.7): the team's dated site reports, from the "Site progress" box field
+	   (bke_dev_progress). Every word shown about the site comes from that text; anything unreadable is skipped.
+	   ===================================================================== */
+
+	/** The month a word names: "October", "Oct", "Sept" (a start of the name, 3 letters or more); 0 for anything else. */
+	function blockke_dev_progress_month( $w ) {
+		$w = strtolower( (string) $w );
+		if ( strlen( $w ) >= 3 ) {
+			foreach ( array( 1 => 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december' ) as $n => $full ) {
+				if ( 0 === strpos( $full, $w ) ) { // never "Octo2"
+					return $n;
+				}
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * A date cell as people write it, ready to read: a label before it ("Report:", "Site update -", "Date:"), a weekday
+	 * ("Wed"), "the" and "of" round the day ("the 15th of September") and a note in brackets after it ("(monthly)") go.
+	 */
+	function blockke_dev_progress_dclean( $s ) {
+		$s = trim( preg_replace( '/\s+/u', ' ', (string) $s ) );
+		$s = preg_replace( '/^(?:(?:site|progress)\s)?(?:report|update|date)(?:\sdate)?\s?[:\x{2013}\x{2014}-]\s?/iu', '', $s ); // "Report: 15 September 2026"
+		$s = preg_replace( '/^(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)\.?,?\s(?=\d|[a-z]{3})/i', '', $s ); // "Wed 15 October 2026"
+		$s = preg_replace( '/^(?:the\s)?(\d{1,2}(?:st|nd|rd|th)?)\sof\s/i', '$1 ', $s ); // "15th of September 2026"
+		return preg_replace( '/\s?\([^()]*\)$/', '', $s ); // "15 October 2026 (monthly)"
+	}
+
+	/**
+	 * A report date: "15 October 2026", "15 Oct 2026", "15-Oct-2026", "October 15, 2026", "2026-10-15", "15/10/2026",
+	 * "15.10.2026" or "15-10-2026" (day first), or "October 2026" (read as the 1st, shown without a day). Day first, a
+	 * two-digit year is this century: "15/10/26", "15.10.26", "15 Oct 26", "15-Oct-26". A label, weekday or bracketed note
+	 * round it is ignored (blockke_dev_progress_dclean()). Returns array( 'ts' (midnight UTC), 'date' => 'Y-m-d', 'label' ),
+	 * or null.
+	 */
+	function blockke_dev_progress_date( $s ) {
+		$names = array( 1 => 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december' );
+		$s     = blockke_dev_progress_dclean( $s );
+		$d     = 0;
+		$m     = 0;
+		$y     = 0;
+		$day   = true;
+		if ( preg_match( '#^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$#', $s, $x ) ) {
+			$y = (int) $x[1];
+			$m = (int) $x[2];
+			$d = (int) $x[3];
+		} elseif ( preg_match( '#^(\d{1,2})([/.\-])(\d{1,2})\2(\d{4}|\d{2})$#', $s, $x ) ) { // day first, as written in Kenya
+			$d = (int) $x[1];
+			$m = (int) $x[3];
+			$y = (int) $x[4] + ( 2 === strlen( $x[4] ) ? 2000 : 0 );
+		} elseif ( preg_match( '/^([a-z]{3,9})\.?\s(\d{1,2})(?:st|nd|rd|th)?,?\s(\d{4})$/i', $s, $x ) ) { // "October 15, 2026"
+			$m = blockke_dev_progress_month( $x[1] );
+			$d = (int) $x[2];
+			$y = (int) $x[3];
+		} elseif ( preg_match( '/^(\d{1,2})(?:st|nd|rd|th)?[\s-]([a-z]{3,9})\.?,?[\s-](\d{4}|\d{2})$/i', $s, $x ) ) { // "15 Oct 2026", "15-Sep-26"
+			$m = blockke_dev_progress_month( $x[2] );
+			$d = (int) $x[1];
+			$y = (int) $x[3] + ( 2 === strlen( $x[3] ) ? 2000 : 0 );
+		} elseif ( preg_match( '/^([a-z]{3,9})\.?,?\s(\d{4})$/i', $s, $x ) ) { // "October 2026"
+			$m   = blockke_dev_progress_month( $x[1] );
+			$day = false;
+			$d   = 1;
+			$y   = (int) $x[2];
+		}
+		if ( $m < 1 || $y < 2000 || $y > 2100 || ! checkdate( $m, $d, $y ) ) {
+			return null;
+		}
+		return array(
+			'ts'    => gmmktime( 0, 0, 0, $m, $d, $y ),
+			'date'  => sprintf( '%04d-%02d-%02d', $y, $m, $d ),
+			'label' => ( $day ? $d . ' ' : '' ) . ucfirst( $names[ $m ] ) . ' ' . $y,
+		);
+	}
+
+	/**
+	 * A first cell that is meant as a date but can't be read ("15 Septmber 2026", "10/15/2026", "31/09/26", "Q3 2026"): a
+	 * day-first date in numbers, or a year and nothing else but numbers and at most two month or weekday words, misspelt or
+	 * not. The reader skips that update with its lines rather than file them under the update above. Part names such as
+	 * "Block 2026" or "Phase 2 (2027)" are not.
+	 */
+	function blockke_dev_progress_datelike( $s ) {
+		$s = trim( preg_replace( '/\([^()]*\)/', ' ', blockke_dev_progress_dclean( $s ) ) );
+		if ( preg_match( '#^\d{1,2}([/.\-])\d{1,2}\1\d{2}$#', $s ) ) { // "31/09/26", "10/15/26"
+			return true;
+		}
+		if ( ! preg_match( '/(?<!\d)(?:19|2\d)\d\d(?!\d)/', $s ) ) { // a year, typos such as 2206 included
+			return false;
+		}
+		$words = preg_split( '#[\s,./\-]+#', $s, -1, PREG_SPLIT_NO_EMPTY );
+		$named = 0;
+		if ( count( $words ) > 6 ) {
+			return false;
+		}
+		foreach ( $words as $w ) {
+			if ( preg_match( '/^(?:\d{1,4}(?:st|nd|rd|th)?|q[1-4])$/i', $w ) ) {
+				continue;
+			}
+			$lw   = strtolower( $w );
+			$word = (bool) preg_match( '/^[a-z]{3,10}$/', $lw ) && ++$named <= 2;
+			if ( $word && ( blockke_dev_progress_month( $lw ) || preg_match( '/^(?:mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)$|^(?:mon|tues|wednes|thurs|fri|satur|sun)day$/', $lw ) ) ) {
+				continue;
+			}
+			if ( $word && strlen( $lw ) > 4 ) { // a misspelt month: "Septmber", "Ocotber", "Octobre"
+				foreach ( array( 'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december' ) as $full ) {
+					if ( levenshtein( $lw, $full ) <= 2 ) {
+						continue 2;
+					}
+				}
+			}
+			return false;
+		}
+		return true;
+	}
+
+	/** Whole days from a report's date to today (site time); negative for a date still ahead. */
+	function blockke_dev_progress_age( $u ) {
+		$t = array_map( 'intval', explode( '-', wp_date( 'Y-m-d' ) ) );
+		return (int) floor( ( gmmktime( 0, 0, 0, $t[1], $t[2], $t[0] ) - (int) $u['ts'] ) / DAY_IN_SECONDS );
+	}
+
+	/** A photo or PDF reference as written, without the quotes, brackets or "#" people put round it. */
+	function blockke_dev_progress_ref( $ref ) {
+		return ltrim( trim( (string) $ref, " \t\"'<>" ), '#' );
+	}
+
+	/**
+	 * A URL in this site's uploads as array( the URL, the uploads paths it can be stored under ), or null for anything
+	 * else (another site's file is never shown). For photos, a resized copy ("-1024x768.jpg") is looked up as its original,
+	 * and so is the original of a big upload, which WordPress keeps as "-scaled.jpg".
+	 */
+	function blockke_dev_progress_upload( $ref, $pdf = false ) {
+		if ( ! preg_match( '#^(?:https?:)?//[^\s]+$#i', $ref ) ) {
+			return null;
+		}
+		$up   = wp_get_upload_dir();
+		$base = preg_replace( '#^https?:#i', '', (string) $up['baseurl'] );
+		$url  = preg_replace( '/[?#].*$/', '', $ref );
+		$bare = preg_replace( '#^https?:#i', '', $url );
+		if ( '' === $base || 0 !== stripos( $bare, $base . '/' ) ) {
+			return null;
+		}
+		$path = (string) substr( $bare, strlen( $base ) + 1 );
+		$try  = array( $path );
+		if ( ! $pdf ) {
+			$orig  = preg_replace( '/-(?:\d+x\d+|scaled)(\.[a-z0-9]+)$/i', '$1', $path );
+			$try[] = $orig;
+			$try[] = preg_replace( '/(\.[a-z0-9]+)$/i', '-scaled$1', $orig );
+		}
+		return array( set_url_scheme( $url, (string) wp_parse_url( $up['baseurl'], PHP_URL_SCHEME ) ), array_values( array_unique( array_filter( $try, 'strlen' ) ) ) );
+	}
+
+	/**
+	 * Attachment IDs for uploads paths (as stored in _wp_attached_file), 0 for none: one query for every path not looked up
+	 * yet in this request. Like attachment_url_to_postid(), it prefers a match in the same letter case.
+	 */
+	function blockke_dev_progress_paths( $paths ) {
+		global $wpdb;
+		static $known = array();
+		$paths = array_values( array_unique( array_map( 'strval', (array) $paths ) ) );
+		$ask   = array();
+		foreach ( $paths as $p ) {
+			if ( '' !== $p && ! isset( $known[ $p ] ) ) {
+				$known[ $p ] = 0;
+				$ask[]       = $p;
+			}
+		}
+		foreach ( array_chunk( $ask, 400 ) as $chunk ) {
+			$lc = array();
+			foreach ( $chunk as $p ) {
+				$lc[ strtolower( $p ) ][] = $p;
+			}
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN (" . implode( ',', array_fill( 0, count( $chunk ), '%s' ) ) . ')', $chunk ) ); // phpcs:ignore WordPress.DB
+			foreach ( (array) $rows as $r ) {
+				$k = strtolower( (string) $r->meta_value );
+				foreach ( isset( $lc[ $k ] ) ? $lc[ $k ] : array() as $p ) {
+					if ( ! $known[ $p ] || $p === $r->meta_value ) {
+						$known[ $p ] = (int) $r->post_id;
+					}
+				}
+			}
+		}
+		$out = array();
+		foreach ( $paths as $p ) {
+			$out[ $p ] = isset( $known[ $p ] ) ? $known[ $p ] : 0;
+		}
+		return $out;
+	}
+
+	/** Loads every attachment some references name in three queries (upload paths, posts, their meta), not two per photo. */
+	function blockke_dev_progress_prime( $refs ) {
+		$ids   = array();
+		$paths = array();
+		foreach ( $refs as $ref ) {
+			$ref = blockke_dev_progress_ref( $ref );
+			if ( preg_match( '/^\d{1,10}$/', $ref ) ) {
+				$ids[] = (int) $ref;
+			} else {
+				$up = blockke_dev_progress_upload( $ref );
+				if ( $up ) {
+					$paths = array_merge( $paths, $up[1] );
+				}
+			}
+		}
+		if ( $paths ) {
+			$ids = array_merge( $ids, array_values( blockke_dev_progress_paths( $paths ) ) );
+		}
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		if ( $ids && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_slice( $ids, 0, 2000 ), false, true );
+		}
+	}
+
+	/**
+	 * A Media ID, or a URL in this site's uploads, as an attachment ID when it is an image (or with $pdf, a PDF) that is
+	 * neither private nor in the trash; else 0.
+	 */
+	function blockke_dev_progress_att( $ref, $pdf = false ) {
+		$ref = blockke_dev_progress_ref( $ref );
+		if ( preg_match( '/^\d{1,10}$/', $ref ) ) {
+			$aid = (int) $ref;
+		} else {
+			$up = blockke_dev_progress_upload( $ref, $pdf );
+			if ( ! $up ) {
+				return 0;
+			}
+			$aid = null;
+			foreach ( blockke_dev_progress_paths( $up[1] ) as $id ) {
+				if ( $id ) {
+					$aid = $id;
+					break;
+				}
+			}
+			$aid = (int) apply_filters( 'attachment_url_to_postid', $aid, $up[0] ); // as attachment_url_to_postid() does
+		}
+		if ( $aid <= 0 || 'attachment' !== get_post_type( $aid ) || ! in_array( get_post_field( 'post_status', $aid ), array( 'inherit', 'publish' ), true ) ) {
+			return 0;
+		}
+		if ( $pdf ) {
+			return 'application/pdf' === get_post_mime_type( $aid ) ? $aid : 0;
+		}
+		return wp_attachment_is_image( $aid ) ? $aid : 0;
+	}
+
+	/** A file size as people read it: "820 KB", "1.6 MB"; '' when unknown. */
+	function blockke_dev_progress_size( $bytes ) {
+		$bytes = (int) $bytes;
+		if ( $bytes <= 0 ) {
+			return '';
+		}
+		if ( $bytes < 1048576 ) {
+			return max( 1, (int) round( $bytes / 1024 ) ) . ' KB';
+		}
+		return rtrim( rtrim( number_format( $bytes / 1048576, 1, '.', '' ), '0' ), '.' ) . ' MB';
+	}
+
+	/** A cell that holds only photo references: "45101, 45102", "45101; 45102.", "#45101" or upload URLs. */
+	function blockke_dev_progress_is_refs( $c ) {
+		return (bool) preg_match( '~^(?:#?(?:\d{1,10}|(?:https?:)?//[^\s,;|]+)(?:\s*[,;]\s*|\s+|\.?$))+$~i', trim( (string) $c ) );
+	}
+
+	/** The references in such a cell, in order. */
+	function blockke_dev_progress_refs( $c ) {
+		return preg_split( '/[\s,;]+/', rtrim( trim( (string) $c ), '.' ), -1, PREG_SPLIT_NO_EMPTY );
+	}
+
+	/**
+	 * Parses the "Site progress" text. One update per block of lines: a first line "date | who reported it | PDF <id or
+	 * URL>" (both cells optional, either order), then "name | what was done | photo IDs or URLs" per part of the site; a
+	 * line without | is a note (two at most); lines starting with # are skipped, as is anything before the first date and
+	 * every line under a date that can't be read. A blank line ends an update: a block that follows one without a date
+	 * line is skipped up to the next date line, never filed under the update above. Returns the updates newest first (12
+	 * at most), each array( 'ts', 'date'
+	 * => 'Y-m-d', 'label', 'by', 'pdf' => array( 'id', 'url', 'size' ) or null, 'notes' => array(), 'items' =>
+	 * array( array( 'name', 'text', 'photos' => IDs ) ) ). With $log (an array), says what was left out and why, by line
+	 * number, for the edit screen. Photos and PDFs are looked up only for the updates shown, all at once.
+	 */
+	function blockke_dev_progress_parse( $raw, &$log = null ) {
+		$say = function ( $n, $msg ) use ( &$log ) {
+			if ( is_array( $log ) ) {
+				$log[] = ( $n ? 'Line ' . $n . ': ' : '' ) . $msg;
+			}
+		};
+		$cut = function ( $s ) {
+			return blockke_dev_trim_words( $s, 40 );
+		};
+		$ups = array();
+		$cur = null; // the update being read; false under a date that can't be read
+		$n   = 0;
+		$gap = false; // a blank line since the last line read
+		foreach ( explode( "\n", str_replace( array( "\r\n", "\r" ), "\n", (string) $raw ) ) as $line ) {
+			$n++;
+			$line = trim( $line );
+			if ( '' === $line ) {
+				$gap = true;
+				continue;
+			}
+			if ( '#' === $line[0] ) {
+				continue;
+			}
+			$after = $gap;
+			$gap   = false;
+			$line  = preg_replace( '/<(?=[\d\s=%.,]|$)/', '&lt;', $line ); // "<10% remaining" is text, not the start of a tag
+			$cells = array_map( 'trim', explode( '|', $line ) );
+			$c0    = blockke_dev_text( $cells[0] );
+			$date  = blockke_dev_progress_date( $c0 );
+			if ( $date ) { // a new update
+				if ( $cur ) {
+					$ups[] = $cur;
+				}
+				$cur = $date + array( 'by' => '', 'pdf' => null, 'notes' => array(), 'items' => array(), 'line' => $n, 'pdfref' => '' );
+				foreach ( array_slice( $cells, 1 ) as $c ) {
+					$c = blockke_dev_text( $c );
+					if ( preg_match( '~^pdf\b[\s:#\-]*(.*)$~i', $c, $pm ) && ! preg_match( "/^[a-z][a-z&.,'\\- ]*$/i", $pm[1] ) ) { // not "PDF Consultants Ltd"
+						if ( preg_match( '~^((?:https?:)?//\S+|\d{1,10})\.?$~i', $pm[1], $pr ) ) { // "PDF 45120", "PDF: https://…"
+							$cur['pdfref'] = '' === $cur['pdfref'] ? $pr[1] : $cur['pdfref'];
+						} else {
+							$say( $n, '"' . $cut( $c ) . '" not read: write PDF and the report\'s Media ID or URL.' );
+						}
+					} elseif ( '' === $cur['by'] && '' !== $c ) {
+						$cur['by'] = blockke_dev_trim_words( $c, 80 );
+					} elseif ( '' !== $c ) {
+						$say( $n, '"' . $cut( $c ) . '" not read: the first line takes the date, who reported it and the PDF.' );
+					}
+				}
+				continue;
+			}
+			if ( blockke_dev_progress_datelike( $c0 ) ) {
+				if ( $cur ) {
+					$ups[] = $cur;
+				}
+				$cur = false;
+				$say( $n, '"' . $cut( $c0 ) . '" is not a date the page can read, so this update is left out up to the next date line. Write 15 October 2026, 2026-10-15 or 15/10/2026 (day first).' );
+				continue;
+			}
+			if ( $after && $cur ) { // a blank line ended the update above: this block has no date of its own
+				$ups[] = $cur;
+				$cur   = false;
+				$say( $n, 'an update starts with its date (15 October 2026, 2026-10-15 or 15/10/2026), but "' . $cut( $c0 ) . '" after the blank line is not one; this block is left out up to the next date line. Inside an update, leave no blank lines.' );
+				continue;
+			}
+			if ( ! $cur ) {
+				if ( null === $cur ) {
+					$say( $n, 'before the first date line; left out.' );
+				}
+				continue;
+			}
+			if ( 1 === count( $cells ) ) { // a note for this update
+				$t = blockke_dev_text( $line );
+				if ( '' !== $t && count( $cur['notes'] ) < 2 ) {
+					$cur['notes'][] = blockke_dev_trim_words( $t, 300 );
+				} elseif ( '' !== $t ) {
+					$say( $n, 'a third note; two are shown.' );
+				}
+				continue;
+			}
+			if ( count( $cur['items'] ) >= 48 ) { // the first 24 that can be shown are kept below
+				continue;
+			}
+			$name = blockke_dev_trim_words( $c0, 60 );
+			$text = '';
+			$refs = array();
+			foreach ( array_slice( $cells, 1 ) as $i => $c ) {
+				if ( '' === $c ) {
+					continue;
+				}
+				// "name | 45101, 45102": photos in the second cell too, but only as a list or URLs; a bare "40" is the text
+				$short = 0 === $i && ! isset( $cells[2] );
+				if ( ( $i > 0 || ( $short && preg_match( '#[,;]|//#', $c ) ) ) && blockke_dev_progress_is_refs( $c ) ) {
+					$refs = array_merge( $refs, blockke_dev_progress_refs( $c ) );
+				} elseif ( 0 === $i ) {
+					$text = blockke_dev_trim_words( blockke_dev_text( $c ), 400 );
+					if ( is_array( $log ) && preg_match( '/^#?\d{1,10}$/', $text ) && blockke_dev_progress_att( $text ) ) { // the edit screen only
+						$say( $n, '"' . $text . '" is shown as the description. For a photo, write: name | description | ' . ltrim( $text, '#' ) . '.' );
+					}
+				} else {
+					$say( $n, '"' . $cut( blockke_dev_text( $c ) ) . '" not read as photos (Media IDs or this site\'s upload URLs, separated by commas).' );
+				}
+			}
+			if ( '' === $name ) {
+				$say( $n, 'no name before the first |; left out.' );
+			} elseif ( '' === $text && ! $refs ) {
+				$say( $n, '"' . $cut( $name ) . '" has no description or photo; left out.' );
+			} else {
+				$cur['items'][] = array( 'name' => $name, 'text' => $text, 'refs' => $refs, 'line' => $n );
+			}
+		}
+		if ( $cur ) {
+			$ups[] = $cur;
+		}
+		$wait = array();
+		foreach ( $ups as $i => $u ) {
+			if ( blockke_dev_progress_age( $u ) < -1 ) { // a date ahead is a typo, not a report
+				$say( $u['line'], $u['label'] . ' is still ahead, so this update is left out.' );
+			} else {
+				$wait[] = $u + array( 'i' => $i );
+			}
+		}
+		usort(
+			$wait,
+			function ( $a, $b ) {
+				return $a['ts'] === $b['ts'] ? $a['i'] - $b['i'] : ( $a['ts'] > $b['ts'] ? -1 : 1 ); // newest first, then as written
+			}
+		);
+		// newest first, the photos and PDFs of as many updates as can still be shown, all looked up at once
+		$keep = array();
+		$pos  = 0;
+		while ( count( $keep ) < 12 && $pos < count( $wait ) ) {
+			$next = array_slice( $wait, $pos, 12 - count( $keep ) );
+			$pos += count( $next );
+			$refs = array();
+			foreach ( $next as $u ) {
+				$refs[] = $u['pdfref'];
+				foreach ( $u['items'] as $it ) {
+					$refs = array_merge( $refs, $it['refs'] );
+				}
+			}
+			blockke_dev_progress_prime( array_filter( $refs, 'strlen' ) );
+			foreach ( $next as $u ) {
+				if ( '' !== $u['pdfref'] ) {
+					$pid = blockke_dev_progress_att( $u['pdfref'], true );
+					$url = $pid ? wp_get_attachment_url( $pid ) : '';
+					if ( $url ) {
+						$meta     = wp_get_attachment_metadata( $pid );
+						$file     = get_attached_file( $pid );
+						$size     = is_array( $meta ) && ! empty( $meta['filesize'] ) ? (int) $meta['filesize'] : ( $file && file_exists( $file ) ? (int) filesize( $file ) : 0 );
+						$u['pdf'] = array( 'id' => $pid, 'url' => $url, 'size' => $size );
+					} else {
+						$say( $u['line'], 'PDF "' . $cut( $u['pdfref'] ) . '" is not a PDF in the Media Library.' );
+					}
+				}
+				$items = array();
+				foreach ( $u['items'] as $it ) {
+					if ( count( $items ) >= 24 ) {
+						$say( $it['line'], 'more than 24 parts in this update; the first 24 are shown.' );
+						break;
+					}
+					$photos = array();
+					foreach ( $it['refs'] as $ref ) {
+						if ( count( $photos ) >= 6 ) {
+							$say( $it['line'], 'more than 6 photos; the first 6 are shown.' );
+							break;
+						}
+						$aid = blockke_dev_progress_att( $ref );
+						if ( ! $aid ) {
+							$say( $it['line'], 'photo "' . $cut( $ref ) . '" is not an image in the Media Library.' );
+						} elseif ( ! in_array( $aid, $photos, true ) ) {
+							$photos[] = $aid;
+						}
+					}
+					if ( '' === $it['text'] && ! $photos ) {
+						$say( $it['line'], '"' . $cut( $it['name'] ) . '" has no description and none of its photos was found; left out.' );
+						continue;
+					}
+					$items[] = array( 'name' => $it['name'], 'text' => $it['text'], 'photos' => $photos );
+				}
+				$u['items'] = $items;
+				if ( ! $u['items'] && ! $u['notes'] && ! $u['pdf'] ) {
+					$say( $u['line'], 'the update of ' . $u['label'] . ' has nothing to show; left out.' );
+					continue;
+				}
+				unset( $u['i'], $u['line'], $u['pdfref'] );
+				$keep[] = $u;
+			}
+		}
+		if ( $pos < count( $wait ) ) {
+			$say( 0, ( count( $wait ) - $pos ) . ' older ' . _n( 'update is', 'updates are', count( $wait ) - $pos ) . ' left out; the page shows the 12 newest.' );
+		}
+		return $keep;
+	}
+
+	/** A listing's site reports (blockke_dev_progress_parse()); a unit with none of its own uses its development's. */
+	function blockke_dev_progress( $id ) {
+		static $cache = array();
+		$id = (int) $id;
+		if ( ! isset( $cache[ $id ] ) ) {
+			$raw = (string) get_post_meta( $id, 'bke_dev_progress', true );
+			if ( '' === trim( $raw ) ) {
+				$mid = (int) get_post_meta( $id, 'property_subunits_master', true );
+				if ( $mid && $mid !== $id && 'estate_property' === get_post_type( $mid ) && 'publish' === get_post_status( $mid ) ) {
+					$raw = (string) get_post_meta( $mid, 'bke_dev_progress', true );
+				}
+			}
+			$cache[ $id ] = '' === trim( $raw ) ? array() : blockke_dev_progress_parse( $raw );
+		}
+		return $cache[ $id ];
+	}
+
+	/**
+	 * Under the "Site progress" field on the edit screen: what the page shows from the saved text, and every line or cell
+	 * it left out, so a typo never goes unnoticed. Admin only; nothing here reaches a page.
+	 */
+	function blockke_dev_progress_check( $post_id, $raw ) {
+		if ( '' === trim( (string) $raw ) ) {
+			$mid = (int) get_post_meta( $post_id, 'property_subunits_master', true );
+			return $mid && $mid !== (int) $post_id && blockke_dev_progress( $mid ) ? '<p class="description">Empty, so this unit shows its development\'s site progress.</p>' : '';
+		}
+		$log = array();
+		$ups = blockke_dev_progress_parse( $raw, $log );
+		if ( $ups ) {
+			$u  = $ups[0];
+			$np = 0;
+			foreach ( $u['items'] as $it ) {
+				$np += count( $it['photos'] );
+			}
+			$what = array( count( $u['items'] ) . ' ' . _n( 'part', 'parts', count( $u['items'] ) ), $np . ' ' . _n( 'photo', 'photos', $np ) );
+			if ( $u['pdf'] ) {
+				$what[] = 'the PDF';
+			}
+			$msg = 'On the page: the update of ' . $u['label'] . ' (' . implode( ', ', $what ) . ')'
+				. ( count( $ups ) > 1 ? ', and ' . ( count( $ups ) - 1 ) . ' earlier ' . _n( 'update', 'updates', count( $ups ) - 1 ) : '' ) . '.'
+				. ( blockke_dev_progress_age( $u ) > 120 ? ' It is more than 120 days old, so the page asks for a newer one.' : '' );
+		} else {
+			$msg = 'Nothing from this text is shown on the page.';
+		}
+		$o = '<div class="notice inline ' . ( $log ? 'notice-warning' : 'notice-info' ) . '" style="margin:10px 0 0"><p>' . esc_html( $msg ) . '</p>';
+		if ( $log ) {
+			$o .= '<p><strong>Not shown:</strong></p><ul style="margin:0 0 8px 18px;list-style:disc">';
+			foreach ( array_slice( $log, 0, 20 ) as $l ) {
+				$o .= '<li>' . esc_html( $l ) . '</li>';
+			}
+			$o .= ( count( $log ) > 20 ? '<li>' . esc_html( 'and ' . ( count( $log ) - 20 ) . ' more.' ) . '</li>' : '' ) . '</ul>';
+		}
+		return $o . '</div>';
+	}
+
+	/** "Tatu City Limited's", "Cytonn Investments'". */
+	function blockke_dev_progress_poss( $who ) {
+		return $who . ( preg_match( '/s$/', $who ) ? "'" : "'s" );
+	}
+
+	/** One update's photos for the viewer, in order: array( list of array( full, alt, thumb, caption ), first index per item ). */
+	function blockke_dev_progress_viewer( $u, $d ) {
+		$list  = array();
+		$start = array();
+		foreach ( $u['items'] as $k => $it ) {
+			$start[ $k ] = count( $list );
+			foreach ( $it['photos'] as $aid ) {
+				$full   = wp_get_attachment_image_url( $aid, '1536x1536' );
+				$thumb  = wp_get_attachment_image_url( $aid, 'thumbnail' );
+				$full   = $full ? $full : wp_get_attachment_url( $aid );
+				$list[] = array( (string) $full, $it['name'] . ', ' . $d['short'] . ', ' . $u['label'], (string) ( $thumb ? $thumb : $full ), $it['name'] . ' — ' . $u['label'] );
+			}
+		}
+		return array( $list, $start );
+	}
+
+	/** The viewer's list as an attribute value (no quotes, ampersands or angle brackets left in the JSON). */
+	function blockke_dev_progress_attr( $list ) {
+		return esc_attr( (string) wp_json_encode( $list, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) );
+	}
+
+	/**
+	 * The card photo's sizes: its column's width, times how much wider than 4:3 the photo is, since a wide site
+	 * panorama fills the 4:3 frame by its height (a 2.5:1 photo in a 384px card is drawn 720px wide).
+	 */
+	function blockke_dev_progress_sizes( $aid, $n ) {
+		$m = wp_get_attachment_metadata( $aid );
+		$f = is_array( $m ) && ! empty( $m['width'] ) && ! empty( $m['height'] ) ? max( 1, ( $m['width'] / $m['height'] ) / ( 4 / 3 ) ) : 1;
+		$w = function ( $px, $unit ) use ( $f ) {
+			return (int) ceil( $px * $f ) . $unit;
+		};
+		if ( 1 === $n ) { // one wide card, the photo beside the text from 760px
+			return '(min-width: 1240px) ' . $w( 700, 'px' ) . ', (min-width: 760px) ' . $w( 56, 'vw' ) . ', ' . $w( 92, 'vw' );
+		}
+		return 2 === $n || 4 === $n ? '(min-width: 1240px) ' . $w( 590, 'px' ) . ', (min-width: 640px) ' . $w( 46, 'vw' ) . ', ' . $w( 92, 'vw' )
+			: '(min-width: 1240px) ' . $w( 384, 'px' ) . ', (min-width: 1000px) ' . $w( 31, 'vw' ) . ', (min-width: 640px) ' . $w( 46, 'vw' ) . ', ' . $w( 92, 'vw' );
+	}
+
+	/** The report link: "Full report (PDF, 1.6 MB)". */
+	function blockke_dev_progress_pdf_link( $pdf, $words ) {
+		$size = blockke_dev_progress_size( $pdf['size'] );
+		return '<a class="bkd-prog-pdf" href="' . esc_url( $pdf['url'] ) . '" target="_blank" rel="noopener" type="application/pdf">'
+			. '<svg class="bkd-i" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg>'
+			. '<span>' . esc_html( $words . ' (PDF' . ( '' !== $size ? ', ' . $size : '' ) . ')' ) . '</span><span class="bkd-sr"> (opens in a new tab)</span></a>';
+	}
+
+	/**
+	 * The dev stylesheet or script without its v1.7 blocks (between the bkd-progress comment markers), for the area, index and
+	 * search pages, which never show a site report: those pages stay byte for byte as in v1.6.1.
+	 */
+	function blockke_dev_noprog( $s ) {
+		$t = preg_replace( '#/\*bkd-progress\*/.*?/\*/bkd-progress\*/#s', '', (string) $s );
+		return null === $t ? (string) $s : $t;
+	}
+
+	/** A date label that never breaks across lines: "15 October 2026" with no-break spaces. */
+	function blockke_dev_progress_nb( $label ) {
+		return str_replace( ' ', "\xC2\xA0", (string) $label );
+	}
+
+	/** The hero's "Site update · 15 October 2026" link, while the latest report is 120 days old or less. */
+	function blockke_dev_progress_hero( $d ) {
+		$p = isset( $d['progress'] ) && is_array( $d['progress'] ) ? $d['progress'] : array();
+		if ( ! $p || blockke_dev_progress_age( $p[0] ) > 120 ) {
+			return '';
+		}
+		return '<!--bkd-progress--><a class="bkd-prog-hero" href="#bkd-progress"><span>Site update · ' . esc_html( blockke_dev_progress_nb( $p[0]['label'] ) ) . '</span>' . blockke_dev_icon( 'arrow' ) . '</a><!--/bkd-progress-->';
+	}
+
+	/**
+	 * The "On site" section after the gallery: the latest report as cards (photo, part of the site, what was done), its PDF,
+	 * the earlier reports and a request for the next one. With no report, an off-plan page gets a short panel offering the
+	 * developer's latest site photos; ready homes and land get nothing. $tight: a section with bottom spacing comes first.
+	 */
+	function blockke_dev_progress_html( $d, $lp, $tight ) {
+		$e    = 'esc_html';
+		$cfg  = blockke_dev_config();
+		$p    = isset( $d['progress'] ) && is_array( $d['progress'] ) ? $d['progress'] : array();
+		$land = ! empty( $d['land'] );
+		$cls  = 'bkd-sec' . ( $tight ? ' bkd-sec-tight' : '' ) . ' bkd-prog';
+		if ( ! $p ) {
+			if ( $land || ! $d['offplan'] ) {
+				return '';
+			}
+			return '<!--bkd-progress--><section class="' . $cls . ' bkd-prog-ask" id="bkd-progress" aria-labelledby="bkd-progress-h"><div class="bkd-wrap"><div class="bkd-prog-box bkd-rv"><div>'
+				. '<p class="bkd-label">On site</p><h2 class="bkd-prog-ask-h" id="bkd-progress-h">Construction progress</h2>'
+				. '<p class="bkd-body">' . ( '' !== (string) $d['completion'] ? $e( 'Completion: ' . $d['completion'] . '.' ) . ' ' : '' ) . $e( 'Ask us for the developer\'s latest site photos and progress report; we\'ll send them on WhatsApp.' ) . '</p></div>'
+				. '<button class="bkd-btn bkd-btn-line" type="button" data-bkd-enquire="progress">Ask for site photos</button></div></div></section><!--/bkd-progress-->';
+		}
+		$u      = $p[0];
+		$stale  = blockke_dev_progress_age( $u ) > 120;
+		$photos = false;
+		foreach ( $u['items'] as $it ) {
+			$photos = $photos || (bool) $it['photos'];
+		}
+		$lede = ( '' !== $u['by'] ? blockke_dev_progress_poss( $u['by'] ) . ' site report of ' : 'The site report of ' ) . blockke_dev_progress_nb( $u['label'] )
+			. ( $u['items'] ? ': what was done on each part of the site' . ( $photos ? ', with photos.' : '.' ) : '.' );
+		// whose words these are: the developer's (Block's own report, if the team ever enters one, makes no such claim)
+		$ours = '' !== $u['by'] && ( 0 === strcasecmp( $u['by'], (string) $cfg['brand'] ) || 0 === stripos( $u['by'], (string) $cfg['brand_full'] ) );
+		$src  = $ours ? '' : $e( ( '' !== $u['by'] ? 'Photos and notes are the developer\'s; ' : 'Photos and notes from the developer\'s report; ' ) . $cfg['brand'] . ' has not inspected the site.' );
+		$o    = '<!--bkd-progress--><section class="' . $cls . '" id="bkd-progress" aria-labelledby="bkd-progress-h"><div class="bkd-wrap">'
+			. '<div class="bkd-prog-head bkd-rv"><div><p class="bkd-label">On site</p><h2 class="bkd-h2" id="bkd-progress-h">' . ( $land ? 'Work <em>on site</em>' : 'Construction <em>progress</em>' ) . '</h2></div>'
+			. '<div class="bkd-prog-about"><p class="bkd-prog-lede">' . $e( $lede ) . '</p>';
+		foreach ( $u['notes'] as $n ) {
+			$o .= '<p class="bkd-body bkd-prog-note">' . $e( $n ) . '</p>';
+		}
+		$o .= '<div class="bkd-prog-meta"><p class="bkd-prog-when"><span>' . ( $stale ? 'Last report' : 'Updated' ) . '</span> <time datetime="' . esc_attr( $u['date'] ) . '">' . $e( blockke_dev_progress_nb( $u['label'] ) ) . '</time></p>'
+			. ( $u['pdf'] ? blockke_dev_progress_pdf_link( $u['pdf'], 'Full report' ) : '' ) . '</div>'
+			. ( '' !== $src ? '<p class="bkd-prog-src">' . $src . '</p>' : '' ) . '</div></div>';
+		if ( $u['items'] ) {
+			list( $list, $start ) = blockke_dev_progress_viewer( $u, $d );
+			$n     = count( $u['items'] );
+			$o    .= '<ul class="bkd-prog-grid" data-n="' . $n . '" data-prog-photos="' . blockke_dev_progress_attr( $list ) . '" data-prog-date="' . esc_attr( $u['date'] ) . '">';
+			foreach ( $u['items'] as $k => $it ) {
+				$o  .= '<li class="bkd-prog-card bkd-rv' . ( $it['photos'] ? '' : ' bkd-prog-card-t' ) . '">';
+				$np  = count( $it['photos'] );
+				$img = $np ? wp_get_attachment_image( $it['photos'][0], 'large', false, array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => blockke_dev_progress_sizes( $it['photos'][0], $n ), 'alt' => $it['name'] . ', ' . $d['short'] . ', ' . $u['label'] ) ) : '';
+				if ( '' !== $img ) {
+					$o .= '<button class="bkd-prog-ph" type="button" data-prog-open="' . (int) $start[ $k ] . '"><span class="bkd-sr">' . ( $np > 1 ? 'Open ' . $np . ' photos: ' : 'Open the photo: ' ) . '</span>' . $img
+						. ( $np > 1 ? '<span class="bkd-prog-n" aria-hidden="true">+' . ( $np - 1 ) . '</span>' : '' ) . '</button>';
+				}
+				$o .= '<div class="bkd-prog-txt"><h3 class="bkd-prog-name">' . $e( $it['name'] ) . '</h3>' . ( '' !== $it['text'] ? '<p>' . $e( $it['text'] ) . '</p>' : '' ) . '</div></li>';
+			}
+			$o .= '</ul>';
+		}
+		$o .= '<div class="bkd-prog-cta bkd-rv"><button class="bkd-btn bkd-btn-line" type="button" data-bkd-enquire="' . ( $stale ? 'progress">Ask for a newer site report' : 'progress-next">Get the next site update on WhatsApp' ) . '</button>'
+			. '<p>' . $e( $stale ? 'We\'ll ask the developer for their latest report and send it, with photos, to your WhatsApp.' : 'We\'ll send the developer\'s next report and photos when they are released.' ) . '</p></div>';
+		if ( count( $p ) > 1 ) { // earlier reports: date, report, notes, and each part of the site in a line with its photos
+			$o .= '<details class="bkd-prog-old"><summary>Earlier updates (' . ( count( $p ) - 1 ) . ')</summary>';
+			foreach ( array_slice( $p, 1 ) as $v ) {
+				list( $list, $start ) = blockke_dev_progress_viewer( $v, $d );
+				$o .= '<div class="bkd-prog-u" data-prog-photos="' . blockke_dev_progress_attr( $list ) . '" data-prog-date="' . esc_attr( $v['date'] ) . '"><div class="bkd-prog-u-h">'
+					. '<h3 class="bkd-prog-u-t"><time datetime="' . esc_attr( $v['date'] ) . '">' . $e( $v['label'] ) . '</time></h3>'
+					. ( '' !== $v['by'] ? '<p class="bkd-prog-u-by">' . $e( blockke_dev_progress_poss( $v['by'] ) . ' site report' ) . '</p>' : '' )
+					. ( $v['pdf'] ? blockke_dev_progress_pdf_link( $v['pdf'], 'Report' ) : '' ) . '</div>';
+				foreach ( $v['notes'] as $n ) {
+					$o .= '<p class="bkd-prog-u-note">' . $e( $n ) . '</p>';
+				}
+				if ( $v['items'] ) {
+					$o .= '<ul class="bkd-prog-list">';
+					foreach ( $v['items'] as $k => $it ) {
+						$o .= '<li><p><b>' . $e( $it['name'] ) . '</b>' . ( '' !== $it['text'] ? ' — ' . $e( $it['text'] ) : '' ) . '</p>';
+						if ( $it['photos'] ) {
+							$o .= '<div class="bkd-prog-thumbs">';
+							foreach ( $it['photos'] as $j => $aid ) {
+								$o .= '<button type="button" data-prog-open="' . ( (int) $start[ $k ] + $j ) . '" aria-label="' . esc_attr( 'Photo' . ( count( $it['photos'] ) > 1 ? ' ' . ( $j + 1 ) . ' of ' . count( $it['photos'] ) : '' ) . ': ' . $it['name'] . ', ' . $v['label'] ) . '">'
+									. wp_get_attachment_image( $aid, 'thumbnail', false, array( 'loading' => 'lazy', 'decoding' => 'async', 'alt' => '' ) ) . '</button>';
+							}
+							$o .= '</div>';
+						}
+						$o .= '</li>';
+					}
+					$o .= '</ul>';
+				}
+				$o .= '</div>';
+			}
+			$o .= '</details>';
+		}
+		return $o . '</div></section><!--/bkd-progress-->';
+	}
+
+	/* =====================================================================
 	   Land mode: a plot estate's own development page (blockke_dev_is_land()). Everything here is called only
 	   for land listings, so home pages never reach it.
 	   ===================================================================== */
@@ -4858,6 +5564,7 @@ JS;
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
 			'crumbs'     => $crumbs,
 			'crumb_here' => $here,
+			'progress'   => blockke_dev_progress( $id ), // v1.7: the site reports, newest first (a unit: its development's)
 			// land mode: false for homes; for land the smallest plot ("1/8 acre"), the deposit % and the plan's months
 			'land'       => $land ? array( 'from' => blockke_dev_land_from( $id, $kv, $units ), 'deposit' => (float) $plan['deposit'], 'term' => (int) $plan['term'] ) : false,
 		);
@@ -5277,7 +5984,7 @@ JS;
 		}
 		$o[]    = '<section class="bkd-hero' . ( $vt ? ' bkd-hero-vt' : '' ) . '" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">' . ( $vt ? $fig . $head : $head . $fig )
 			. '<div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
-		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : 'Get the price list and floor plans' ) . '</div>'
+		$o[] = '</dl>' . blockke_dev_progress_hero( $d ) . '<div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : 'Get the price list and floor plans' ) . '</div>'
 			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
 			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
 			. ( $d['brochure'] ? '<div class="bkd-quick-alt"><button class="bkd-link" type="button" data-bkd-enquire="brochure">Or download the brochure' . blockke_dev_icon( 'arrow' ) . '</button></div>' : '' )
@@ -5289,6 +5996,9 @@ JS;
 		$nav = array();
 		if ( $d['overview']['paras'] || $d['desc'] ) {
 			$nav['overview'] = 'Overview';
+		}
+		if ( ! empty( $d['progress'] ) ) { // v1.7: the site reports, after the gallery
+			$nav['progress'] = 'Progress';
 		}
 		if ( $d['units'] ) {
 			$nav['residences'] = $land ? 'Plots' : 'Residences';
@@ -5312,7 +6022,7 @@ JS;
 		}
 		$o[] = '<nav class="bkd-subnav" id="bkd-subnav" aria-label="On this page"><div class="bkd-wrap bkd-subnav-in"><b class="bkd-subnav-name">' . $e( $d['short'] ) . '</b><div class="bkd-subnav-links">';
 		foreach ( $nav as $k => $label ) {
-			$o[] = '<a href="#bkd-' . $k . '">' . $e( $label ) . '</a>';
+			$o[] = 'progress' === $k ? '<!--bkd-progress--><a href="#bkd-progress">Progress</a><!--/bkd-progress-->' : '<a href="#bkd-' . $k . '">' . $e( $label ) . '</a>';
 		}
 		$o[] = '</div><div class="bkd-subnav-r">' . ( $search ? ( $land ? '<a class="bkd-subnav-srch" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search land" title="Search land">' . blockke_dev_icon( 'search' ) . '</a>'
 			: '<a class="bkd-subnav-srch" data-bkd-search="subnav" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" title="Search homes">' . blockke_dev_icon( 'search' ) . '</a>' ) : '' )
@@ -5361,6 +6071,9 @@ JS;
 			}
 			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . $e( $d['gallery_note'] ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
 		}
+
+		// Construction progress (v1.7): the site reports, or an off-plan page's offer of site photos
+		$o[] = blockke_dev_progress_html( $d, $lp, $n_img >= 3 || isset( $nav['overview'] ) );
 
 		// Video or virtual tour
 		if ( $d['video'] ) {
@@ -6123,7 +6836,77 @@ html.bkd-lock #zsiq_float{display:none!important}
 #bkd .bkd-seg .bkd-chip+.bkd-chip span{border-left:0}
 #bkd .bkd-sf .bkd-chip span{min-width:44px;padding:0 10px;justify-content:center}
 #bkd .bkd-sf .bkd-chips{gap:6px}
-@media print{#bkd .bkd-subnav,#bkd .bkd-mb,#bkd .bkd-md,#bkd .bkd-lb,#bkd .bkd-quick,#bkd .bkd-formcard,#bkd .bkd-map,#bkd .bkd-un,#bkd .bkd-hero-tools,#bkd .bkd-sim-act,#bkd .bkd-card-all,#bkd .bkd-alt{display:none!important}#bkd .bkd-rv{opacity:1!important;transform:none!important}}
+@media print{#bkd .bkd-subnav,#bkd .bkd-mb,#bkd .bkd-md,#bkd .bkd-lb,#bkd .bkd-quick,#bkd .bkd-formcard,#bkd .bkd-map,#bkd .bkd-un,#bkd .bkd-hero-tools,#bkd .bkd-sim-act,#bkd .bkd-card-all,#bkd .bkd-alt{display:none!important}#bkd .bkd-rv{opacity:1!important;transform:none!important}}/*bkd-progress*/
+/* v1.7 construction progress: the latest site report as cards, earlier reports, the hero link and the no-report panel */
+#bkd .bkd-prog-head{display:grid;gap:22px;margin-bottom:clamp(36px,4.4vw,56px)}
+#bkd .bkd-prog-head .bkd-label{margin-bottom:20px}
+#bkd .bkd-prog-about{min-width:0;max-width:640px}
+#bkd .bkd-prog-lede{font-size:clamp(17px,1.5vw,19px);font-weight:300;line-height:1.65;color:var(--ink)}
+#bkd .bkd-prog-note{margin-top:14px}
+#bkd .bkd-prog-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 28px;margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-size:11px;font-weight:600;line-height:1.5;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+#bkd .bkd-prog-when time{margin-left:4px;color:var(--navy)}
+#bkd .bkd-prog-pdf{display:inline-flex;align-items:center;gap:8px;min-height:24px;color:var(--navy)!important}
+#bkd .bkd-prog-pdf:hover{color:var(--navy)!important}
+#bkd .bkd-prog-pdf>span:not(.bkd-sr){padding-bottom:1px;border-bottom:1px solid var(--line-2);transition:border-color .2s}
+#bkd .bkd-prog-pdf:hover>span:not(.bkd-sr){border-color:var(--navy)}
+#bkd .bkd-prog-pdf .bkd-i{width:16px;height:16px;color:var(--brass-d)}
+#bkd .bkd-prog-src{margin-top:10px;font-size:12px;line-height:1.6;color:var(--muted)}
+@media (min-width:1000px){#bkd .bkd-prog-head{grid-template-columns:minmax(0,5fr) minmax(0,6fr);column-gap:80px;align-items:start}}
+#bkd .bkd-prog-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:640px){#bkd .bkd-prog-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}}
+@media (min-width:1000px){#bkd .bkd-prog-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}#bkd .bkd-prog-grid[data-n="2"],#bkd .bkd-prog-grid[data-n="4"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#bkd .bkd-prog-card{display:flex;flex-direction:column;min-width:0;background:#fff;border:1px solid var(--line)}
+@media (min-width:760px){#bkd .bkd-prog-grid[data-n="1"]{grid-template-columns:minmax(0,1fr)}#bkd .bkd-prog-grid[data-n="1"] .bkd-prog-card:not(.bkd-prog-card-t){display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);align-items:center}#bkd .bkd-prog-grid[data-n="1"] .bkd-prog-ph{height:100%}#bkd .bkd-prog-grid[data-n="1"] .bkd-prog-txt{padding:32px 40px}}
+#bkd .bkd-prog-card-t{border-top:2px solid var(--brass)}
+#bkd .bkd-prog-ph{position:relative;display:block;flex:none;width:100%;margin:0;padding:0!important;border:0!important;border-radius:0!important;aspect-ratio:4/3;overflow:hidden;background:var(--mist)!important;box-shadow:none!important;cursor:zoom-in}
+#bkd .bkd-prog-ph img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover;transition:transform .8s ease}
+#bkd .bkd-prog-ph:hover img{transform:scale(1.03)}
+#bkd .bkd-prog-n{position:absolute;right:12px;bottom:12px;z-index:1;padding:6px 9px;background:rgba(13,36,64,.88);font-size:12px;font-weight:600;line-height:1;letter-spacing:.04em;color:#fff;pointer-events:none}
+#bkd .bkd-prog-txt{padding:20px 22px 24px}
+#bkd .bkd-prog-name{margin:0 0 6px!important;font-size:18px!important;font-weight:600!important;letter-spacing:-.01em!important;line-height:1.35!important}
+#bkd .bkd-prog-txt p{font-size:15px;line-height:1.65;color:var(--slate)}
+#bkd .bkd-prog-cta{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;margin-top:clamp(32px,4vw,44px)}
+#bkd .bkd-prog-cta p{max-width:52ch;font-size:14px;line-height:1.6;color:var(--slate)}
+@media (max-width:559px){#bkd .bkd-prog-cta .bkd-btn,#bkd .bkd-prog-box .bkd-btn{width:100%;white-space:normal;padding:12px 14px!important;letter-spacing:.06em!important;line-height:1.4!important}}
+#bkd .bkd-prog-old{margin-top:clamp(40px,5vw,56px);border-top:1px solid var(--line)}
+#bkd .bkd-prog-old>summary{display:inline-flex;align-items:center;gap:10px;margin-top:22px;padding-bottom:3px;border-bottom:1px solid var(--line-2);font-size:14px;font-weight:600;line-height:1.5;color:var(--navy);cursor:pointer;list-style:none}
+#bkd .bkd-prog-old>summary::-webkit-details-marker{display:none}
+#bkd .bkd-prog-old>summary::after{content:"";width:8px;height:8px;margin-top:-3px;border-right:1.5px solid var(--navy);border-bottom:1.5px solid var(--navy);transform:rotate(45deg);transition:transform .2s}
+#bkd .bkd-prog-old[open]>summary::after{transform:rotate(-135deg);margin-top:3px}
+#bkd .bkd-prog-u{margin-top:24px;padding:clamp(20px,3vw,32px);background:#fff;border:1px solid var(--line)}
+#bkd .bkd-prog-u-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 20px}
+#bkd .bkd-prog-u-t{margin:0!important;font-size:18px!important;font-weight:600!important;letter-spacing:-.01em!important;line-height:1.35!important} /* the sans: its 1 is never read as an l */
+#bkd .bkd-prog-u-by{font-size:13px;line-height:1.5;color:var(--muted)}
+#bkd .bkd-prog-u-h .bkd-prog-pdf{font-size:13px;font-weight:600}
+#bkd .bkd-prog-u-note{margin-top:12px;max-width:680px;font-size:15px;line-height:1.65;color:var(--slate)}
+#bkd .bkd-prog-list{margin-top:18px!important;border-top:1px solid var(--line)}
+#bkd .bkd-prog-list li{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:14px 0;border-bottom:1px solid var(--line)}
+#bkd .bkd-prog-list li:last-child{padding-bottom:0;border-bottom:0}
+@media (min-width:760px){#bkd .bkd-prog-list li{grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:28px}}
+#bkd .bkd-prog-list p{font-size:15px;line-height:1.6;color:var(--slate)}
+#bkd .bkd-prog-list b{font-weight:600;color:var(--navy)}
+#bkd .bkd-prog-thumbs{display:flex;flex-wrap:wrap;gap:6px}
+#bkd .bkd-prog-thumbs button{position:relative;display:block;width:64px;height:48px;margin:0;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden;background:var(--mist)!important;box-shadow:none!important;cursor:zoom-in}
+#bkd .bkd-prog-thumbs img{width:100%!important;height:100%!important;max-width:none!important;object-fit:cover}
+#bkd .bkd-prog-box{display:grid;gap:22px;padding:clamp(24px,3.4vw,40px);background:#fff;border:1px solid var(--line)}
+#bkd .bkd-prog-box .bkd-label{margin-bottom:14px}
+#bkd .bkd-prog-ask-h{font-family:var(--display)!important;font-size:clamp(28px,2.8vw,36px)!important;font-weight:var(--display-w)!important;letter-spacing:var(--display-ls)!important;line-height:1.1!important}
+#bkd .bkd-prog-box .bkd-body{margin-top:10px;max-width:60ch}
+@media (min-width:800px){#bkd .bkd-prog-box{grid-template-columns:minmax(0,1fr) auto;align-items:end;column-gap:48px}}
+#bkd .bkd-prog-hero{display:flex;align-items:center;gap:8px;width:max-content;max-width:100%;margin:-8px 0 22px;font-size:13px;font-weight:600;line-height:1.4;color:var(--brass-d)!important}
+#bkd .bkd-prog-hero::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--brass)}
+#bkd .bkd-prog-hero:hover,#bkd .bkd-prog-hero:focus-visible{color:var(--brass-d)!important}
+#bkd .bkd-prog-hero:hover span{text-decoration:underline;text-underline-offset:4px}
+#bkd .bkd-prog-hero .bkd-i{width:14px;height:14px}
+@media (max-width:999px){#bkd.bkd-lpm .bkd-prog-hero{display:none}} /* the landing page's phone cover keeps the whole form on the first screen */
+#bkd .bkd-prog-all{display:none}
+@media (max-width:639px){#bkd .bkd-prog-few>li:nth-child(n+4){display:none}#bkd .bkd-prog-all{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;margin:16px 0 0;padding:15px 16px!important;border:1px solid var(--line-2)!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;font-size:14px;font-weight:600;line-height:1.4;letter-spacing:0;text-transform:none;color:var(--navy)!important;cursor:pointer}#bkd .bkd-prog-all::after{content:"";width:8px;height:8px;margin-top:-4px;border-right:1.5px solid var(--navy);border-bottom:1.5px solid var(--navy);transform:rotate(45deg)}} /* phones: a long report's first 3 parts, then "Show all" (added by the script) */
+#bkd .bkd-prog-lede,#bkd .bkd-prog-note,#bkd .bkd-prog-src,#bkd .bkd-prog-txt,#bkd .bkd-prog-u-note,#bkd .bkd-prog-list p,#bkd .bkd-prog-u-by{min-width:0;overflow-wrap:anywhere} /* a pasted link or long name wraps instead of widening the page */
+#bkd .bkd-lb-stage{grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr);height:100%}
+#bkd .bkd-lb-stage img{min-height:0;height:auto;max-height:100%;width:auto;max-width:100%} /* the viewer: a tall or big photo fits between the top bar and the strip (the gallery's too) */
+@media (max-width:639px){#bkd .bkd-lb-stage{padding:0}#bkd .bkd-lb .bkd-lb-prev,#bkd .bkd-lb .bkd-lb-next{z-index:1;background:rgba(13,36,64,.55)!important}} /* phones: photos use the whole width, the arrows sit over their edges (swipe works too) */
+@media print{#bkd .bkd-prog-cta,#bkd .bkd-prog-hero,#bkd .bkd-prog-box .bkd-btn,#bkd .bkd-prog-all{display:none!important}#bkd .bkd-prog-few>li{display:flex!important}}
+/*/bkd-progress*/
 CSS;
 	}
 
@@ -6243,12 +7026,12 @@ CSS;
   function prefill(form){['name','phone','email'].forEach(function(k){var i=form.querySelector('[name="'+k+'"]');if(i&&!i.value&&remembered[k]){i.value=remembered[k];}});}
   function icon(n,cls){return '<svg class="bkd-i'+(n==='wa'?' bkd-i-f':'')+(cls?' '+cls:'')+'" aria-hidden="true"><use href="#bkd-i-'+n+'"></use></svg>';}
   function waUrl(text){return 'https://wa.me/'+C.wa+'?text='+encodeURIComponent(text);}
-  function leadText(p){return ['Hi '+C.brand+", I've just sent an enquiry about "+(C.leadName||C.name)+' on block.ke.',p.unit?'Interested in: '+p.unit:'','Name: '+p.name,C.url].filter(Boolean).join('\n');}
+  function leadText(p){return ['Hi '+C.brand+", I've just sent an enquiry about "+(C.leadName||C.name)+' on block.ke.',/*bkd-progress*/{progress:"I'd like the developer's latest site photos and progress report.",'progress-next':"I'd like the developer's next site report when it is released."}[p.intent]||'',/*/bkd-progress*/p.unit?'Interested in: '+p.unit:'','Name: '+p.name,C.url].filter(Boolean).join('\n');}
   function success(form,p,j){
     var ok=form.nextElementSibling,first=(p.name||'').trim().split(/\s+/)[0];
     ok.querySelector('[data-first]').textContent=first?', '+first:'';
     var it=form.getAttribute('data-intent')||'';
-    var tail={alternatives:'with 3 similar homes and their prices','search-shortlist':'with a shortlist of matching homes',compare:'to compare '+C.name+' with similar homes',find:'with matches as they come up',comparables:'with recent rents and resale prices near '+C.name,mortgage:'to talk through financing for '+C.name}[it]||C.okTail||'with the price list and floor plans for '+C.name;
+    var tail={alternatives:'with 3 similar homes and their prices','search-shortlist':'with a shortlist of matching homes',compare:'to compare '+C.name+' with similar homes',find:'with matches as they come up',comparables:'with recent rents and resale prices near '+C.name,mortgage:'to talk through financing for '+C.name/*bkd-progress*/,progress:'with the latest site photos and progress for '+C.name,'progress-next':"and we'll send the developer's next site report for "+C.name+' when it is released'/*/bkd-progress*/}[it]||C.okTail||'with the price list and floor plans for '+C.name;
     ok.querySelector('[data-okmsg]').textContent='An advisor will be in touch shortly'+(j&&j.phone_display?' on '+j.phone_display:'')+' '+tail+'.';
     ok.querySelector('[data-wa-ok]').href=waUrl(leadText(p));
     var ab=ok.querySelector('[data-asset]');
@@ -6324,12 +7107,12 @@ CSS;
   function lock(on){html.classList.toggle('bkd-lock',on);}
   function openModal(source,unit){
     var f=$('form',mdForm),ok=$('.bkd-ok',mdForm);f.hidden=false;ok.hidden=true;
-    var b=f.querySelector('[type=submit]');b.disabled=false;var al=f.querySelector('.bkd-alert');if(al){al.remove();}
+    var b=f.querySelector('[type=submit]');b.disabled=false;var al=f.querySelector('.bkd-alert');if(al){al.remove();}/*bkd-progress*/var bt=b.firstChild;if(bt&&bt.nodeType===3){if(!b.hasAttribute('data-t')){b.setAttribute('data-t',bt.nodeValue);}bt.nodeValue=source==='progress'?'Send them to me':source==='progress-next'?'Send me the next update':b.getAttribute('data-t');}/*/bkd-progress*/
     f.setAttribute('data-unit',unit||'');f.setAttribute('data-intent',source||'');
     var titles={'payment-plan':'Get the payment plan',mortgage:'Talk to us about financing',brochure:'Download the brochure',comparables:'Get rental and resale comparables',
-      alternatives:'Get 3 similar homes','search-shortlist':'Get a shortlist',compare:'Compare with an advisor',find:C.areaPage?'Ask us to find one':'Find me a home like this'};
+      alternatives:'Get 3 similar homes','search-shortlist':'Get a shortlist',compare:'Compare with an advisor',find:C.areaPage?'Ask us to find one':'Find me a home like this'/*bkd-progress*/,progress:'Site photos and progress','progress-next':'The next site update'/*/bkd-progress*/};
     var subs={alternatives:'Similar homes'+(C.area?' in and around '+C.area:'')+', with prices and payment plans, sent to your WhatsApp.','search-shortlist':(unit?unit+'. ':'')+'An advisor picks the best matches and sends them to your WhatsApp.',
-      compare:'We\'ll compare '+C.name+' with similar homes on price, payment plan and completion.',find:'Tell us what you need and we\'ll send matches as they come up.'};
+      compare:'We\'ll compare '+C.name+' with similar homes on price, payment plan and completion.',find:'Tell us what you need and we\'ll send matches as they come up.'/*bkd-progress*/,progress:'The developer\'s latest progress report and site photos for '+C.name+', sent to your WhatsApp.','progress-next':'We\'ll send the developer\'s next site report and photos for '+C.name+' to your WhatsApp when they are released.'/*/bkd-progress*/};
     document.getElementById('bkd-md-t').textContent=titles[source]||C.mdTitle||(unit?'Floor plan and price':'Get the price list');
     document.getElementById('bkd-md-sub').textContent=subs[source]?subs[source]:C.mdSub?C.mdSub:unit?unit+' at '+C.name+'. Sent to your WhatsApp.':(source==='brochure'?'Leave your details and the brochure opens straight away.':(source==='mortgage'?'We will compare mortgage options for you.':(source==='comparables'?'Recent rents and resale prices near '+C.name+', sent to your WhatsApp.':'Floor plans and the payment plan, sent to your WhatsApp.')));
     prefill(f);lastFocus=document.activeElement;md.hidden=false;lock(true);
@@ -6405,8 +7188,26 @@ CSS;
     $$('button',strip).forEach(function(b,j){b.classList.toggle('on',j===cur);});if(strip.children[cur]){strip.children[cur].scrollIntoView({block:'nearest',inline:'center'});}}
   function openLb(i){if(!G.length){return;}build();lbFocus=document.activeElement;lb.hidden=false;lock(true);show(i);lb.querySelector('.bkd-lb-x').focus();track('gallery_open');}
   function closeLb(){lb.hidden=true;lock(false);if(lbFocus){lbFocus.focus();}}
-  root.addEventListener('click',function(e){var o=e.target.closest&&e.target.closest('[data-bkd-open]');if(o){openLb(+o.getAttribute('data-bkd-open'));}if(e.target.closest&&e.target.closest('[data-bkd-lbclose]')){closeLb();}});
-  if(lb){lb.querySelector('.bkd-lb-prev').addEventListener('click',function(){show(cur-1);});lb.querySelector('.bkd-lb-next').addEventListener('click',function(){show(cur+1);});}
+  root.addEventListener('click',function(e){var o=e.target.closest&&e.target.closest('[data-bkd-open]');if(o){/*bkd-progress*/useList(C.gallery||[],'');/*/bkd-progress*/openLb(+o.getAttribute('data-bkd-open'));}if(e.target.closest&&e.target.closest('[data-bkd-lbclose]')){closeLb();}});
+  if(lb){lb.querySelector('.bkd-lb-prev').addEventListener('click',function(){show(cur-1);});lb.querySelector('.bkd-lb-next').addEventListener('click',function(){show(cur+1);});}/*bkd-progress*/
+  /* site progress: the same viewer with one report's photos in order (data-prog-photos: [full, alt, thumb, caption]); swipe on phones */
+  var lbName=lb?lb.getAttribute('aria-label'):'',lbX=lb?lb.querySelector('.bkd-lb-x'):null,lbXName=lbX?lbX.getAttribute('aria-label'):'';
+  function useList(list,name){if(G!==list){G=list;built=false;cur=0;if(strip){strip.innerHTML='';}}if(lb){lb.setAttribute('aria-label',name||lbName);}if(lbX){lbX.setAttribute('aria-label',name?'Close '+name.toLowerCase():lbXName);}}
+  document.addEventListener('keydown',function(e){if(lb&&!lb.hidden&&e.key==='Tab'){trap(e,lb);}});
+  /* phones: a long report shows its first 3 parts, then "Show all 8 parts" (the CSS hides the rest below 640px; without script all show) */
+  $$('.bkd-prog-grid').forEach(function(g){var n=g.children.length;if(n<5){return;}
+    var b=document.createElement('button');b.type='button';b.className='bkd-prog-all';b.textContent='Show all '+n+' parts';g.classList.add('bkd-prog-few');g.parentNode.insertBefore(b,g.nextSibling);
+    b.addEventListener('click',function(){g.classList.remove('bkd-prog-few');b.remove();var c=g.children[3],f=c&&(c.querySelector('.bkd-prog-ph')||c.querySelector('h3'));if(f){if(f.tagName==='H3'){f.tabIndex=-1;}try{f.focus({preventScroll:true});}catch(x){f.focus();}}track('progress_show_all',{parts:n});});});
+  root.addEventListener('click',function(e){
+    var o=e.target.closest&&e.target.closest('[data-prog-open]'),box=o&&o.closest('[data-prog-photos]'),list=null;if(!box||!lb){return;}
+    try{list=JSON.parse(box.getAttribute('data-prog-photos'));}catch(x){list=null;}if(!list||!list.length){return;}
+    useList(list,'Site photos');build();lbFocus=o;lb.hidden=false;lock(true);show(+o.getAttribute('data-prog-open')||0);lb.querySelector('.bkd-lb-x').focus();
+    track('progress_photos_open',{report_date:box.getAttribute('data-prog-date')||''});
+  });
+  if(lb){var sx=null,sy=0,stg=lb.querySelector('.bkd-lb-stage');
+    stg.addEventListener('touchstart',function(e){if(e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;}else{sx=null;}},{passive:true});
+    stg.addEventListener('touchend',function(e){if(sx===null||!e.changedTouches.length){return;}var dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;sx=null;if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)*1.2){show(cur+(dx<0?1:-1));}},{passive:true});}
+  /*/bkd-progress*/
   function trap(e,box){var f=$$('a[href], button, input, select, textarea',box).filter(function(x){return x.offsetParent!==null&&!x.disabled&&!x.classList.contains('bkd-hp')&&x.tabIndex!==-1&&!(x.type==='radio'&&!x.checked&&$$('input[name="'+x.name+'"]:checked',box).length);});
     if(!f.length){return;}if(e.shiftKey&&document.activeElement===f[0]){e.preventDefault();f[f.length-1].focus();}else if(!e.shiftKey&&document.activeElement===f[f.length-1]){e.preventDefault();f[0].focus();}}
   document.addEventListener('keydown',function(e){
@@ -6887,7 +7688,10 @@ JS;
 			$at = $at instanceof WP_Term ? $at : null;
 		}
 		$ix = ! $lid && ! $at && '1' === $get( 'index', 2 ); // the new developments index
-		if ( ! $at && ! $ix && ( ! $post || 'estate_property' !== $post->post_type || 'publish' !== $post->post_status ) ) {
+		$tps = (array) blockke_dev_config()['lead_topics'];
+		$tp  = ! $lid && ! $at && ! $ix ? sanitize_key( $get( 'topic', 40 ) ) : ''; // v1.6.2: a page built outside the snippet, e.g. land and build
+		$tp  = '' !== $tp && isset( $tps[ $tp ] ) ? $tp : '';
+		if ( ! $at && ! $ix && '' === $tp && ( ! $post || 'estate_property' !== $post->post_type || 'publish' !== $post->post_status ) ) {
 			return new WP_REST_Response( array( 'ok' => false, 'message' => 'This listing is no longer available.' ), 400 );
 		}
 		$name  = $get( 'name', 80 );
@@ -6973,6 +7777,17 @@ JS;
 			$asked = $unit !== $title ? $unit : ''; // e.g. the search sheet's summary, from "ask an advisor to shortlist"
 			$unit  = $brief ? implode( ' · ', $brief ) : $asked; // the enquiries inbox shows it next to the page's name
 			$area_url = blockke_area_url( $at, $seg );
+		} elseif ( '' !== $tp ) {
+			$title    = blockke_dev_text( $tps[ $tp ] );
+			$dev_name = $title;
+			$area     = $get( 'where', 60 ); // where they want to buy, also Zoho's area and submarket
+			$price    = 0;
+			foreach ( array( 'stage' => 'Stage', 'where' => 'Where', 'budget' => 'Budget' ) as $k => $l ) {
+				if ( '' !== $get( $k, 60 ) ) {
+					$extra[] = $l . ': ' . $get( $k, 60 );
+				}
+			}
+			$area_url = $page ? $page : home_url( '/' );
 		} else {
 			$title    = blockke_dev_text( get_the_title( $lid ) );
 			$proj     = blockke_dev_first_term( $lid, 'property_project' );
@@ -6997,6 +7812,8 @@ JS;
 			'search-shortlist' => 'Shortlist request (from the search)',
 			'compare'      => 'Compare request (similar homes)',
 			'find'         => 'Find-me-one request (no similar homes listed)',
+			'progress'     => 'Site progress request', // v1.7: "Ask for site photos" / "Ask for a newer site report": send the latest now
+			'progress-next' => 'Site progress request (next report)', // v1.7: "Get the next site update": they have seen the latest
 		);
 		$forms['dev_index'] = 'Shortlist request (new developments page)';
 		$land_lead          = $lid && ! $at && ! $ix && blockke_dev_is_land( $lid ); // a land listing's own page (blockke_dev_is_land())
@@ -7021,6 +7838,12 @@ JS;
 			$lines[] = 'Looking at: ' . $title;
 			if ( '' !== $asked ) {
 				$lines[] = 'Interested in: ' . $asked;
+			}
+			$lines = array_merge( $lines, $extra );
+		} elseif ( '' !== $tp ) {
+			$lines[] = mb_strtoupper( $title ) . ' ENQUIRY (website page)';
+			if ( '' !== $unit ) {
+				$lines[] = 'Interested in: ' . $unit;
 			}
 			$lines = array_merge( $lines, $extra );
 		} else {
@@ -7049,8 +7872,8 @@ JS;
 		}
 		$lines[] = '';
 		$lines[] = 'Form: ' . $form_label;
-		$lines[] = $ix ? 'Listing: none (new developments page)' : ( $at ? 'Area: ' . $area . ' (term ' . (int) $at->term_id . ')' : 'Listing: ' . $title . ' (Ref W-' . $lid . ')' );
-		$lines[] = 'Page: ' . ( $page ? $page : ( $at || $ix ? $area_url : get_permalink( $lid ) ) );
+		$lines[] = $ix ? 'Listing: none (new developments page)' : ( $at ? 'Area: ' . $area . ' (term ' . (int) $at->term_id . ')' : ( '' !== $tp ? 'Listing: none (' . $title . ' page)' : 'Listing: ' . $title . ' (Ref W-' . $lid . ')' ) );
+		$lines[] = 'Page: ' . ( $page ? $page : ( $at || $ix || '' !== $tp ? $area_url : get_permalink( $lid ) ) );
 		$lines[] = 'Channel (auto-tagged): ' . $channel . ( $campaign ? ' | campaign: ' . $campaign : '' );
 		if ( ! empty( $attr['utm_source'] ) || ! empty( $attr['utm_medium'] ) ) {
 			$lines[] = 'UTM: ' . ( isset( $attr['utm_source'] ) ? $attr['utm_source'] : '' ) . ' / ' . ( isset( $attr['utm_medium'] ) ? $attr['utm_medium'] : '' ) . ( ! empty( $attr['utm_term'] ) ? ' / term: ' . $attr['utm_term'] : '' );
@@ -7080,7 +7903,7 @@ JS;
 				'email'    => $email,
 				'purpose'  => $purpose,
 				'timeline' => $timeline,
-				'form'     => ( $ix ? 'new developments: ' : ( $at ? 'area page: ' : '' ) ) . $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
+				'form'     => ( $ix ? 'new developments: ' : ( $at ? 'area page: ' : ( '' !== $tp ? $tp . ' page: ' : '' ) ) ) . $source . ( $intent && $intent !== $source ? '/' . $intent : '' ),
 				'channel'  => $channel,
 				'source'   => $lead_source,
 				'page'     => $page,
@@ -7104,11 +7927,11 @@ JS;
 					'email'       => $email,
 					'areas'       => $area ? array( $area ) : array(),
 					'budget'      => '', // the band is in the description; Zoho's budget picklist uses the popup's own bands
-					'unit'        => $at || $ix ? $title : trim( $dev_name . ( $unit ? ' - ' . $unit : '' ) ),
+					'unit'        => $at || $ix || '' !== $tp ? $title : trim( $dev_name . ( $unit ? ' - ' . $unit : '' ) ),
 					'alerts'      => false,
 					'channel'     => $channel,
 					'campaign'    => $campaign,
-					'page'        => $page ? $page : ( $at || $ix ? $area_url : get_permalink( $lid ) ),
+					'page'        => $page ? $page : ( $at || $ix || '' !== $tp ? $area_url : get_permalink( $lid ) ),
 					'page_title'  => $title,
 					'description' => $description,
 				)
@@ -7116,7 +7939,7 @@ JS;
 		}
 
 		$to      = blockke_dev_lead_to( $lid );
-		$subject = $ix ? sprintf( '[Block] New developments enquiry: %s', $name ) : ( $at ? sprintf( '[Block] Area enquiry: %s - %s', $name, $title ) : null );
+		$subject = $ix ? sprintf( '[Block] New developments enquiry: %s', $name ) : ( $at ? sprintf( '[Block] Area enquiry: %s - %s', $name, $title ) : ( '' !== $tp ? sprintf( '[Block] %s enquiry: %s%s', $title, $name, $unit ? ' - ' . $unit : '' ) : null ) );
 		$subject = null !== $subject ? $subject : sprintf( '[Block] Development enquiry: %s - %s%s', $name, $dev_name, $unit ? ' - ' . $unit : '' );
 		$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
 		if ( $email ) {
@@ -7137,7 +7960,7 @@ JS;
 			'phone_display' => blockke_dev_phone_display( $phone ),
 			'ref'           => $ref,
 		);
-		$brochure = $at || $ix ? '' : blockke_dev_brochure( $lid );
+		$brochure = $at || $ix || '' !== $tp ? '' : blockke_dev_brochure( $lid );
 		if ( $brochure ) {
 			$out['asset'] = $brochure;
 		}
@@ -7181,6 +8004,7 @@ JS;
 			'bke_dev_gallery_note'     => array( 'Gallery note', 'text', 'Under the photos, e.g. Photos of the show apartment. Empty: "Project renders." on off-plan listings, else "Photos of {development}." "none" hides it.' ),
 			'bke_dev_brochure'         => array( 'Brochure (PDF link)', 'url', 'Opens for the visitor right after they send their details. Empty: the first PDF attached to the listing.' ),
 			'bke_dev_video'            => array( 'Video (YouTube or Vimeo link)', 'url', 'Empty: the listing\'s video, else its virtual tour.' ),
+			'bke_dev_progress'         => array( 'Site progress', 'textarea', 'One update per block of lines, newest first or in any order; a blank line ends an update. First line: the date (15 October 2026, 2026-10-15 or 15/10/2026, day first), then | who reported it, then | PDF and a Media ID or URL (optional). Then one line per part of the site: name | what was done | photo Media IDs or URLs, comma-separated (optional). A line with no | is a note for that update. Lines starting with # are ignored. After saving, anything the page could not read is listed under this box.', 'rows' => 10, 'cap' => 'manage_options' ),
 			'bke_dev_similar'          => array( 'Similar listings (IDs)', 'text', 'Comma-separated listing IDs, shown first under "Also consider". The rest are picked automatically: homes with the same bedrooms in the same area at a similar price.' ),
 			'bke_dev_area'             => array( 'Main area (slug)', 'text', 'For listings tagged with more than one area, e.g. westlands. Empty: the development\'s area, else the area with most listings.' ),
 			'bke_dev_similar_off'      => array( 'Hide "Also consider"', 'checkbox', 'No similar homes block on this page.' ),
@@ -7298,6 +8122,9 @@ JS;
 					}
 					echo '<table class="form-table" role="presentation"><tbody>';
 					foreach ( blockke_dev_fields() as $key => $f ) {
+						if ( ! empty( $f['cap'] ) && ! current_user_can( $f['cap'] ) ) {
+							continue; // v1.7: "Site progress" is for administrators
+						}
 						$val = (string) get_post_meta( $post->ID, $key, true );
 						echo '<tr><th scope="row"><label for="' . esc_attr( $key ) . '">' . esc_html( $f[0] ) . '</label></th><td>';
 						if ( 'select' === $f[1] ) {
@@ -7309,12 +8136,15 @@ JS;
 						} elseif ( 'checkbox' === $f[1] ) {
 							echo '<input type="hidden" name="' . esc_attr( $key ) . '" value=""><label><input type="checkbox" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="1"' . checked( '' !== $val, true, false ) . '> Yes</label>';
 						} elseif ( 'textarea' === $f[1] ) {
-							echo '<textarea class="large-text" rows="3" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '">' . esc_textarea( $val ) . '</textarea>';
+							echo '<textarea class="large-text" rows="' . ( isset( $f['rows'] ) ? (int) $f['rows'] : 3 ) . '" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '">' . esc_textarea( 'bke_dev_progress' === $key ? str_replace( '&lt;', '<', $val ) : $val ) . '</textarea>'; // "<95%" shows as typed; saving escapes it again
 						} else {
 							echo '<input class="regular-text" type="' . ( 'number' === $f[1] ? 'number" step="any' : esc_attr( $f[1] ) ) . '" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="' . esc_attr( $val ) . '">';
 						}
 						if ( ! empty( $f[2] ) ) {
 							echo '<p class="description">' . esc_html( $f[2] ) . '</p>';
+						}
+						if ( 'bke_dev_progress' === $key ) {
+							echo blockke_dev_progress_check( $post->ID, $val ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped inside
 						}
 						echo '</td></tr>';
 					}
@@ -7337,7 +8167,7 @@ JS;
 				return;
 			}
 			foreach ( blockke_dev_fields() as $key => $f ) {
-				if ( ! isset( $_POST[ $key ] ) ) {
+				if ( ! isset( $_POST[ $key ] ) || ( ! empty( $f['cap'] ) && ! current_user_can( $f['cap'] ) ) ) {
 					continue;
 				}
 				$raw = wp_unslash( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -7346,6 +8176,10 @@ JS;
 				} elseif ( 'checkbox' === $f[1] ) {
 					$v = '1' === (string) $raw ? '1' : '';
 				} elseif ( 'textarea' === $f[1] ) {
+					if ( 'bke_dev_progress' === $key ) { // the sanitiser strips "<…>" across lines: keep "<95%" and "<https://…>" as written
+						$raw = preg_replace( '~<\s*((?:https?:)?//[^\s<>|]+)\s*>~i', '$1', $raw );
+						$raw = preg_replace( '/<(?=[\d\s=%.,]|$)/m', '&lt;', $raw );
+					}
 					$v = sanitize_textarea_field( $raw );
 				} elseif ( 'url' === $f[1] ) {
 					$v = esc_url_raw( trim( $raw ) );
@@ -8544,7 +9378,7 @@ JS;
 						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
 					}
 					$css = $v16 ? blockke_bkn_card_css() . blockke_index_css() . blockke_area_css_v16() : blockke_area_css();
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . $css . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_noprog( blockke_dev_css() ) . $font[1] . $css . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				99
 			);
@@ -8584,7 +9418,7 @@ JS;
 					}
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
 					$own = $v16 ? blockke_area_js_v16() . "\n" . blockke_bkn_nav_js() : blockke_area_js();
-					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . $own . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_noprog( blockke_dev_js() ) . "\n" . $own . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				20
 			);
@@ -10679,7 +11513,7 @@ JS;
 						}
 					}
 					$font = blockke_dev_font_head( '#bkd' );
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_bkn_card_css() . blockke_index_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_noprog( blockke_dev_css() ) . $font[1] . blockke_bkn_card_css() . blockke_index_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				99
 			);
@@ -10712,7 +11546,7 @@ JS;
 					);
 					echo '<script id="bkn-data" type="application/json">' . wp_json_encode( blockke_index_json(), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP ) . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
-					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_index_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_noprog( blockke_dev_js() ) . "\n" . blockke_index_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				20
 			);
@@ -13225,7 +14059,7 @@ JS;
 					if ( '' === $font[0] ) {
 						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}';
 					}
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_bkn_card_css() . blockke_search_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_noprog( blockke_dev_css() ) . $font[1] . blockke_bkn_card_css() . blockke_search_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 					if ( blockke_bkn_on( 'view_transitions' ) && empty( $GLOBALS['blockke_bkn_vt_printed'] ) ) {
 						$GLOBALS['blockke_bkn_vt_printed'] = true;
 						echo blockke_bkn_vt_head(); // phpcs:ignore WordPress.Security.EscapeOutput
@@ -13261,7 +14095,7 @@ JS;
 						'listLabel' => 'your search', // what the card context and "Back to …" read
 					);
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
-					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_search_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_noprog( blockke_dev_js() ) . "\n" . blockke_search_js() . "\n" . blockke_bkn_nav_js() . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				20
 			);
