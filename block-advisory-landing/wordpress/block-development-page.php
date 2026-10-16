@@ -202,7 +202,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				array( 'Checks before you commit', 'We help you check ownership, approvals and the sale or lease agreement before you pay a deposit.' ),
 				array( 'One advisor throughout', 'From the first viewing to signing, the same advisor stays with you.' ),
 			),
-			'card_v16'           => false, // v1.6: area and segment pages use the new card, filter bar and URL state
+			'card_v16'           => false, // v1.6: area and segment pages use the new card, filter bar and URL state (preview: ?bke_cards=1)
 			'dev_index'          => false, // v1.6: /new-developments/ on the new layout (preview: ?bke_index=1)
 			'dev_index_page'     => 30752, // the page it takes over
 			'index_picks'        => array(), // lead first, then up to 2 listing IDs; empty: chosen automatically
@@ -9145,8 +9145,21 @@ JS;
 					$text[] = $c;
 				}
 			}
-			$k     = count( $cover );
-			$strip = $out ? array() : array_splice( $cover, 0, $k >= 6 ? 3 : ( $k >= 2 ? 1 : 0 ) ); // three only when a row is left
+			$k = count( $cover );
+			$t = 0; // the strip: three photos or one, whichever leaves the grid whole rows that show every other one (else three, from 6)
+			if ( ! $out ) {
+				$t = $k >= 6 ? 3 : ( $k >= 2 ? 1 : 0 );
+				foreach ( array( true, false ) as $rows ) {
+					foreach ( array( 3, 1 ) as $try ) {
+						$left = $k - $try;
+						if ( $left >= 1 && $left <= $max && ( $rows ? 0 === $left % 3 : $left < 3 ) ) {
+							$t = $try;
+							break 2;
+						}
+					}
+				}
+			}
+			$strip = array_splice( $cover, 0, $t );
 			$k     = count( $cover );
 			$d     = $k < 3 ? $k : 3 * intdiv( min( $k, $max ), 3 );
 			$all   = $d === $k;
@@ -9224,7 +9237,7 @@ JS;
 		if ( $lead ) {
 			// sizes as drawn: the large photo 7/12 of the 1200px wrap (790px), 448px at 768, the page width on phones; the
 			// small ones beside it 395px, 224px, half the page on phones; one photo alone spans the wrap
-			$sz  = 1 === count( $lead ) ? array( '(min-width:1240px) 1200px, calc(100vw - 40px)' ) : array( '(min-width:1000px) 790px, (min-width:768px) 448px, calc(100vw - 40px)', '(min-width:1000px) 395px, (min-width:768px) 224px, calc(50vw - 26px)' );
+			$sz  = 1 === count( $lead ) ? array( '(min-width:1240px) 1200px, (min-width:768px) calc(100vw - 80px), calc(100vw - 40px)' ) : array( '(min-width:1000px) 790px, (min-width:768px) 448px, calc(100vw - 40px)', '(min-width:1000px) 395px, (min-width:768px) 224px, calc(50vw - 26px)' );
 			$o[] = '<div class="bkd-wrap"><ul class="bka16-strip bka16-n' . count( $lead ) . '">';
 			foreach ( array_values( $lead ) as $i => $c ) {
 				$o[] = '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area" data-pos="' . ( $i + 1 ) . '"><span class="bkn-img">' . wp_get_attachment_image( $c['cover'], 0 === $i ? 'large' : 'medium_large', false, array( 'alt' => $c['name'], 'sizes' => $sz[ min( $i, count( $sz ) - 1 ) ], 'loading' => 0 === $i ? 'eager' : 'lazy', 'decoding' => 'async' ) ) . '</span><span class="bka16-cap">' . $e( $c['name'] ) . '</span></a></li>';
@@ -9505,7 +9518,7 @@ JS;
 #bkd .bka16-about{max-width:62ch;margin:20px 0 0;font-size:17px;line-height:1.65;color:var(--ink)}
 #bkd .bka16-about p{margin:0 0 14px}
 #bkd .bka16-more{margin:4px 0 0;font-size:15px}
-#bkd .bka16-more a,#bkd .bka16-sh .bkn-link{display:inline-block;padding:11px 0;margin:-11px 0}
+#bkd .bka16-more a,#bkd .bka16-all-top{display:inline-block;padding:11px 0;margin:-11px 0}
 #bkd .bka16-tabs{display:flex;flex-wrap:wrap;gap:6px 24px;margin:28px 0 0;padding:0 0 0;font-size:15px}
 @media (max-width:767px){#bkd .bka16-tabs{flex-wrap:nowrap;gap:20px;overflow-x:auto;scrollbar-width:none;margin-right:calc(var(--gutter) * -1);padding-right:var(--gutter)}#bkd .bka16-tabs::-webkit-scrollbar{display:none}}
 #bkd .bka16-tabs a,#bkd .bka16-tabs span{display:inline-flex;flex:none;align-items:center;gap:6px;min-height:44px;white-space:nowrap;color:var(--navy)!important;text-decoration:none;border-bottom:1px solid transparent}
