@@ -135,7 +135,7 @@
 
   <main id="main">
 
-    <!-- PAGE HEAD: breadcrumbs, h1, lede and a chart-form record of this page -->
+    <!-- PAGE HEAD: breadcrumbs, h1, lede and a chart-form card of key facts for patients -->
     <header class="page-head">
       <div class="wrap page-head-grid">
         <div>
@@ -146,12 +146,12 @@
             </ol>
           </nav>
           <h1><span class="ht-line">Care for every tooth.</span> <span class="ht-line ht-soft">Explained before we start.</span></h1>
-          <p class="lede">General and family dentistry under one roof: check&#8209;ups, cosmetic work, repairs, clear aligners, children’s care, same-day emergencies, and comfort options for anyone who feels nervous.</p>
+          <p class="lede">General and family dentistry under one roof: <span class="nowrap">check-ups</span>, cosmetic work, repairs, clear aligners, children’s care, same-day emergencies, and comfort options for anyone who feels nervous.</p>
         </div>
         <dl class="chart-form chart-form--card">
-          <div><dt>Page</dt><dd>Services</dd></div>
-          <div><dt>Sections</dt><dd>7 kinds of care</dd></div>
-          <div><dt>Next step</dt><dd><a href="contact.html#request">Request a visit</a></dd></div>
+          <div><dt><span class="nowrap">Check-up</span></dt><dd>About 60 minutes</dd></div>
+          <div><dt>Before treatment</dt><dd>Written estimate, every time</dd></div>
+          <div><dt>Emergencies</dt><dd><a href="#emergency">Seen the same day</a></dd></div>
         </dl>
       </div>
     </header>
@@ -167,7 +167,8 @@
             <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>You get a written estimate before any treatment starts.</li>
             <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>We are in network with most PPO plans, and we file the claim for you.</li>
             <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>No insurance? Our membership plan is $29 a month for adults and $22 for kids under 13, with 15% off other treatment.</li>
-            <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>0% interest monthly payments through a third-party financing company, subject to approval.</li>
+            <!-- OWNER: confirm the financing terms with your lender and add any required disclosures (for example deferred interest or promo length). -->
+            <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>0% APR monthly payments through a third-party financing company, subject to credit approval.</li>
           </ul>
           <a class="link-arrow" href="new-patients.html#insurance">Insurance, membership and financing <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg></a>
           <p class="help-note"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg><span>Not sure what you need? Call <a class="nowrap" href="tel:+15550142368">(555) 014-2368</a> and we’ll help you book the right visit.</span></p>
@@ -178,7 +179,7 @@
             <li>
               <a href="#preventive">
                 <span class="si-thumb"><svg class="minichart" viewBox="0 0 328 62" aria-hidden="true" focusable="false"><use href="#mc-arch" class="mc-soft"/></svg></span>
-                <span><span class="si-name">Check&#8209;ups &amp; cleanings</span><span class="si-meta">About 60 minutes</span></span>
+                <span><span class="si-name"><span class="nowrap">Check-ups</span> &amp; cleanings</span><span class="si-meta">About 60 minutes</span></span>
                 <svg class="icon si-arrow" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg>
               </a>
             </li>
@@ -234,7 +235,7 @@
       <div class="wrap svc-grid svc-grid--areas">
         <div class="svc-head">
           <p class="eyebrow">General &amp; preventive</p>
-          <h2 id="preventive-title">Check&#8209;ups, cleanings and <span class="nowrap">X-rays</span></h2>
+          <h2 id="preventive-title"><span class="nowrap">Check-ups</span>, cleanings and <span class="nowrap">X-rays</span></h2>
           <p class="lede">A careful look at every tooth and your gums, a gentle clean, and a plain-language summary of what we found. Twice a year is how small problems stay small.</p>
         </div>
         <div class="svc-aside">
@@ -274,7 +275,7 @@
             <div><p><strong>New here, without insurance?</strong> The $99 new patient visit includes a comprehensive exam, <span class="nowrap">X-rays</span> and a cleaning, in about 75 minutes. Deep cleaning is not included. <a class="text-link" href="new-patients.html">What happens at your first visit</a></p></div>
           </div>
           <div class="cta-row">
-            <a class="btn btn-primary" href="contact.html#request">Request a check&#8209;up</a>
+            <a class="btn btn-primary" href="contact.html?reason=checkup#request">Request a <span class="nowrap">check-up</span></a>
             <a class="link-arrow" href="tel:+15550142368"><span>Or call <span class="nowrap">(555) 014-2368</span></span></a>
           </div>
         </div>
@@ -320,7 +321,7 @@
             <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>An honest note that whitening does not change the color of fillings or crowns.</li>
           </ul>
           <div class="cta-row">
-            <a class="btn btn-primary" href="contact.html#request">Request a cosmetic consult</a>
+            <a class="btn btn-primary" href="contact.html?reason=cosmetic#request">Request a cosmetic consult</a>
             <a class="link-arrow" href="tel:+15550142368"><span>Or call <span class="nowrap">(555) 014-2368</span></span></a>
           </div>
         </div>
@@ -387,9 +388,10 @@
           <dl class="meta-list">
             <div><dt>Consult</dt><dd>About 45 minutes, free</dd></div>
             <div><dt>Check-ins</dt><dd>Every 6 to 8 weeks</dd></div>
-            <div><dt>Who you’ll see</dt><dd>Dr. Daniel Reyes, <abbr title="Doctor of Dental Medicine">DMD</abbr> · <span lang="es">habla español</span></dd></div>
+            <div><dt>Who you’ll see</dt><dd>Dr. Daniel Reyes, <abbr title="Doctor of Dental Medicine">DMD</abbr> · <span lang="es">Habla español</span></dd></div>
             <div><dt>Cost</dt><dd>Written estimate after the consult; members 15% off</dd></div>
-            <div><dt>Payments</dt><dd>0% interest monthly, subject to approval</dd></div>
+            <!-- OWNER: confirm the financing terms with your lender and add any required disclosures (for example deferred interest or promo length). -->
+            <div><dt>Payments</dt><dd>0% APR monthly, subject to credit approval</dd></div>
           </dl>
         </div>
         <div class="svc-body">
@@ -408,7 +410,7 @@
             <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>If aligners are not the right fit for you, we will say so and explain why.</li>
           </ul>
           <div class="cta-row">
-            <a class="btn btn-primary" href="contact.html#request">Book your free aligner consult</a>
+            <a class="btn btn-primary" href="contact.html?reason=aligner#request">Request your free aligner consult</a>
             <a class="link-arrow" href="tel:+15550142368"><span>Or call <span class="nowrap">(555) 014-2368</span></span></a>
           </div>
         </div>
@@ -421,7 +423,7 @@
         <div class="svc-head">
           <p class="eyebrow">Children’s dentistry</p>
           <h2 id="kids-title">Short, gentle visits for children, from age one</h2>
-          <p class="lede">We like to see children by their first birthday. Early visits are short and mostly about getting comfortable in the chair, so check&#8209;ups never become something to dread.</p>
+          <p class="lede">We like to see children by their first birthday. Early visits are short and mostly about getting comfortable in the chair, so <span class="nowrap">check-ups</span> feel familiar, not frightening.</p>
         </div>
         <div class="svc-aside">
           <figure class="mc-tray">
@@ -452,17 +454,18 @@
           </ul>
           <div class="note-card note-card--pen">
             <h3>For parents</h3>
-            <p>You are welcome to stay in the room for the whole visit. Priya Shah, our hygienist, does most of our kids’ cleanings and never rushes them. No insurance? The kids’ membership plan is $22 a month for children under 13, with two cleanings and exams a year.</p>
+            <!-- OWNER: add the self-pay price of a child’s visit, or say whether the $99 new patient visit applies to children. -->
+            <p>You are welcome to stay in the room for the whole visit. Priya Shah, one of our hygienists, does most of our kids’ cleanings and never rushes them. No insurance? The kids’ membership plan is $22 a month for children under 13, with two cleanings and exams a year. Paying for a single visit instead? Call us and we’ll tell you the cost before you book.</p>
           </div>
           <div class="cta-row">
-            <a class="btn btn-primary" href="contact.html#request">Request a child’s visit</a>
+            <a class="btn btn-primary" href="contact.html?reason=child#request">Request a child’s visit</a>
             <a class="link-arrow" href="tel:+15550142368"><span>Or call <span class="nowrap">(555) 014-2368</span></span></a>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 6. EMERGENCY (#emergency): the numbers come first, labelled by time of day, with the 911 guidance;
+    <!-- 6. EMERGENCY (#emergency): the numbers come first, labeled by time of day, with the 911 guidance;
          then first aid, then what the visit involves. -->
     <section class="section svc" id="emergency" aria-labelledby="emergency-title">
       <div class="wrap">
@@ -470,7 +473,7 @@
           <div>
             <p class="eyebrow eyebrow--alert">Emergency dentistry</p>
             <h2 id="emergency-title">In pain today? Call us now.</h2>
-            <p>We keep same-day appointments for toothaches, broken teeth, lost fillings or crowns, and swelling. When the office is closed, call our after-hours line.</p>
+            <p>We keep same-day appointments for toothaches, broken teeth, lost fillings or crowns, and swelling during opening hours (<span class="nowrap">Mon–Thu 8:00 am – 5:00 pm</span>, <span class="nowrap">Tue until 7:00 pm</span>, <span class="nowrap">Fri 8:00 am – 2:00 pm</span>, <span class="nowrap">1st &amp; 3rd Sat 9:00 am – 1:00 pm</span>). When the office is closed, call our after-hours line.</p>
             <p class="emergency-911">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
               <span>If you have trouble breathing or swallowing, swelling that is spreading, or a serious injury to the face or jaw, call 911 or go to the nearest emergency room.</span>
@@ -494,12 +497,12 @@
           </ul>
         </div>
 
-        <div class="svc-part">
+        <div class="svc-part" id="first-aid">
           <h3 class="svc-part-title">What to do until you see us</h3>
           <div class="cards">
             <div class="note-card note-card--pen">
               <h4>Knocked-out adult tooth</h4>
-              <p><strong>Call us now.</strong> The tooth has the best chance if you are seen within 30 to 60 minutes. Hold it by the crown (the white part), not the root. Rinse it briefly in water without scrubbing, keep it in a cup of milk, and bring it with you.</p>
+              <p><strong>Call us now.</strong> The tooth has the best chance if you are seen within 30 to 60 minutes. Hold it by the crown (the white part), not the root. Rinse it briefly in water without scrubbing. If you can, gently push it back into its socket and bite on a clean cloth to hold it in place. If not, keep it in a cup of milk and bring it with you.</p>
               <p class="small muted">A knocked-out baby tooth should not be put back. Just call us.</p>
             </div>
             <div class="note-card">
@@ -538,7 +541,7 @@
             <h3>What to expect</h3>
             <ul class="checklist" role="list">
               <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>We find the cause first, usually with an exam and an X-ray.</li>
-              <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>We ease the pain at the same visit, and fix the tooth then if there is time.</li>
+              <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>We aim to ease the pain at the same visit, and fix the tooth then if there is time.</li>
               <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>If it needs more work, you get a written estimate and a follow-up appointment.</li>
             </ul>
             <div class="cta-row">
@@ -580,7 +583,7 @@
             <li class="feature">
               <span class="feature-icon" aria-hidden="true"><svg class="icon" focusable="false"><use href="#i-drop"/></svg></span>
               <h3>Numbing gel first</h3>
-              <p>We numb the gum with gel before any injection, so you feel far less of it.</p>
+              <p>We numb the gum with gel before any injection, to make it more comfortable.</p>
             </li>
             <li class="feature">
               <span class="feature-icon" aria-hidden="true"><svg class="icon" focusable="false"><use href="#i-air"/></svg></span>
@@ -589,7 +592,7 @@
             </li>
             <li class="feature">
               <span class="feature-icon" aria-hidden="true"><svg class="icon" focusable="false"><use href="#i-headphones"/></svg></span>
-              <h3>Noise-cancelling headphones</h3>
+              <h3>Noise-canceling headphones</h3>
               <p>Bring a playlist or a podcast and tune out the sounds of the room.</p>
             </li>
             <li class="feature">
@@ -599,7 +602,7 @@
             </li>
           </ul>
           <div class="cta-row">
-            <a class="btn btn-primary" href="contact.html#request">Request a slower first visit</a>
+            <a class="btn btn-primary" href="contact.html?reason=nervous#request">Request a slower first visit</a>
             <a class="link-arrow" href="tel:+15550142368"><span>Or call <span class="nowrap">(555) 014-2368</span></span></a>
           </div>
         </div>
@@ -613,7 +616,7 @@
           <div>
             <svg class="closing-seal" viewBox="0 0 48 44" aria-hidden="true" focusable="false"><use href="#bm"/></svg>
             <h2 id="closing-title">Start with a conversation.</h2>
-            <p>Request a time online, or call and Elena will help you find a time and the right kind of visit. Tuesday evenings and Saturday mornings included, and a text reminder follows two days before.</p>
+            <p>Request a time online, or call and Elena will help you find a time and the right kind of visit. Tuesday evenings and two Saturday mornings a month included, and a text reminder follows two days before.</p>
           </div>
           <div class="closing-ctas">
             <a class="btn btn-primary btn-lg" href="contact.html#request">Request appointment</a>
@@ -646,7 +649,7 @@
         <h2 class="f-title">Hours</h2>
         <dl class="f-hours">
           <div><dt>Mon–Thu</dt><dd>8:00 am – 5:00 pm</dd></div>
-          <div><dt>Tuesday</dt><dd>open until 7:00 pm</dd></div>
+          <div><dt>Tue</dt><dd>Open until 7:00 pm</dd></div>
           <div><dt>Fri</dt><dd>8:00 am – 2:00 pm</dd></div>
           <div><dt>Sat</dt><dd>9:00 am – 1:00 pm, 1st &amp; 3rd of the month</dd></div>
           <div><dt>Sun</dt><dd>Closed</dd></div>

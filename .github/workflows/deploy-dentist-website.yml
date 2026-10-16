@@ -39,7 +39,7 @@ jobs:
         run: |
           base="${{ steps.pages.outputs.base_path }}/"
           sed -i "s|<base href=\"/\">|<base href=\"${base}\">|" dentist-website/404.html
-          grep -n "<base " dentist-website/404.html
+          grep -q "<base href=\"${base}\">" dentist-website/404.html || { echo "404 base path was not rewritten"; exit 1; }
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v3

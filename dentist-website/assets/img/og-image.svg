@@ -8,7 +8,6 @@
 .h{font:780 76px 'Bricolage Grotesque','Arial Narrow',sans-serif;font-stretch:80%;fill:#3A2C8C}
 .soft{font:300 76px 'Bricolage Grotesque',Arial,sans-serif;fill:#1D1736}
 .p{font:400 25px 'Commissioner',Arial,sans-serif;fill:#1D1736}
-.pb{font:700 25px 'Commissioner',Arial,sans-serif;fill:#3A2C8C}
 .card{fill:#FFFFFF;stroke:#DCD5EE}
 .f-dt{font:400 13px 'Spline Sans Mono',monospace;fill:#554D72}.f-dd{font:700 16px 'Commissioner',Arial,sans-serif;fill:#3A2C8C}
 .dash{stroke:#8C83B0;stroke-width:1.5;stroke-dasharray:4 4}
@@ -24,8 +23,8 @@ svg text.odo-num,svg .odo-labels text{font-family:'Spline Sans Mono',ui-monospac
 <text class="h" x="72" y="236">Every tooth charted.</text>
 <text class="h" x="72" y="314">Every cost explained.</text>
 <text class="soft" x="72" y="392">No rush.</text>
-<text class="p" x="72" y="470">Gentle family dentistry on Maple Avenue, Springfield.</text>
-<text class="pb" x="72" y="516">(555) 014-2368</text><text class="p" x="262" y="516">· Same-day emergencies · Se habla español</text>
+<text class="p" x="72" y="470">Gentle family dentistry.</text>
+<text class="p" x="72" y="516">Same-day emergencies · Se habla español</text>
 <rect class="card" x="772" y="40" width="380" height="550" rx="28"/>
 <text class="f-dt" x="800" y="80">Patient</text><text class="f-dd" x="800" y="102">You</text>
 <text class="f-dt" x="912" y="80">Recall</text><text class="f-dd" x="912" y="102">Every 6 months</text>

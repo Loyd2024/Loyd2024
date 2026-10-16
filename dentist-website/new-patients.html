@@ -67,7 +67,7 @@
         "name": "How much is a visit without insurance?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Your first visit is $99 if you pay for it yourself. That covers a comprehensive exam, X-rays and a cleaning. A deep cleaning is not included. For ongoing care without insurance, the Brightwater Membership Plan is $29 a month for adults or $22 a month for kids under 13. It includes two cleanings and exams a year, all routine X-rays, one emergency exam and 15% off other treatment, with no waiting period."
+          "text": "Your first visit is $99 if you pay for it yourself. That covers a comprehensive exam, X-rays and a cleaning. A deep cleaning is not included. For ongoing care without insurance, the Brightwater Membership Plan is $29 a month for adults or $22 a month for kids under 13. It includes two cleanings and exams a year, all routine X-rays, one emergency exam and 15% off other treatment, with no waiting period. Paying for a single visit instead? Call us and we’ll tell you the cost before you book."
         }
       },
       {
@@ -83,7 +83,7 @@
         "name": "Do you offer sedation?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "We offer nitrous oxide (laughing gas), which takes the edge off while you stay awake and able to talk to us. It is the only sedation we offer. Marcus Bell, RDH, is sedation-assist certified. We also numb the gum with gel before any injection, and we have noise-cancelling headphones and weighted blankets if you would like them."
+          "text": "We offer nitrous oxide (laughing gas), which takes the edge off while you stay awake and able to talk to us. It is the only sedation we offer. Marcus Bell, RDH, is sedation-assist certified. We also numb the gum with gel before any injection, and we have noise-canceling headphones and weighted blankets if you would like them."
         }
       },
       {
@@ -213,7 +213,7 @@
   </header>
   <main id="main">
 
-    <!-- PAGE HEAD: breadcrumbs, h1, lede, jump links, and a chart-form record of this page -->
+    <!-- PAGE HEAD: breadcrumbs, h1, lede, jump links, and a chart-form card of first-visit facts -->
     <header class="page-head">
       <div class="wrap page-head-grid">
         <div>
@@ -227,6 +227,7 @@
           <p class="lede">What happens at your first appointment, what to bring, and how insurance, our membership plan and the $99 new patient visit work. Still have a question? Call <a class="text-link nowrap" href="tel:+15550142368">(555) 014-2368</a> and Elena will talk it through.</p>
           <nav class="jump-links" aria-label="On this page">
             <ul role="list">
+              <li><a href="#new-patient-offer">$99 visit</a></li>
               <li><a href="#what-to-bring">What to bring</a></li>
               <li><a href="#forms">Forms</a></li>
               <li><a href="#insurance">Insurance</a></li>
@@ -237,9 +238,9 @@
           </nav>
         </div>
         <dl class="chart-form chart-form--card">
-          <div><dt>Page</dt><dd>New patients</dd></div>
-          <div><dt>Sections</dt><dd>5, from first visit to booking</dd></div>
-          <div><dt>Next step</dt><dd><a href="contact.html#request">Request a visit</a></dd></div>
+          <div><dt>First visit</dt><dd><a href="#first-visit">About 75 minutes</a></dd></div>
+          <div><dt>Without insurance</dt><dd><a href="#new-patient-offer">$99 new-patient visit</a></dd></div>
+          <div><dt>Bring</dt><dd><a href="#what-to-bring">Photo ID and insurance card</a></dd></div>
         </dl>
       </div>
     </header>
@@ -257,7 +258,7 @@
 
         <div class="split np-fv">
           <div class="probe">
-            <ol class="steps">
+            <ol class="steps" role="list">
               <li class="step">
                 <span class="step-n" aria-hidden="true">1</span>
                 <div class="step-body">
@@ -310,14 +311,14 @@
                   <div><dt>Length</dt><dd>About 75 minutes</dd></div>
                   <div><dt>Not included</dt><dd>Deep cleaning, if you need one</dd></div>
                 </dl>
-                <a class="btn btn-primary btn-block" href="contact.html#request">Book the $99 visit</a>
+                <a class="btn btn-primary btn-block" href="contact.html?reason=new99#request">Request the $99 visit</a>
               </div>
               <p class="appt-stub">Need to move it? Please give us 24 hours’ notice. We text a reminder 2 days before.</p>
             </article>
 
             <div class="note-card note-card--pen" id="kids-first-visit">
               <h3>Bringing your child?</h3>
-              <p>We like to see children by their first birthday. First visits are short and gentle, and you’re welcome to stay in the room. Priya Shah, our hygienist, does most of our kids’ cleanings, and the kids’ membership plan is $22 a month.</p>
+              <p>We like to see children by their first birthday. First visits are short and gentle, and you’re welcome to stay in the room. Priya Shah, one of our hygienists, does most of our kids’ cleanings, and the kids’ membership plan is $22 a month.</p>
               <a class="link-arrow" href="services.html#kids">Children’s dentistry <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg></a>
             </div>
           </div>
@@ -335,7 +336,7 @@
           </div>
           <div>
             <p class="muted">We’re at 214 Maple Avenue, Suite 200, with free parking behind the building and an elevator to the suite.</p>
-            <a class="link-arrow" href="contact.html">Hours and directions <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg></a>
+            <a class="link-arrow" href="contact.html#visit">Hours and directions <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg></a>
           </div>
         </div>
 
@@ -351,6 +352,8 @@
             </ul>
           </div>
 
+          <!-- OWNER: if you don't send patients a secure forms link by text, rewrite this card (and the matching lines on index.html,
+               contact.html and new-patients step 1) to describe how forms work at your practice. -->
           <div class="note-card" id="forms">
             <h3>Your forms</h3>
             <p>We text you a secure link to complete forms before your visit, or arrive 10 minutes early and fill them in with us.</p>
@@ -440,14 +443,18 @@
             <div class="plan-foot">
               <div class="plan-rule">
                 <p class="plan-note">For patients without dental insurance. With no waiting period, your benefits start the day you join.</p>
+                <p class="plan-note">Ask Elena when you book or at your first visit, and she’ll set it up.</p>
+                <!-- OWNER: add how billing works (monthly or yearly), any minimum term and how to cancel. -->
+                <a class="link-arrow" href="tel:+15550142368">Ask about the plan: <span class="nowrap">(555) 014-2368</span></a>
               </div>
             </div>
           </article>
 
           <article class="plan-card" id="financing" aria-labelledby="financing-title">
             <p class="plan-kicker">Spreading the cost</p>
-            <h3 id="financing-title">0% interest monthly payments</h3>
-            <p>Spread the cost of treatment over monthly payments with 0% interest, through a third-party patient financing company. Subject to approval.</p>
+            <!-- OWNER: confirm the financing terms with your lender and add any required disclosures (for example deferred interest or promo length). -->
+            <h3 id="financing-title">0% APR monthly payments</h3>
+            <p>Spread the cost of treatment over monthly payments at 0% APR, through a third-party patient financing company. Subject to credit approval.</p>
             <p class="plan-note">You see the full cost first, so you can decide before you apply.</p>
             <h4>Help with the paperwork</h4>
             <p>Elena, our patient care coordinator, sets up payment plans and can walk you through the application.</p>
@@ -487,7 +494,8 @@
             <summary>How much is a visit without insurance?</summary>
             <div class="faq-a">
               <p>Your first visit is $99 if you pay for it yourself. That covers a comprehensive exam, <span class="nowrap">X-rays</span> and a cleaning. A deep cleaning is not included.</p>
-              <p>For ongoing care without insurance, the Brightwater Membership Plan is $29 a month for adults or $22 a month for kids under 13. It includes two cleanings and exams a year, all routine <span class="nowrap">X-rays</span>, one emergency exam and 15% off other treatment, with no waiting period.</p>
+              <p>For ongoing care without insurance, the Brightwater Membership Plan is $29 a month for adults or $22 a month for kids under 13. It includes two cleanings and exams a year, all routine <span class="nowrap">X-rays</span>, one emergency exam and 15% off other treatment, with no waiting period. Paying for a single visit instead? Call us and we’ll tell you the cost before you book.</p>
+              <!-- OWNER: add the self-pay price of a child’s visit, or say whether the $99 new patient visit applies to children. -->
             </div>
           </details>
           <details class="faq-item">
@@ -500,7 +508,7 @@
             <summary>Do you offer sedation?</summary>
             <div class="faq-a">
               <p>We offer nitrous oxide (laughing gas), which takes the edge off while you stay awake and able to talk to us. It is the only sedation we offer. Marcus Bell, <abbr title="Registered Dental Hygienist">RDH</abbr>, is sedation-assist certified.</p>
-              <p>We also numb the gum with gel before any injection, and we have noise-cancelling headphones and weighted blankets if you would like them.</p>
+              <p>We also numb the gum with gel before any injection, and we have noise-canceling headphones and weighted blankets if you would like them.</p>
             </div>
           </details>
           <details class="faq-item">
@@ -593,7 +601,7 @@
         <h2 class="f-title">Hours</h2>
         <dl class="f-hours">
           <div><dt>Mon–Thu</dt><dd>8:00 am – 5:00 pm</dd></div>
-          <div><dt>Tuesday</dt><dd>open until 7:00 pm</dd></div>
+          <div><dt>Tue</dt><dd>Open until 7:00 pm</dd></div>
           <div><dt>Fri</dt><dd>8:00 am – 2:00 pm</dd></div>
           <div><dt>Sat</dt><dd>9:00 am – 1:00 pm, 1st &amp; 3rd of the month</dd></div>
           <div><dt>Sun</dt><dd>Closed</dd></div>

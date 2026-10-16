@@ -52,7 +52,7 @@
     "url": "https://www.brightwater-dental.example/",
     "logo": "https://www.brightwater-dental.example/assets/img/icon-512.png",
     "image": "https://www.brightwater-dental.example/assets/img/og-image.png",
-    "telephone": "+1-555-014-2368",
+    "telephone": "+15550142368",
     "email": "hello@brightwater-dental.example",
     "foundingDate": "2009",
     "priceRange": "$$",
@@ -69,15 +69,15 @@
       "addressCountry": "US"
     },
     "geo": { "@type": "GeoCoordinates", "latitude": 0, "longitude": 0 },
-    "hasMap": "https://maps.google.com/?q=214+Maple+Avenue+Springfield",
+    "hasMap": "https://www.google.com/maps/search/?api=1&query=214+Maple+Avenue+Suite+200+Springfield+ST+00000",
     "openingHoursSpecification": [
       { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Wednesday", "Thursday"], "opens": "08:00", "closes": "17:00" },
       { "@type": "OpeningHoursSpecification", "dayOfWeek": "Tuesday", "opens": "08:00", "closes": "19:00" },
       { "@type": "OpeningHoursSpecification", "dayOfWeek": "Friday", "opens": "08:00", "closes": "14:00" }
     ],
     "contactPoint": [
-      { "@type": "ContactPoint", "telephone": "+1-555-014-2368", "contactType": "customer service", "availableLanguage": ["English", "Spanish"] },
-      { "@type": "ContactPoint", "telephone": "+1-555-014-2399", "contactType": "emergency", "description": "After-hours dental emergency line" }
+      { "@type": "ContactPoint", "telephone": "+15550142368", "contactType": "customer service", "availableLanguage": ["English", "Spanish"] },
+      { "@type": "ContactPoint", "telephone": "+15550142399", "contactType": "emergency", "description": "After-hours dental emergency line" }
     ],
     "amenityFeature": [
       { "@type": "LocationFeatureSpecification", "name": "Free parking behind the building", "value": true },
@@ -176,7 +176,7 @@
   </header>
   <main id="main">
 
-    <!-- PAGE HEAD: breadcrumbs, what this page is for, and a chart-form record of the page -->
+    <!-- PAGE HEAD: breadcrumbs, what this page is for, and a chart-form card of the key facts (numbers and address) -->
     <header class="page-head">
       <div class="wrap page-head-grid">
         <div>
@@ -190,25 +190,26 @@
           <p class="lede">Send a request below and we’ll call or text you to agree on a time. Prefer to talk? Call <a class="text-link nowrap" href="tel:+15550142368">(555) 014-2368</a> and Elena will help you find one.</p>
         </div>
         <dl class="chart-form chart-form--card">
-          <div><dt>Page</dt><dd>Contact &amp; appointments</dd></div>
-          <div><dt>Sections</dt><dd>3, from emergencies to directions</dd></div>
-          <div><dt>Next step</dt><dd><a href="#request">Request a visit</a></dd></div>
+          <div><dt>Call</dt><dd><a class="nowrap" href="tel:+15550142368">(555) 014-2368</a></dd></div>
+          <div><dt>After hours</dt><dd><a class="nowrap" href="tel:+15550142399">(555) 014-2399</a></dd></div>
+          <div><dt>Address</dt><dd><a href="#visit">214 Maple Avenue, Suite 200</a></dd></div>
         </dl>
       </div>
     </header>
 
-    <!-- EMERGENCIES FIRST: both numbers labelled by time of day, plus the 911 guidance -->
+    <!-- EMERGENCIES FIRST: both numbers labeled by time of day, plus the 911 guidance -->
     <section class="section" id="emergency" aria-labelledby="emergency-title">
       <div class="wrap">
         <div class="emergency-panel">
           <div>
             <p class="eyebrow eyebrow--alert">Dental emergency</p>
             <h2 id="emergency-title">In pain today? Please call rather than book online.</h2>
-            <p>The request form is for routine visits. We keep same-day emergency appointments during opening hours, and the after-hours line is there when the office is closed.</p>
+            <p>The request form is for routine visits. We keep same-day emergency appointments during opening hours (<span class="nowrap">Mon–Thu 8:00 am – 5:00 pm</span>, <span class="nowrap">Tue until 7:00 pm</span>, <span class="nowrap">Fri 8:00 am – 2:00 pm</span>, <span class="nowrap">1st &amp; 3rd Sat 9:00 am – 1:00 pm</span>), and the after-hours line is there when the office is closed.</p>
             <p class="emergency-911">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
               <span>If you have trouble breathing or swallowing, swelling that is spreading, or a serious injury to the face or jaw, call 911 or go to the nearest emergency room.</span>
             </p>
+            <a class="link-arrow" href="services.html#first-aid">What to do until you see us <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-arrow"/></svg></a>
           </div>
           <ul class="phone-tiles" role="list">
             <li>
@@ -232,16 +233,17 @@
 
     <!-- REQUEST: the appointment form (main.js contract: data-appointment-form, data-endpoint, data-phone-*),
          with the other ways to reach us beside it -->
-    <section class="section section--tint" aria-labelledby="request-title">
+    <section class="section section--tint">
       <div class="wrap split">
         <div class="form-card" id="request">
           <div class="form-card-head" aria-hidden="true"><span>Appointment request</span><span>Brightwater Dental</span></div>
           <!-- OWNER: to connect the form, set BOTH data-endpoint and action to your form service URL (for example a Formspree
-               endpoint), then delete the <noscript> note below. Until then, main.js explains that requests aren't connected yet. -->
+               endpoint), then delete the <noscript> note below. Until then, main.js explains that requests aren't connected yet,
+               and without JavaScript the Send button stays hidden (styles.css, section 16). -->
           <form class="form" data-appointment-form data-endpoint="" data-phone-href="tel:+15550142368" data-phone-text="(555) 014-2368" method="post" action="contact.html#request" aria-labelledby="request-title">
             <h2 class="h2-sm" id="request-title">Request an appointment</h2>
 
-            <!-- Emergency entry: both numbers, labelled by time of day; the head links up to the 911 guidance -->
+            <!-- Emergency entry: both numbers, labeled by time of day, with the office hours under them; the head links up to the 911 guidance -->
             <div class="urgent">
               <a class="urgent-head" href="#emergency">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-tooth"/></svg>
@@ -252,6 +254,7 @@
                 <li><a href="tel:+15550142368"><span class="ul-label">During opening hours</span><span class="ul-num">(555) 014-2368</span></a></li>
                 <li><a href="tel:+15550142399"><span class="ul-label">After hours</span><span class="ul-num">(555) 014-2399</span></a></li>
               </ul>
+              <p class="urgent-hours">Office hours: <span class="nowrap">Mon–Thu 8:00 am – 5:00 pm</span> <span class="nowrap">(Tue until 7:00 pm)</span>, <span class="nowrap">Fri 8:00 am – 2:00 pm</span>, <span class="nowrap">1st &amp; 3rd Sat 9:00 am – 1:00 pm</span>.</p>
             </div>
 
             <noscript><p class="form-status" data-kind="info"><span>Online requests aren’t connected yet, so this form can’t be sent. Please call <a class="nowrap" href="tel:+15550142368">(555) 014-2368</a> and we’ll find you a time.</span></p></noscript>
@@ -264,56 +267,60 @@
             <div class="form-grid">
               <div class="field">
                 <label class="field-label" for="f-name">Full name</label>
-                <input id="f-name" name="name" type="text" autocomplete="name" required data-msg="Please tell us your name." aria-describedby="f-name-error">
+                <input id="f-name" name="name" type="text" autocomplete="name" maxlength="100" required data-msg="Please tell us your name." aria-describedby="f-name-hint f-name-error">
+                <p class="field-hint" id="f-name-hint">Booking for a child? Give your own name here, and their first name and age in the note below.</p>
                 <p class="field-error" id="f-name-error" data-error-for="f-name"></p>
               </div>
               <div class="field">
                 <label class="field-label" for="f-phone">Phone</label>
-                <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required data-msg="Please give us a phone number so we can confirm a time." aria-describedby="f-phone-hint f-phone-error">
+                <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" pattern="[0-9\(\)+.\s\-]{7,}" required data-msg="Please give us a phone number so we can confirm a time." aria-describedby="f-phone-hint f-phone-error">
                 <p class="field-hint" id="f-phone-hint">We’ll call or text to confirm a time.</p>
                 <p class="field-error" id="f-phone-error" data-error-for="f-phone"></p>
               </div>
               <div class="field">
                 <label class="field-label" for="f-email">Email</label>
-                <input id="f-email" name="email" type="email" autocomplete="email" spellcheck="false" required data-msg="Please give us an email address." aria-describedby="f-email-error">
+                <input id="f-email" name="email" type="email" autocomplete="email" maxlength="254" spellcheck="false" required data-msg="Please give us an email address." aria-describedby="f-email-error">
                 <p class="field-error" id="f-email-error" data-error-for="f-email"></p>
               </div>
               <fieldset class="field" aria-describedby="f-patient-error">
                 <legend>Are you new to Brightwater?</legend>
                 <div class="choices">
-                  <label class="choice" for="f-patient-new"><input id="f-patient-new" type="radio" name="patient_type" value="New patient" required data-msg="Please tell us if you’re new to Brightwater or have been before." aria-describedby="f-patient-error"> New patient</label>
-                  <label class="choice" for="f-patient-returning"><input id="f-patient-returning" type="radio" name="patient_type" value="Returning patient" aria-describedby="f-patient-error"> Returning patient</label>
+                  <label class="choice" for="f-patient-new"><input id="f-patient-new" type="radio" name="patient_type" value="New patient" required data-msg="Please tell us if you’re new to Brightwater or have been before."> New patient</label>
+                  <label class="choice" for="f-patient-returning"><input id="f-patient-returning" type="radio" name="patient_type" value="Returning patient"> Returning patient</label>
                 </div>
                 <p class="field-error" id="f-patient-error" data-error-for="patient_type"></p>
               </fieldset>
               <div class="field field--full">
                 <label class="field-label" for="f-reason">Reason for your visit</label>
-                <select id="f-reason" name="reason" required data-msg="Please choose a reason. “Something else” is fine." aria-describedby="f-reason-error">
+                <select id="f-reason" name="reason" required data-msg="Please choose a reason. “Something else” is fine." aria-describedby="f-reason-hint f-reason-error">
                   <option value="">Choose one</option>
-                  <option value="Check-up and cleaning">Check&#8209;up and cleaning</option>
-                  <option>Toothache or another problem</option>
-                  <option>Cosmetic or whitening</option>
-                  <option>Clear aligner consult (free)</option>
-                  <option>Child’s visit</option>
-                  <option>I’m nervous — please plan a slower first visit</option>
-                  <option>Something else</option>
+                  <!-- data-reason: buttons elsewhere link to contact.html?reason=nervous#request (etc.) and main.js preselects the match -->
+                  <option data-reason="checkup">Check-up and cleaning</option>
+                  <option data-reason="new99">New patient visit ($99, self-pay)</option>
+                  <option data-reason="toothache">Toothache or another problem</option>
+                  <option data-reason="cosmetic">Cosmetic or whitening</option>
+                  <option data-reason="aligner">Clear aligner consult (free)</option>
+                  <option data-reason="child">Child’s visit</option>
+                  <option data-reason="nervous">I’m nervous — please plan a slower first visit</option>
+                  <option data-reason="other">Something else</option>
                 </select>
+                <p class="field-hint" id="f-reason-hint">Nervous? Choose “I’m nervous — please plan a slower first visit” and tell us anything else in the note below.</p>
                 <p class="field-error" id="f-reason-error" data-error-for="f-reason"></p>
               </div>
               <fieldset class="field" aria-describedby="f-days-hint">
                 <legend>Preferred days <span class="field-optional">(optional)</span></legend>
                 <div class="choices choices--grid">
-                  <label class="choice" for="f-day-mon"><input id="f-day-mon" type="checkbox" name="preferred_days" value="Monday" aria-describedby="f-days-hint"> Monday</label>
-                  <label class="choice" for="f-day-tue"><input id="f-day-tue" type="checkbox" name="preferred_days" value="Tuesday" aria-describedby="f-days-hint"> Tuesday</label>
-                  <label class="choice" for="f-day-wed"><input id="f-day-wed" type="checkbox" name="preferred_days" value="Wednesday" aria-describedby="f-days-hint"> Wednesday</label>
-                  <label class="choice" for="f-day-thu"><input id="f-day-thu" type="checkbox" name="preferred_days" value="Thursday" aria-describedby="f-days-hint"> Thursday</label>
-                  <label class="choice" for="f-day-fri"><input id="f-day-fri" type="checkbox" name="preferred_days" value="Friday" aria-describedby="f-days-hint"> Friday</label>
-                  <label class="choice" for="f-day-sat"><input id="f-day-sat" type="checkbox" name="preferred_days" value="Saturday" aria-describedby="f-days-hint"> Saturday</label>
+                  <label class="choice" for="f-day-mon"><input id="f-day-mon" type="checkbox" name="preferred_days" value="Monday"> Monday</label>
+                  <label class="choice" for="f-day-tue"><input id="f-day-tue" type="checkbox" name="preferred_days" value="Tuesday"> Tuesday</label>
+                  <label class="choice" for="f-day-wed"><input id="f-day-wed" type="checkbox" name="preferred_days" value="Wednesday"> Wednesday</label>
+                  <label class="choice" for="f-day-thu"><input id="f-day-thu" type="checkbox" name="preferred_days" value="Thursday"> Thursday</label>
+                  <label class="choice" for="f-day-fri"><input id="f-day-fri" type="checkbox" name="preferred_days" value="Friday"> Friday</label>
+                  <label class="choice" for="f-day-sat"><input id="f-day-sat" type="checkbox" name="preferred_days" value="Saturday"> Saturday</label>
                 </div>
-                <p class="field-hint" id="f-days-hint">Tick any that work. We’re open the 1st and 3rd Saturday of the month.</p>
+                <p class="field-hint" id="f-days-hint">Check any that work. We’re open the 1st and 3rd Saturday of the month.</p>
               </fieldset>
               <div class="field">
-                <label class="field-label" for="f-time">Preferred time of day</label>
+                <label class="field-label" for="f-time">Preferred time of day <span class="field-optional">(optional)</span></label>
                 <select id="f-time" name="preferred_time" aria-describedby="f-time-hint">
                   <option>No preference</option>
                   <option>Morning</option>
@@ -326,7 +333,7 @@
               <div class="field field--full">
                 <label class="field-label" for="f-message">Anything we should know? <span class="field-optional">(optional)</span></label>
                 <textarea id="f-message" name="message" maxlength="500" aria-describedby="f-message-hint f-message-error"></textarea>
-                <p class="field-hint" id="f-message-hint">A short note is plenty, up to 500 characters. Please don’t include detailed medical history.</p>
+                <p class="field-hint" id="f-message-hint">A short note is plenty, up to 500 characters. Booking for a child or several family members? Add first names and ages. Please don’t include detailed medical history. <span lang="es">¿Prefiere español? Díganoslo aquí.</span></p>
                 <p class="field-error" id="f-message-error" data-error-for="f-message"></p>
               </div>
               <div class="field field--full">
@@ -344,6 +351,12 @@
         </div>
 
         <div class="stack request-aside">
+          <!-- OWNER: confirm who answers the phone in Spanish. -->
+          <div class="callout" lang="es" id="espanol">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg>
+            <div><p><strong>¿Prefiere su cita en español?</strong> El Dr. Reyes habla español. Llame&nbsp;al&nbsp;<a class="text-link nowrap" href="tel:+15550142368">(555) 014-2368</a>.</p></div>
+          </div>
+
           <div class="contact-card">
             <h3>Call, email or visit</h3>
             <ul class="contact-list" role="list">
@@ -355,7 +368,7 @@
             </ul>
           </div>
 
-          <!-- Nervous patients: the home page's "Request a slower first visit" button lands on this form -->
+          <!-- Nervous patients: "Request a slower first visit" buttons link to contact.html?reason=nervous#request, which preselects that reason -->
           <div class="note-card note-card--pen">
             <h3>Nervous about coming in?</h3>
             <p>Choose “I’m nervous — please plan a slower first visit” as your reason, and we’ll leave time to talk before anything starts. No lecture, however long it has been.</p>
@@ -364,7 +377,7 @@
           <div class="note-card">
             <h3>What happens next</h3>
             <div class="probe">
-            <ol class="steps">
+            <ol class="steps" role="list">
               <li class="step">
                 <span class="step-n" aria-hidden="true">1</span>
                 <div class="step-body">
@@ -383,7 +396,7 @@
                 <span class="step-n" aria-hidden="true">3</span>
                 <div class="step-body">
                   <h4>Your visit</h4>
-                  <p>New patients: plan on about 75 minutes, and arrive 10 minutes early or <a class="text-link" href="new-patients.html#forms">fill in your forms online</a> beforehand.</p>
+                  <p>New patients: plan on about 75 minutes, and arrive 10 minutes early or <a class="text-link" href="new-patients.html#forms">complete your forms from the link we text you</a> beforehand.</p>
                 </div>
               </li>
             </ol>
@@ -431,6 +444,7 @@
               <svg class="map-svg" viewBox="0 0 560 380" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Illustrated map of 214 Maple Avenue, Springfield. Brightwater Dental is on the north side of Maple Avenue. The free parking lot is directly behind the building, and the rear entrance faces the lot. North is up.">
                 <rect class="m-ground" width="560" height="380"/>
                 <path class="m-block" d="M20 20h150v120H20zM20 270h150v90H20zM208 270h150v90H208zM396 270h144v90H396zM396 20h144v120H396z"/>
+                <path class="m-road-edge" d="M0 222h560M189 0v380M377 0v380"/>
                 <path class="m-road" d="M0 222h560M189 0v380M377 0v380"/>
                 <path class="m-road m-road--minor" d="M200 58h14"/>
                 <rect class="m-lot" x="212" y="20" width="150" height="76" rx="8"/>
@@ -457,7 +471,7 @@
               214 Maple Avenue, Suite 200<br>
               Springfield, ST 00000
             </address>
-            <a class="btn btn-line" href="https://maps.google.com/?q=214+Maple+Avenue+Springfield" rel="noopener">
+            <a class="btn btn-line" href="https://www.google.com/maps/dir/?api=1&amp;destination=214+Maple+Avenue+Suite+200+Springfield+ST+00000" rel="noopener">
               <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-pin"/></svg>
               Get directions<span class="sr-only"> (opens Google Maps)</span>
             </a>
@@ -466,7 +480,8 @@
             <h3>Parking &amp; access</h3>
             <ul class="icon-list" role="list">
               <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-parking"/></svg>Free parking in the lot behind the building</li>
-              <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lift"/></svg>Step-free entrance and an elevator to Suite 200</li>
+              <!-- OWNER: confirm which entrance is step-free; mention accessible parking spaces or a drop-off point if you have them. -->
+              <li><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-lift"/></svg>Step-free entrance from the parking lot, and an elevator to Suite 200</li>
             </ul>
           </div>
         </div>
@@ -493,7 +508,7 @@
         <h2 class="f-title">Hours</h2>
         <dl class="f-hours">
           <div><dt>Mon–Thu</dt><dd>8:00 am – 5:00 pm</dd></div>
-          <div><dt>Tuesday</dt><dd>open until 7:00 pm</dd></div>
+          <div><dt>Tue</dt><dd>Open until 7:00 pm</dd></div>
           <div><dt>Fri</dt><dd>8:00 am – 2:00 pm</dd></div>
           <div><dt>Sat</dt><dd>9:00 am – 1:00 pm, 1st &amp; 3rd of the month</dd></div>
           <div><dt>Sun</dt><dd>Closed</dd></div>

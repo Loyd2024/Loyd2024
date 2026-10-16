@@ -3,7 +3,7 @@
    1 Fonts  2 Tokens  3 Base  4 Type  5 Layout  6 Utilities  7 Buttons, links, lists
    8 Notice, skip link  9 Header, nav  10 Chart vocabulary  11 Home sections
    12 Steps, appointment card  13 People, plans, reviews  14 Hours, map, contact
-   15 Inner pages  16 Forms  17 Closing, 404  18 Footer  19 Motion
+   15 Inner pages  16 Forms  17 Closing, 404  18 Footer  19 Forced colors  20 Motion
    ===================================================================== */
 
 /* ---------- 1. Fonts: metric-adjusted fallbacks ----------
@@ -104,14 +104,15 @@
 @media (min-width: 68em) {
   :root { --header-h: 5rem; }
 }
-@media (max-width: 39.99em) {
-  body { line-height: 1.55; }
-}
 
 /* ---------- 3. Reset and base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h) + 1rem); }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--text); line-height: 1.6; overflow-wrap: break-word; -webkit-font-smoothing: antialiased; }
+/* Phones: slightly tighter body leading (after the base rule, so it applies) */
+@media (max-width: 39.99em) {
+  body { line-height: 1.55; }
+}
 :where(h1, h2, h3, h4, p, ul, ol, dl, dd, figure, blockquote) { margin: 0; }
 :where(p) { margin-bottom: 1em; }
 :where(p:last-child) { margin-bottom: 0; }
@@ -190,6 +191,15 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 }
 .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
 .cards > * { min-width: 0; }
+/* Two columns, then three; an odd last card spans the row instead of sitting alone */
+@media (min-width: 39em) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (min-width: 60em) {
+  .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cards > :last-child:nth-child(odd) { grid-column: auto; }
+}
 .stack > * + * { margin-top: var(--stack, 1rem); }
 .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-top: 1.75rem; }
 @media (max-width: 29.99em) { .cta-row .btn { flex: 1 1 100%; } }
@@ -233,7 +243,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--fo
 .btn-band:hover { background: var(--band-muted); }
 .btn-on-band { border-color: var(--band-fg); color: var(--band-fg); }
 .btn-on-band:hover { background: var(--band-surface); }
-.btn[disabled] { opacity: 0.6; cursor: progress; }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
 
 .link-arrow { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; font-weight: 700; color: var(--pen); text-decoration: underline 2px var(--pen-soft); text-underline-offset: 5px; }
 .link-arrow:hover { text-decoration-color: currentColor; }
@@ -318,6 +328,8 @@ html:not(.js) .nav-toggle { display: none; }
 .site-nav { flex-basis: 100%; min-width: 0; padding-bottom: 0.75rem; }
 .nav-links { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
 .nav-links a { position: relative; display: flex; align-items: center; min-height: 44px; padding: 0.4rem 0.7rem; border-radius: 10px; color: var(--fg); font-weight: 600; text-decoration: none; }
+/* Nav labels and the header button never wrap inside themselves (the row tightens instead, see 68em-71.99em) */
+.nav-links a, .nav-actions .btn { white-space: nowrap; }
 .nav-links a:hover { color: var(--pen); background: var(--surface-2); }
 .nav-links a[aria-current="page"] { color: var(--pen); font-weight: 700; }
 .nav-links a[aria-current="page"]::after { content: ""; position: absolute; left: 0.7rem; right: 0.7rem; bottom: 0.3rem; height: 3px; border-radius: 2px; background: currentColor; }
@@ -349,10 +361,16 @@ html:not(.js) .nav-toggle { display: none; }
   .js .nav-links a { min-height: 52px; padding-inline: 0.85rem; border-bottom: 1px solid var(--line); border-radius: 0; font-family: var(--font-display); font-size: 1.375rem; font-weight: 700; font-stretch: 88%; }
   .js .nav-links a[aria-current="page"]::after { left: 0; right: auto; top: 0.7rem; bottom: 0.7rem; width: 4px; height: auto; }
   .js .nav-actions { display: grid; gap: 0.25rem; margin-top: 1rem; }
-  .js .nav-actions .btn { order: -1; width: 100%; margin-bottom: 0.5rem; }
+  /* The button follows the two phone lines, as in the DOM, so focus order matches what you see */
+  .js .nav-actions .btn { width: 100%; margin-top: 0.5rem; }
   .js .nav-phone, .js .nav-after { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); column-gap: 0.6rem; padding: 0.35rem 0.25rem; font-size: 1.125rem; line-height: 1.3; }
   .js .nav-actions .icon { grid-row: span 2; }
   .np-label { font-size: 0.875rem; }
+}
+/* Tablets: the open panel spans the full viewport (canceling the .wrap's 1rem side margins); content stays aligned with the header */
+@media (min-width: 45em) and (max-width: 67.99em) {
+  .js .site-nav { left: -1rem; right: -1rem; padding-inline: calc(1rem + max(16px, env(safe-area-inset-left, 0px))); }
+  .js .nav-actions .btn { justify-self: start; width: auto; min-width: 18rem; }
 }
 @media (min-width: 68em) {
   .header-inner { flex-wrap: nowrap; gap: 1.5rem; }
@@ -360,6 +378,14 @@ html:not(.js) .nav-toggle { display: none; }
   .site-nav { display: flex; align-items: center; gap: 1.25rem; flex-basis: auto; padding-bottom: 0; }
   .nav-links { flex-wrap: nowrap; gap: 0.15rem; }
   .nav-actions { flex-wrap: nowrap; gap: 1.1rem; margin-top: 0; }
+}
+/* Just above the desktop breakpoint: a tighter row keeps every label on one line */
+@media (min-width: 68em) and (max-width: 71.99em) {
+  .header-inner { gap: 1rem; }
+  .site-nav { gap: 0.75rem; }
+  .nav-actions { gap: 0.75rem; }
+  .nav-links a { padding-inline: 0.55rem; }
+  .nav-links a[aria-current="page"]::after { left: 0.55rem; right: 0.55rem; }
 }
 
 /* ---------- 10. Chart vocabulary ---------- */
@@ -369,7 +395,8 @@ html:not(.js) .nav-toggle { display: none; }
 .chart-form > div { min-width: 0; }
 .chart-form dt { font: 400 0.75rem/1.3 var(--font-mono); letter-spacing: 0.02em; color: var(--fg-muted); }
 .chart-form dd { margin: 0.2rem 0 0; font-weight: 700; font-size: 0.9375rem; line-height: 1.3; color: var(--pen); }
-.chart-form a { display: inline-block; padding-block: 0.8rem; margin-block: -0.8rem; color: inherit; }
+/* vertical-align: top keeps the field label on the first line of a value link that wraps */
+.chart-form a { display: inline-block; vertical-align: top; padding-block: 0.8rem; margin-block: -0.8rem; color: inherit; }
 /* Stacked record-card variant (page heads, 404) */
 .chart-form--card { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0.35rem 1.15rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-1); }
 .chart-form--card > div { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.75rem; align-items: baseline; padding: 0.65rem 0; }
@@ -428,7 +455,7 @@ html:not(.js) .nav-toggle { display: none; }
 .trust > li { display: flex; align-items: center; gap: 0.4rem; }
 .trust .icon { color: var(--pen); stroke-width: 2.4; }
 
-/* Hero emergency card: every part of it is a link; numbers labelled by time of day */
+/* Hero emergency card: the head and both numbers are links (labeled by time of day), office hours underneath */
 .urgent { margin-top: 1.75rem; max-width: 34rem; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-1); overflow: hidden; }
 .urgent-head { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; padding: 0.75rem 1.1rem; color: var(--fg); font-size: 0.9375rem; line-height: 1.4; text-decoration: none; }
 .urgent-head .icon { color: var(--pen); width: 1.4em; height: 1.4em; }
@@ -446,6 +473,10 @@ html:not(.js) .nav-toggle { display: none; }
   .urgent-lines { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .urgent-lines li + li { border-top: 0; border-left: 1px solid var(--line); }
 }
+/* The card clips its rounded hover fills (overflow: hidden), so its focus rings are drawn inside each link */
+.urgent :focus-visible { outline-offset: -4px; border-radius: var(--radius-sm); }
+/* Opening hours beside the two numbers, so "during opening hours" and "after hours" need no guessing */
+.urgent-hours { margin: 0; padding: 0.55rem 1.1rem 0.7rem; border-top: 1px solid var(--line); font-size: 0.875rem; line-height: 1.45; color: var(--fg-muted); }
 @media (min-width: 48em) and (max-width: 63.99em) { .hero-chart { max-width: 34rem; } }
 @media (min-width: 64em) {
   .hero-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: var(--gap); align-items: start; }
@@ -462,6 +493,8 @@ html:not(.js) .nav-toggle { display: none; }
 .band .feature-icon { background: var(--band-surface); color: var(--band-fg); }
 .band .feature p { color: var(--band-muted); }
 @media (min-width: 64em) { .features--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Four items: 2 + 2 at mid widths (never 3 + 1), then one row of four */
+@media (min-width: 36em) and (max-width: 74.99em) { .features--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 75em) { .features--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /* Comfort band */
@@ -494,8 +527,9 @@ html:not(.js) .nav-toggle { display: none; }
   .breath-toggle { min-height: 44px; padding-inline: 1rem; }
 }
 @media (max-width: 22.49em) {
-  /* Narrowest phones: a smaller dial beside the title and note, the button full width underneath */
-  .breath { grid-template-columns: 6.5rem minmax(0, 1fr); }
+  /* Narrowest phones: a smaller dial beside the title and note, the button full width underneath
+     (8rem keeps "Breathe out" inside the ring at the cue's 12px minimum) */
+  .breath { grid-template-columns: 8rem minmax(0, 1fr); column-gap: 0.85rem; }
   .breath-dial { grid-row: 1 / span 2; }
   .breath-toggle { grid-column: 1 / -1; justify-self: stretch; }
 }
@@ -534,6 +568,7 @@ html:not(.js) .breath-toggle { display: none; }
 .emergency-panel p { max-width: 36em; }
 .emergency-911 { display: flex; gap: 0.65rem; align-items: flex-start; margin-top: 1.25rem; padding: 0.85rem 1rem; border-radius: var(--radius-sm); background: var(--surface); font-size: 0.9375rem; line-height: 1.5; }
 .emergency-911 .icon { margin-top: 0.1em; color: var(--accent-text); vertical-align: 0; }
+.emergency-911 + .link-arrow { margin-top: 0.75rem; }
 .phone-tiles { display: grid; gap: 0.75rem; align-content: center; }
 .phone-tile { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.95rem 1.25rem 1.05rem; border: 2px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--fg); text-decoration: none; }
 .phone-tile:hover { border-color: var(--pen); }
@@ -627,6 +662,8 @@ html:not(.js) .breath-toggle { display: none; }
 .portrait--alt { background: radial-gradient(110% 80% at 85% 0%, var(--accent-soft), transparent 62%), linear-gradient(190deg, var(--pen-soft), var(--surface-3)); }
 .portrait-initials { position: relative; font-family: var(--font-display); font-size: clamp(3.5rem, 2.6rem + 4vw, 6.5rem); font-weight: 300; font-stretch: 100%; letter-spacing: -0.03em; line-height: 1; }
 .portrait-mark { position: absolute; top: 0.9rem; left: 0.9rem; width: 2.5rem; height: auto; }
+/* Real photos: <img class="portrait …"> keeps the same classes (and so the same aspect ratios) and is cropped, never stretched */
+img.portrait { width: 100%; height: auto; object-fit: cover; }
 .portrait-tag {
   position: absolute;
   left: 0.75rem;
@@ -679,7 +716,7 @@ html:not(.js) .breath-toggle { display: none; }
   .person--full .person-body { padding-top: 0.5rem; }
 }
 
-/* Place photo placeholder: a named, tinted panel with a token-coloured line drawing
+/* Place photo placeholder: a named, tinted panel with a token-colored line drawing
    (keep data-photo + the PHOTO comment; swap the div for an <img> when photos arrive) */
 .office-tour { display: grid; gap: 1.5rem 1rem; margin-bottom: clamp(2.25rem, 1.5rem + 2.5vw, 4rem); }
 @media (min-width: 40em) { .office-tour { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -710,6 +747,12 @@ html:not(.js) .breath-toggle { display: none; }
 .team-aside > p { padding-top: 1rem; border-top: 1.5px dotted var(--line-strong); font-size: 0.9375rem; color: var(--fg-muted); }
 .team-aside > p strong { color: var(--fg); }
 .team-grid { display: grid; gap: 2rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+/* Two dentists side by side: the "Also looking after you" aside runs full width under them, its people in a row */
+@media (min-width: 38em) and (max-width: 63.99em) {
+  .team-grid > .team-aside { grid-column: 1 / -1; }
+  .team-grid .people-sm { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .team-grid .people-sm > li { align-items: start; }
+}
 @media (min-width: 64em) {
   .team-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--gap); }
   .team-grid .portrait { aspect-ratio: 1; }
@@ -787,29 +830,32 @@ html:not(.js) .breath-toggle { display: none; }
 .hours tbody tr:last-child :where(th, td) { border-bottom: 0; }
 .hours th { padding-right: 0.75rem; font-weight: 700; line-height: 1.3; }
 .h-sub { display: block; margin-top: 0.15rem; font-size: 0.8125rem; font-weight: 600; color: var(--pen); }
-.h-time { padding-right: 1rem; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.h-time { padding-right: 1rem; line-height: 1.35; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .is-closed :where(th, .h-time) { color: var(--fg-muted); }
 .h-viz { width: 34%; }
-.h-track { position: relative; display: block; height: 10px; border-radius: 999px; background: var(--surface-2); }
+.h-track { position: relative; display: block; height: 10px; border-radius: 999px; background: var(--line); }
 .h-bar { position: absolute; top: 0; bottom: 0; left: calc((var(--o) - 7) / 13 * 100%); width: calc((var(--c) - var(--o)) / 13 * 100%); border-radius: 999px; background: var(--pen); }
 .is-late .h-bar { background: linear-gradient(90deg, var(--pen) 0 81.8%, transparent 81.8%), repeating-linear-gradient(135deg, var(--pen) 0 2.5px, var(--pen-soft) 2.5px 5px); }
 .is-some .h-bar { background: repeating-linear-gradient(90deg, var(--pen) 0 7px, transparent 7px 11px); }
 .hours tfoot td { padding: 0.35rem 0 0; border: 0; }
 .h-axis { position: relative; display: block; height: 1rem; font-size: 0.75rem; color: var(--fg-muted); }
 .h-axis span { position: absolute; top: 0; left: calc((var(--t) - 7) / 13 * 100%); transform: translateX(-50%); white-space: nowrap; }
-@media (max-width: 25.99em) {
+/* Below 27.5em the bars' axis labels would collide, so phones get the table alone (the .h-sub labels stay) */
+@media (max-width: 27.49em) {
   .hours :where(.h-viz, tfoot) { display: none; }
-  .h-time { padding-right: 0; white-space: nowrap; }
+  .h-time { padding-right: 0; }
 }
 @media (max-width: 22.49em) { .h-time { font-size: 0.9375rem; } }
 
-/* Map: inline SVG coloured by tokens, role="img" with a descriptive label */
+/* Map: inline SVG colored by tokens, role="img" with a descriptive label */
 .map { margin: 0; }
 .map-frame { position: relative; overflow: hidden; border-radius: var(--radius); background: var(--map-ground); }
 .map-svg { display: block; width: 100%; height: auto; aspect-ratio: 560 / 380; }
 @media (max-width: 39.99em) { .map-svg { aspect-ratio: 1; } }
 .m-ground { fill: var(--map-ground); }
 .m-block { fill: var(--map-block); }
+/* Road casing: a wider stroke under each road leaves 1.5px edges with >= 3:1 contrast in both themes */
+.m-road-edge { fill: none; stroke: var(--control-border); stroke-width: 29; }
 .m-road { fill: none; stroke: var(--map-road); stroke-width: 26; }
 .m-road--minor { stroke-width: 12; stroke-linecap: round; }
 .m-lot { fill: var(--map-lot); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
@@ -825,6 +871,8 @@ html:not(.js) .breath-toggle { display: none; }
 .m-north text { font: 700 13px var(--font-body); fill: var(--fg-muted); }
 .m-path { fill: none; stroke: var(--pen); stroke-width: 2.2; stroke-dasharray: 2 6; stroke-linecap: round; }
 .map-tag { position: absolute; top: 0.75rem; left: 0.75rem; margin: 0; padding: 0.3rem 0.6rem; border-radius: 999px; background: var(--surface); color: var(--fg-muted); font: 400 0.75rem/1.2 var(--font-mono); }
+/* Phones (square crop): the tag moves down over the lower-left block, clear of the parking lot */
+@media (max-width: 39.99em) { .map-tag { top: auto; bottom: 0.75rem; } }
 .map figcaption { display: flex; gap: 0.55rem; align-items: flex-start; margin-top: 0.75rem; font-weight: 600; }
 .map figcaption .icon { margin-top: 0.12em; color: var(--pen); vertical-align: 0; }
 
@@ -844,7 +892,7 @@ html:not(.js) .breath-toggle { display: none; }
 .icon-list a { display: inline-flex; align-items: center; min-height: 44px; color: var(--pen); font-weight: 600; overflow-wrap: anywhere; }
 @media (min-width: 40em) { .icon-list--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* Contact card: labelled phone lines (by time of day), email, address */
+/* Contact card: labeled phone lines (by time of day), email, address */
 .contact-card { min-width: 0; padding: clamp(1.25rem, 1rem + 1vw, 1.75rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-1); }
 .contact-card h2, .contact-card h3 { margin-bottom: 0.75rem; font-size: 1.5rem; }
 .contact-list { display: grid; }
@@ -876,7 +924,7 @@ html:not(.js) .breath-toggle { display: none; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.5rem; margin: 0; padding: 0; list-style: none; font-size: 0.9375rem; }
 .breadcrumbs li { display: flex; align-items: center; gap: 0.5rem; color: var(--fg-muted); }
 .breadcrumbs li + li::before { content: "/"; content: "/" / ""; color: var(--line-strong); }
-.breadcrumbs a { display: inline-flex; align-items: center; min-height: 44px; color: var(--pen); font-weight: 600; }
+.breadcrumbs a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; color: var(--pen); font-weight: 600; }
 .breadcrumbs [aria-current="page"] { color: var(--fg); font-weight: 600; }
 .page-head-link { margin-top: 0.75rem; }
 
@@ -973,17 +1021,13 @@ html:not(.js) .breath-toggle { display: none; }
 .np-fv > .probe { align-self: start; }
 .np-fv-aside { display: grid; gap: 1.5rem; align-content: start; min-width: 0; }
 .np-fv-aside .note-card .link-arrow { margin-top: 0.25rem; }
+.np-fv-aside .appt-card { max-width: none; }
 @media (min-width: 40em) and (max-width: 63.99em) {
   .np-fv-aside { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
 .np-before > .note-card > * + * { margin-top: 0.75rem; }
 .np-before .icon-list { gap: 0.15rem; }
 .np-before .icon-list > li { line-height: 1.4; }
-@media (min-width: 40em) and (max-width: 59.99em) {
-  .np-before { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .np-before > :last-child { grid-column: 1 / -1; }
-}
-@media (min-width: 60em) { .np-before { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .np-costs-help { margin: clamp(1rem, 0.8rem + 0.8vw, 1.5rem) 0 0; }
 .np-faq { display: grid; gap: clamp(1.5rem, 1rem + 1.5vw, 2rem); }
 .np-faq > * { min-width: 0; }
@@ -1087,7 +1131,7 @@ html:not(.js) .breath-toggle { display: none; }
 .choice input[aria-invalid="true"] { border-color: var(--accent-text); }
 @media (forced-colors: active) { .choice input { appearance: auto; } }
 
-/* Field error: icon + text, announced via aria-describedby; never colour alone */
+/* Field error: icon + text, announced via aria-describedby; never color alone */
 .field-error { display: flex; gap: 0.45rem; align-items: flex-start; margin: 0; font-size: 0.9375rem; font-weight: 700; line-height: 1.4; color: var(--accent-text); }
 .field-error:empty { display: none; }
 .field-error::before, .form-status::before { content: ""; flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.1em; background: currentColor; -webkit-mask: var(--status-icon) center / contain no-repeat; mask: var(--status-icon) center / contain no-repeat; }
@@ -1109,7 +1153,8 @@ html:not(.js) .breath-toggle { display: none; }
   font-weight: 600;
   line-height: 1.5;
 }
-.form-status:empty { display: none; }
+/* Empty: hidden visually but kept in the accessibility tree, so its first message is announced (absolute: no grid gap) */
+.form-status:empty { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); }
 .form-status::before { color: var(--pen); margin-top: 0.15em; }
 .form-status a { color: var(--pen); white-space: nowrap; }
 .form-status[data-kind="success"] {
@@ -1124,6 +1169,9 @@ html:not(.js) .breath-toggle { display: none; }
 .form-note { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.9375rem; color: var(--fg-muted); }
 .form-note .icon { margin-top: 0.12em; color: var(--pen); vertical-align: 0; }
 .hp-field { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+/* Without JS the unconnected form can't be sent: hide its button so the <noscript> call note is the only path.
+   This stops matching as soon as data-endpoint is set. */
+html:not(.js) form[data-endpoint=""] [type="submit"] { display: none; }
 /* The emergency entry card (.urgent) reused at the top of a form: full width, the form grid handles spacing */
 .form .urgent { margin-top: 0; max-width: none; }
 
@@ -1141,7 +1189,8 @@ html:not(.js) .breath-toggle { display: none; }
 }
 @media (min-width: 64em) {
   .closing-panel { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: end; }
-  .closing-ctas { justify-content: flex-end; }
+  /* One column, as wide as the wider button, at the right: both buttons share its width and left edge */
+  .closing-ctas { flex-direction: column; align-items: stretch; justify-self: end; }
 }
 
 /* 404: "This tooth isn't on the chart." */
@@ -1173,7 +1222,7 @@ html:not(.js) .breath-toggle { display: none; }
 .f-brand address { display: grid; justify-items: start; color: var(--footer-muted); font-size: 0.9375rem; }
 .f-title { margin-bottom: 0.6rem; font: 700 0.8125rem/1.3 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--footer-muted); }
 .f-hours { display: grid; gap: 0.35rem; font-size: 0.9375rem; }
-.f-hours div { display: flex; flex-wrap: wrap; gap: 0 0.5rem; }
+.f-hours div { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0 0.5rem; }
 .f-hours dt { font-weight: 700; }
 .f-hours dd { margin: 0; color: var(--footer-muted); }
 .f-links a, .f-tel, .f-brand address a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; text-underline-offset: 3px; }
@@ -1192,7 +1241,21 @@ html:not(.js) .breath-toggle { display: none; }
   .footer-bottom p:last-child { justify-self: end; text-align: right; }
 }
 
-/* ---------- 19. Motion: only when the visitor has not asked for less ---------- */
+/* ---------- 19. Forced colors (Windows High Contrast): keep icons that are drawn with CSS backgrounds ---------- */
+@media (forced-colors: active) {
+  .nav-toggle-bars, .nav-toggle-bars::before, .nav-toggle-bars::after { forced-color-adjust: none; background: ButtonText; }
+  .nav-toggle[aria-expanded="true"] .nav-toggle-bars { background: transparent; }
+  .nav-links a[aria-current="page"]::after { forced-color-adjust: none; background: LinkText; }
+  .faq-item summary::after {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background:
+      linear-gradient(CanvasText, CanvasText) 50% 50% / 10px 2px no-repeat, linear-gradient(CanvasText, CanvasText) 50% 50% / 2px 10px no-repeat;
+  }
+  .faq-item[open] summary::after { background: linear-gradient(CanvasText, CanvasText) 50% 50% / 10px 2px no-repeat; }
+}
+
+/* ---------- 20. Motion: only when the visitor has not asked for less ---------- */
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
   .btn, .header-call, .nav-toggle, .nav-links a, .phone-tile, .urgent-lines a, .faq-item summary::after { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease; }

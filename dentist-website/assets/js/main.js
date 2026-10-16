@@ -24,21 +24,26 @@
   var nav = toggle ? doc.getElementById(toggle.getAttribute('aria-controls')) : null;
 
   if (toggle && nav) {
-    var label = toggle.querySelector('.nav-toggle-label');
     var header = toggle.closest('header') || nav.parentNode;
     var desktop = window.matchMedia('(min-width: 68em)');
     var isOpen = function () { return toggle.getAttribute('aria-expanded') === 'true'; };
 
     // The panel may scroll on its own: size it to the space left below the header (landscape phones)
     var fit = function () {
-      nav.style.setProperty('--nav-max', Math.max(160, window.innerHeight - header.getBoundingClientRect().bottom) + 'px');
+      nav.style.setProperty('--nav-max', Math.max(120, window.innerHeight - header.getBoundingClientRect().bottom) + 'px');
     };
 
+    // The button keeps its "Menu" name; aria-expanded (and the bars turning into an X) carry the open state
     var setOpen = function (open, returnFocus) {
-      if (open) fit();
+      if (open) {
+        // Very short screens at the top of the page (template notice above the sticky header):
+        // bring the header to the top first, so the panel gets the whole screen below it
+        var top = header.getBoundingClientRect().top;
+        if (top > 0 && window.innerHeight < 480) window.scrollBy(0, top);
+        fit();
+      }
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       nav.classList.toggle('is-open', open);
-      if (label) label.textContent = open ? 'Close' : 'Menu';
       if (!open && returnFocus) toggle.focus();
     };
 
@@ -149,16 +154,27 @@
   /* ---------- Appointment request form ----------
      <form data-appointment-form data-endpoint="" data-phone-href="tel:+15550142368" data-phone-text="(555) 014-2368">
      Empty endpoint: validate, then explain that online requests are not connected yet (with the phone number).
-     Endpoint set (e.g. a Formspree URL): POST FormData with Accept: application/json; report success only if it worked. */
+     Endpoint set (e.g. a Formspree URL): POST FormData with Accept: application/json; report success only if it worked.
+     Status messages are announced by the role="status" live region; focus stays where the visitor is.
+     contact.html?reason=nervous#request preselects the reason <option data-reason="nervous">. */
   Array.prototype.forEach.call(doc.querySelectorAll('form[data-appointment-form]'), function (form) {
     var status = form.querySelector('[data-form-status]');
-    var submit = form.querySelector('[type="submit"]');
+    var submit = form.querySelector('[type="submit"], button:not([type])');
     var phoneHref = form.getAttribute('data-phone-href') || '';
     var phoneText = form.getAttribute('data-phone-text') || '';
     var attempted = false;
+    var sending = false;
+    var summaryCount = 0; // how many fields the error summary currently counts (0: no summary shown)
+
+    // Arriving from a specific button (e.g. "Request a slower first visit"): preselect the matching reason
+    var want = window.URLSearchParams ? new URLSearchParams(window.location.search).get('reason') : null;
+    if (want && /^[a-z0-9-]+$/.test(want)) {
+      var option = form.querySelector('option[data-reason="' + want + '"]');
+      if (option) option.selected = true;
+    }
 
     // Status messages are built as one <span> (text + phone link) so the icon layout stays intact
-    var say = function (kind, before, after, keepFocus) {
+    var say = function (kind, before, after) {
       if (!status) return;
       var span = doc.createElement('span');
       span.appendChild(doc.createTextNode(before));
@@ -174,33 +190,51 @@
       status.textContent = '';
       status.setAttribute('data-kind', kind);
       status.appendChild(span);
-      if (keepFocus) return;
-      if (!status.hasAttribute('tabindex')) status.setAttribute('tabindex', '-1');
-      status.focus();
+      summaryCount = 0;
+    };
+
+    var clearStatus = function () {
+      if (status) { status.textContent = ''; status.removeAttribute('data-kind'); }
+      summaryCount = 0;
+    };
+
+    var summarize = function (count) {
+      say('error', count === 1
+        ? 'One field needs attention. It is marked above.'
+        : count + ' fields need attention. They are marked above.');
+      summaryCount = count;
     };
 
     var messageFor = function (field) {
       var v = field.validity;
       var custom = field.getAttribute('data-msg');
-      if (field.type === 'checkbox') return custom || 'Please tick this box so we can contact you.';
+      if (field.type === 'checkbox') return custom || 'Please check this box so we can contact you.';
       if (field.type === 'radio') return custom || 'Please choose one option.';
-      if (v.valueMissing) return custom || 'Please fill in this field.';
+      if (v.valueMissing || field.validationMessage === 'blank') return custom || 'Please fill in this field.';
       if (field.type === 'email') return 'Please enter an email address like name@example.com.';
-      if (field.type === 'tel') return 'Please enter a phone number with at least 7 digits.';
+      if (field.type === 'tel') return 'Please enter a phone number with 7 to 15 digits. Spaces, dashes, dots, brackets and + are fine.';
       if (v.tooLong) return 'Please shorten this to ' + field.maxLength + ' characters or fewer.';
       return custom || field.validationMessage;
     };
 
-    // Phone numbers: at least 7 digits, any common punctuation
-    var checkTel = function (field) {
-      if (field.type !== 'tel') return;
-      var digits = field.value.replace(/\D/g, '');
-      field.setCustomValidity(field.value && digits.length < 7 ? 'phone' : '');
+    // Checks the browser doesn't make: a required text field holding only spaces, and phone numbers
+    // (7 to 15 digits, using only digits, spaces and ( ) + - .)
+    var customCheck = function (field) {
+      if (!field.setCustomValidity) return;
+      var value = field.value;
+      var problem = '';
+      if (field.required && /^(text|tel|textarea)$/.test(field.type) && value && !value.trim()) {
+        problem = 'blank';
+      } else if (field.type === 'tel' && value) {
+        var digits = value.replace(/\D/g, '').length;
+        if (!/^[0-9()+.\s-]+$/.test(value) || digits < 7 || digits > 15) problem = 'phone';
+      }
+      field.setCustomValidity(problem);
     };
 
     // Validate one control (radio groups are checked as a group, keyed by name)
     var validate = function (field) {
-      checkTel(field);
+      customCheck(field);
       var key = field.type === 'radio' ? field.name : field.id;
       var ok = field.checkValidity();
       var group = field.type === 'radio' ? form.querySelectorAll('input[type="radio"][name="' + field.name + '"]') : [field];
@@ -224,38 +258,51 @@
 
     form.setAttribute('novalidate', '');
 
-    // After the first attempt, errors clear as soon as a field is fixed
+    // After the first attempt, errors clear as soon as a field is fixed, and the summary keeps count
     var revalidate = function (event) {
       var el = event.target;
-      if (attempted && el.willValidate && el.getAttribute('aria-invalid') === 'true') validate(el);
+      if (!attempted || !el.willValidate || el.getAttribute('aria-invalid') !== 'true') return;
+      validate(el);
+      if (!summaryCount) return;
+      var left = fields().filter(function (f) { return f.getAttribute('aria-invalid') === 'true'; }).length;
+      if (!left) clearStatus();
+      else if (left !== summaryCount) summarize(left);
     };
     form.addEventListener('input', revalidate);
     form.addEventListener('change', revalidate);
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (sending) return;
       attempted = true;
+      var button = event.submitter || submit;
 
       var invalid = fields().filter(function (el) { return !validate(el); });
       if (invalid.length) {
-        say('error', invalid.length === 1
-          ? 'One field needs attention. It is marked above.'
-          : invalid.length + ' fields need attention. They are marked above.', undefined, true);
+        summarize(invalid.length);
         invalid[0].focus();
         return;
       }
 
+      // A filled-in spam trap (the hidden _gotcha field) means a bot: send nothing
+      var trap = form.querySelector('.hp-field input');
       var endpoint = (form.getAttribute('data-endpoint') || '').trim();
-      if (!endpoint) {
+      if (!endpoint || (trap && trap.value)) {
         say('info', 'Online requests aren’t connected yet, so this form hasn’t been sent. Please call ', ' and we’ll find you a time.');
         return;
       }
 
-      if (submit) { submit.disabled = true; }
+      // aria-disabled (not disabled) keeps keyboard focus on the button while the request is on its way
+      sending = true;
+      if (button) button.setAttribute('aria-disabled', 'true');
       form.setAttribute('aria-busy', 'true');
-      say('info', 'Sending your request…', undefined, true);
+      say('info', 'Sending your request…');
 
-      fetch(endpoint, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } })
+      // Give up after 15 seconds, so a service that never answers can't leave the form stuck on "Sending"
+      var controller = window.AbortController ? new AbortController() : null;
+      var timer = controller ? window.setTimeout(function () { controller.abort(); }, 15000) : null;
+
+      fetch(endpoint, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' }, signal: controller ? controller.signal : undefined })
         .then(function (response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);
           form.reset();
@@ -263,10 +310,13 @@
           say('success', 'Thank you. Your request has reached us, and we’ll contact you to confirm a time. If it’s urgent, call ', '.');
         })
         .catch(function () {
-          say('error', 'Sorry, your request could not be sent. Please try again in a moment, or call ', '.');
+          // The request may still have arrived (for example if the service's reply can't be read), so don't invite a resend
+          say('error', 'Sorry, we couldn’t confirm that your request reached us. To be sure, please call ', ' rather than sending it again.');
         })
         .then(function () {
-          if (submit) { submit.disabled = false; }
+          window.clearTimeout(timer);
+          sending = false;
+          if (button) button.removeAttribute('aria-disabled');
           form.removeAttribute('aria-busy');
         });
     });
