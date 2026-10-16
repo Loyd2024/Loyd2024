@@ -131,15 +131,32 @@
  * v1.6 (2026-10-16): new developments, search results and one card family (4 above), all switched off. Built from one
  * cached read of every listing (transients bkn_rows, bkn_devs, bkn_index, rebuilt when a listing changes); every
  * number on a card traces to a listing; filtered views are noindex with the canonical on the plain page.
+ * v1.6.1 (2026-10-16): land estates on the development layout (blockke_dev_is_land(): a land category, no home category,
+ * no bedrooms; bke_dev_kind overrides). Plots, servicing, tenure, the developer's payment plan without a mortgage
+ * calculator, infrastructure first, other land nearby, land wording in the forms and leads. Every other page is byte for
+ * byte as in v1.6; config land_layout = false turns it off.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
+
+	/** Land mode's own wording (config land_why and land_disclaimer), also the fallback when a saved option leaves them empty. */
+	function blockke_dev_land_defaults() {
+		return array(
+			'land_why'        => array(
+				array( 'Independent advice', 'We compare estates, plot sizes, servicing and payment plans side by side, so you choose with clarity rather than pressure.' ),
+				array( 'Checks before you commit', 'We help you check the title and official search, the survey and beacons, and what the zoning allows you to build, before you reserve or pay a deposit.' ),
+				array( 'One advisor to title', 'From reservation and instalments to transfer and the title in your name, the same advisor stays with you.' ),
+			),
+			'land_disclaimer' => "All information is provided in good faith from the developer's published material and is subject to change without notice. Prices, plot sizes, servicing, availability, payment terms and title timelines should be confirmed before you commit. Images may include renders and plans. Block Real Estate does not provide financial or legal advice; we recommend an advocate reviews the title and sale agreement before you pay.",
+		);
+	}
 
 	function blockke_dev_config() {
 		static $cfg = null;
 		if ( null !== $cfg ) {
 			return $cfg;
 		}
+		$land     = blockke_dev_land_defaults();
 		$defaults = array(
 			'enabled'            => true,  // development layout
 			'auto'               => false, // true: every listing with units gets the layout unless switched off
@@ -244,6 +261,14 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				array( 'One advisor to handover', 'From reservation and payments to construction updates and handover, the same advisor stays with you.', 'From reservation and payments to transfer and handover, the same advisor stays with you.' ), // third: ready homes
 			),
 			'disclaimer'         => "All information is provided in good faith from the developer's published material and is subject to change without notice. Prices, sizes, availability, payment terms and completion dates should be confirmed before you commit. Images may include project renders. Block Real Estate does not provide financial or legal advice.",
+			'land_layout'        => true,  // land mode: a plot estate's own development page reads as land (blockke_dev_is_land()); false: every page as before
+			'land_why'           => $land['land_why'],
+			'land_disclaimer'    => $land['land_disclaimer'],
+			'land_neighbours'    => array( // land pages' "Also consider": area slug => array( nearest areas, the next ring ); else 'neighbours'
+				'juja'  => array( array( 'ruiru', 'thika', 'thika-road', 'tatu-city' ), array( 'kiambu-road', 'kamiti-road', 'ruaka' ) ),
+				'ruiru' => array( array( 'juja', 'tatu-city', 'thika-road', 'kamiti-road' ), array( 'thika', 'kiambu-road' ) ),
+				'thika' => array( array( 'juja', 'thika-road', 'ruiru' ), array( 'tatu-city' ) ),
+			),
 		);
 		$saved = get_option( 'blockke_dev_page', array() );
 		if ( ! is_array( $saved ) ) {
@@ -452,6 +477,33 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			return false;
 		}
 		return has_term( 'offplan-ongoing', 'property_status', $id );
+	}
+
+	/** Land: a land category, no home category, no bedrooms. Custom field bke_dev_kind = land | homes overrides. Config land_layout = false turns land mode off everywhere. */
+	function blockke_dev_is_land( $id ) {
+		static $c = array();
+		$id = (int) $id;
+		if ( isset( $c[ $id ] ) ) {
+			return $c[ $id ];
+		}
+		$cfg = blockke_dev_config();
+		if ( empty( $cfg['land_layout'] ) || $id <= 0 ) {
+			return $c[ $id ] = false;
+		}
+		$o = strtolower( trim( (string) get_post_meta( $id, 'bke_dev_kind', true ) ) );
+		if ( 'land' === $o || 'homes' === $o ) {
+			return $c[ $id ] = ( 'land' === $o );
+		}
+		$home = array_values( array_filter( array( 'apartments', 'villas-residential', 'houses-residential', (string) $cfg['studio_cat'] ) ) );
+		$land = has_term( array( 'land', 'residential-land', 'agricultural', 'industrial-land' ), 'property_category', $id )
+			&& ! has_term( $home, 'property_category', $id )
+			&& (int) blockke_dev_pm( $id, 'property_bedrooms' ) <= 0;
+		if ( ! $land ) { // a plot listed under a land estate, without its own land category
+			$c[ $id ] = false; // guards a master that points back
+			$m        = (int) get_post_meta( $id, 'property_subunits_master', true );
+			$land     = $m > 0 && $m !== $id && ! has_term( $home, 'property_category', $id ) && (int) blockke_dev_pm( $id, 'property_bedrooms' ) <= 0 && blockke_dev_is_land( $m );
+		}
+		return $c[ $id ] = $land;
 	}
 
 	function blockke_dev_is_for_sale( $id ) {
@@ -809,6 +861,54 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 	function blockke_dev_calc_instalment( $price, $plan, $cta = '' ) {
 		$cfg    = blockke_dev_config();
 		$cur    = $cfg['currency'];
+		if ( ! empty( $plan['land'] ) ) {
+			// Land (blockke_dev_land_plan()): the deposit, then equal instalments over the plan's length; nothing "until
+			// completion" and no "On completion" share. With a length the "Over" choices run up to it, with it selected.
+			$dep  = $plan['deposit'] > 0 ? $plan['deposit'] : (float) $cfg['default_deposit'];
+			$term = isset( $plan['term'] ) ? (int) $plan['term'] : 0;
+			$freq = ! empty( $plan['quarterly'] ) ? 3 : 1;
+			$opts = array( 6, 12, 18, 24, 30, 36, 48, 60 );
+			$sel  = 24;
+			if ( $term > 0 ) {
+				$opts = array();
+				for ( $mo = 6; $mo <= $term; $mo += 6 ) {
+					$opts[] = $mo;
+				}
+				if ( ! in_array( $term, $opts, true ) ) {
+					$opts[] = $term;
+				}
+				$sel = $term;
+			}
+			$h  = '<div class="bkd-calc" id="bkd-calc" data-bkd-calc="instalment" data-cur="' . esc_attr( $cur ) . '" data-deposit="' . esc_attr( $dep ) . '"'
+				. ' data-reservation="' . esc_attr( (float) $plan['reservation'] ) . '" data-until="" data-months="' . esc_attr( $term ) . '" data-completion="" data-oncompletion="0">';
+			$h .= '<div class="bkd-calc-grid"><div class="bkd-calc-fields">';
+			$h .= '<label class="bkd-cf"><span class="bkd-cl">Price (' . esc_html( $cur ) . ')</span><input class="bkd-ci" data-c="price" inputmode="numeric" autocomplete="off" value="' . esc_attr( $price > 0 ? number_format( $price ) : '' ) . '" aria-label="Price"></label>';
+			$h .= '<label class="bkd-cf"><span class="bkd-cl">Deposit <output data-c="dep-out">' . esc_html( blockke_dev_num( $dep ) ) . '%</output></span>'
+				. '<input class="bkd-range" type="range" data-c="dep" min="0" max="60" step="5" value="' . esc_attr( round( $dep / 5 ) * 5 ) . '" aria-label="Deposit percentage"></label>';
+			$h .= '<div class="bkd-cf" role="group" aria-label="Pay the balance"><span class="bkd-cl">Pay the balance</span><div class="bkd-seg">'
+				. '<button type="button" data-c="freq" data-v="1" aria-pressed="' . ( 1 === $freq ? 'true' : 'false' ) . '">Monthly</button><button type="button" data-c="freq" data-v="3" aria-pressed="' . ( 3 === $freq ? 'true' : 'false' ) . '">Quarterly</button></div></div>';
+			$h .= '<label class="bkd-cf"><span class="bkd-cl">Over</span><select class="bkd-ci" data-c="months" aria-label="Number of months">';
+			foreach ( $opts as $mo ) {
+				$h .= '<option value="' . $mo . '"' . selected( $sel, $mo, false ) . '>' . $mo . ' months</option>';
+			}
+			$h .= '</select></label>';
+			$h .= '</div><div class="bkd-calc-out" aria-live="polite">';
+			$h .= '<div class="bkd-co-main"><span data-c="per-label">Per month</span><strong data-c="per">—</strong></div>';
+			$h .= '<div class="bkd-co-row"><span>Deposit<small data-c="dep-note"></small></span><strong data-c="deposit">—</strong></div>';
+			$h .= '<div class="bkd-co-row"><span>Instalments</span><strong data-c="count">—</strong></div>';
+			$h .= '<div class="bkd-co-row" data-c="comp-row" hidden><span>On completion</span><strong data-c="comp">—</strong></div>';
+			$h .= '<div class="bkd-co-row bkd-co-total"><span>Total price</span><strong data-c="total">—</strong></div>';
+			$h .= '</div></div>';
+			if ( $plan['deposit'] > 0 ) {
+				$note = 'Illustrative only: a ' . blockke_dev_num( $plan['deposit'] ) . '% deposit, then equal instalments over ' . ( $term > 0 ? $term . ' months' : 'the period you choose' ) . '.';
+			} else {
+				$note = 'Illustrative only: equal instalments over ' . ( $term > 0 ? $term . ' months' : 'the period you choose' ) . ' after the deposit. Set the deposit to the developer\'s figure; this listing has not stated one.';
+			}
+			$h .= '<div class="bkd-calc-note">' . esc_html( $note . " The developer's official schedule may differ." ) . '</div>';
+			$h .= $cta;
+			$h .= '</div>';
+			return $h;
+		}
 		$dep    = $plan['deposit'] > 0 ? $plan['deposit'] : (float) $cfg['default_deposit'];
 		$months = (int) $plan['months'];
 		$ip     = isset( $plan['inst_pct'] ) ? (float) $plan['inst_pct'] : 0;
@@ -2710,6 +2810,9 @@ JS;
 			$p[] = 'location=' . rawurlencode( $q['area'] );
 		}
 		$p[] = rawurlencode( 'property_action_category[]' ) . '=' . ( isset( $q['action'] ) && 'rent' === $q['action'] ? 'for-rent' : 'for-sale' );
+		if ( ! empty( $q['type'] ) && 'land' === $q['type'] ) { // land pages only (blockke_dev_is_land()); no other caller passes a type
+			$p[] = rawurlencode( 'property_category[]' ) . '=land';
+		}
 		if ( ! empty( $q['beds'] ) && 'studio' === $q['beds'] && '' !== (string) $cfg['studio_cat'] ) {
 			$p[] = rawurlencode( 'property_category[]' ) . '=' . rawurlencode( (string) $cfg['studio_cat'] );
 		} elseif ( ! empty( $q['beds'] ) && ctype_digit( (string) $q['beds'] ) ) {
@@ -2791,6 +2894,9 @@ JS;
 		$c   = $d['ctx'];
 		if ( $c['sim_off'] ) {
 			return null;
+		}
+		if ( ! empty( $c['land'] ) ) {
+			return blockke_dev_similar_land_block( $d ); // land pages: other land, never homes
 		}
 		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) ); // 'homes': blocks cached before "See all" was read as homes (blockke_dev_seg_url) are rebuilt
 		$tk  = 'bkd_sim_' . (int) $d['id'];
@@ -3089,6 +3195,1301 @@ JS;
 		return $pdf ? wp_get_attachment_url( $pdf[0]->ID ) : '';
 	}
 
+	/* =====================================================================
+	   Land mode: a plot estate's own development page (blockke_dev_is_land()). Everything here is called only
+	   for land listings, so home pages never reach it.
+	   ===================================================================== */
+
+	/** "1/8" -> 0.125, "1/8th" -> 0.125, "½" -> 0.5, "2.5" -> 2.5. */
+	function blockke_dev_land_num( $s ) {
+		$s = trim( (string) $s );
+		$s = preg_replace( '/(?<=\d|[½¼¾⅛])(?:st|nd|rd|th)$/u', '', $s ); // an ordinal fraction: "1/8th", "⅛th"
+		$u = array( '½' => 0.5, '¼' => 0.25, '¾' => 0.75, '⅛' => 0.125 );
+		if ( isset( $u[ $s ] ) ) {
+			return $u[ $s ];
+		}
+		if ( preg_match( '/^(\d+)\s*\/\s*(\d+)$/', $s, $m ) ) {
+			return (int) $m[2] > 0 ? (int) $m[1] / (int) $m[2] : 0;
+		}
+		return (float) $s;
+	}
+
+	/** Acres as buyers read them: "855 acres", "1 acre", "1/8 acre" (a common fraction, within $tol), else "0.3 acres". */
+	function blockke_dev_land_acres_label( $acres, $tol = 0.05, $fracs = null ) {
+		$acres = (float) $acres;
+		if ( $acres <= 0 ) {
+			return '';
+		}
+		$fracs = is_array( $fracs ) ? $fracs : array( '1/8' => 0.125, '1/4' => 0.25, '1/2' => 0.5, '3/4' => 0.75 );
+		foreach ( $fracs as $l => $v ) {
+			if ( abs( $acres - $v ) <= $tol * $v ) {
+				return $l . ' acre';
+			}
+		}
+		if ( $acres >= 1 ) {
+			$n = blockke_dev_num( $acres );
+			return $n . ( '1' === $n ? ' acre' : ' acres' );
+		}
+		return rtrim( rtrim( number_format( $acres, 2, '.', '' ), '0' ), '.' ) . ' acres';
+	}
+
+	/**
+	 * A plot or estate size: array( acres, label ). Acres and fractions ("855 acres", "1/8 acre", "⅛-acre", "an eighth of an
+	 * acre", "1/8 – 1/2 acre" reads its smallest), hectares, sq ft and m²; a dimension ("50 x 100 ft") keeps its words. With no
+	 * size in the text, $sqft: property_size (in sq ft unless the site measures in metres, blockke_dev_sqft_factor()).
+	 */
+	function blockke_dev_land_parse( $s, $sqft = 0 ) {
+		$t   = strtolower( blockke_dev_text( $s ) );
+		$t   = preg_replace( '/(?<=\d),(?=\d{3}\b)/', '', $t );
+		$num = '(\d+\s*\/\s*\d+(?:st|nd|rd|th)?|[½¼¾⅛](?:th)?|\d+(?:\.\d+)?)'; // "1/8th of an acre" is 1/8, never "an acre"
+		$a   = 0;
+		if ( '' !== $t ) {
+			if ( preg_match( '/' . $num . '(?:\s*(?:–|—|-|to)\s*' . $num . ')?\s*(?:-\s*|of\s+an?\s+)?acres?\b/u', $t, $m ) ) {
+				$a = blockke_dev_land_num( $m[1] );
+			} elseif ( preg_match( '/(\d+\s*\/\s*\d+(?:st|nd|rd|th)?|[½¼¾⅛](?:th)?)\s+an?\s+acres?\b/u', $t, $m ) ) { // "1/2 an acre"
+				$a = blockke_dev_land_num( $m[1] );
+			} elseif ( preg_match( '/\b(eighth|quarter|half|three[\s-]quarters?)(?:\s*-\s*|\s+of\s+an?\s+|\s+an?\s+|\s+)acres?\b/u', $t, $m ) ) {
+				$w = array( 'eighth' => 0.125, 'quarter' => 0.25, 'half' => 0.5 );
+				$a = isset( $w[ $m[1] ] ) ? $w[ $m[1] ] : 0.75;
+			} elseif ( preg_match( '/\b(?:an?|one)\s+acre\b/u', $t ) ) {
+				$a = 1;
+			} elseif ( preg_match( '/(\d+(?:\.\d+)?)\s*(?:ha\b|hectares?)/u', $t, $m ) ) {
+				$a = (float) $m[1] * 2.4711;
+			} elseif ( preg_match( '/(\d+(?:\.\d+)?)\s*(?:x|×|by)\s*(\d+(?:\.\d+)?)\s*(ft\b|feet|foot|m\b|metres?|meters?)?/u', $t, $m ) ) {
+				$met = isset( $m[3] ) && '' !== $m[3] && 'f' !== $m[3][0];
+				$lab = $m[1] . ' × ' . $m[2] . ( isset( $m[3] ) && '' !== $m[3] ? ( $met ? ' m' : ' ft' ) : '' );
+				return array( (float) $m[1] * (float) $m[2] / ( $met ? 4046.86 : 43560 ), $lab ); // as written: 50 x 100 ft is not quite 1/8 acre
+			} elseif ( preg_match( '/(\d+(?:\.\d+)?)\s*(?:sq\.?\s*f(?:ee|oo)?t|sqft|ft²|ft2\b|square f(?:ee|oo)t)/u', $t, $m ) ) {
+				$a = (float) $m[1] / 43560;
+			} elseif ( preg_match( '/(\d+(?:\.\d+)?)\s*(?:sq\.?\s*m\b|sqm\b|m²|m2\b|square met(?:er|re)s?)/u', $t, $m ) ) {
+				$a = (float) $m[1] / 4046.86;
+			}
+		}
+		if ( $a <= 0 && '' === $t && $sqft > 0 ) {
+			$a = (float) $sqft * blockke_dev_sqft_factor() / 4046.86;
+		}
+		return array( $a, blockke_dev_land_acres_label( $a ) );
+	}
+
+	/** A plot or estate size as text: "855 acres", "1/8 acre", "50 × 100 ft"; '' when there is none. */
+	function blockke_dev_land_size( $s, $sqft = 0 ) {
+		$p = blockke_dev_land_parse( $s, $sqft );
+		return $p[1];
+	}
+
+	/** A price cell on a plot table: plot sizes taken out first, so "1/8 acre: KES 2.96M" reads 2,960,000, not 0. */
+	function blockke_dev_land_money( $s ) {
+		$t = preg_replace( '/(?:\d+\s*\/\s*\d+(?:st|nd|rd|th)?|[½¼¾⅛](?:th)?)\s*-?\s*(?:of\s+an?\s+|an?\s+)?acres?|[\d,]+(?:\.\d+)?\s*(?:acres?|ha\b|hectares?)|\d+\s*(?:x|×|by)\s*\d+\s*(?:ft|feet)?|[\d,]+(?:\.\d+)?\s*(?:sq\.?\s*f(?:ee)?t|sqft|ft²|sq\.?\s*m\b|sqm|m²)/iu', ' ', blockke_dev_text( $s ) );
+		return blockke_dev_parse_money( $t );
+	}
+
+	/**
+	 * Sentence case: "Potential Clubhouse and Lifestyle Facilities" -> "Potential clubhouse and lifestyle facilities". Acronyms
+	 * (JKUAT) stay. $only: lower-case just these words (plot types keep names such as "Lulu Park"). $keep: lower-case words
+	 * that keep their capital (place names: "Proximity to Juja Town" -> "Proximity to Juja Town", not "juja town").
+	 */
+	function blockke_dev_land_sentence( $s, $only = null, $keep = array() ) {
+		$s    = trim( preg_replace( '/\s+/u', ' ', (string) $s ) );
+		$bits = preg_split( '/(\p{L}[\p{L}\'’-]*)/u', $s, -1, PREG_SPLIT_DELIM_CAPTURE );
+		$name = false; // the word before was a kept name: "Thika Road", "Juja Town" stay together ("Thika road access")
+		$sfx  = array( 'road', 'town', 'city', 'street', 'avenue', 'drive', 'highway', 'superhighway', 'bypass', 'way', 'park', 'estate', 'river', 'hill', 'hills', 'centre', 'center', 'mall', 'county', 'university', 'market', 'springs', 'gardens', 'valley', 'heights', 'ridge', 'lake', 'dam' );
+		for ( $i = 1; $i < count( $bits ); $i += 2 ) {
+			$w = $bits[ $i ];
+			if ( preg_match( '/^[\p{Lu}\d]{2,}$/u', $w ) ) {
+				$name = false;
+				continue;
+			}
+			$l = mb_strtolower( $w );
+			if ( $keep && preg_match( '/^\p{Lu}/u', $w ) && ( in_array( $l, $keep, true ) || ( $name && ' ' === $bits[ $i - 1 ] && in_array( $l, $sfx, true ) ) ) ) {
+				$name = true;
+				continue;
+			}
+			$name       = false;
+			$bits[ $i ] = null === $only || in_array( $l, $only, true ) ? $l : $w;
+		}
+		$s = implode( '', $bits );
+		return mb_strtoupper( mb_substr( $s, 0, 1 ) ) . mb_substr( $s, 1 );
+	}
+
+	/**
+	 * A heading in the reader's case: one already in sentence case ("Lulu Park serviced plots") as written, a Title Case one
+	 * ("Proximity to Juja Town and JKUAT") in sentence case with the listing's names kept ($keep, blockke_dev_land_names()).
+	 */
+	function blockke_dev_land_heading( $s, $keep = array() ) {
+		$s = trim( preg_replace( '/\s+/u', ' ', (string) $s ) );
+		foreach ( array_slice( preg_split( '/[^\p{L}\'’-]+/u', $s, -1, PREG_SPLIT_NO_EMPTY ), 1 ) as $w ) {
+			if ( mb_strlen( $w ) >= 4 && preg_match( '/^\p{Ll}/u', $w ) && ! in_array( $w, array( 'with', 'from', 'into', 'onto', 'over', 'near', 'along', 'within', 'through', 'about', 'around', 'upon', 'than', 'that', 'this', 'your' ), true ) ) {
+				return mb_strtoupper( mb_substr( $s, 0, 1 ) ) . mb_substr( $s, 1 ); // sentence case already
+			}
+		}
+		return blockke_dev_land_sentence( $s, null, $keep );
+	}
+
+	/**
+	 * Names the listing writes with a capital in mid-sentence at least as often as without ("Juja", "Park", "Road"), lower
+	 * case, from its paragraphs and list items (headings are often in Title Case, so they are not read), plus $extra words.
+	 */
+	function blockke_dev_land_names( $tokens, $extra = '' ) {
+		$cap = array();
+		$low = array();
+		$txt = array();
+		foreach ( $tokens as $t ) {
+			if ( 'p' === $t['tag'] ) {
+				$txt[] = blockke_dev_text( $t['inner'] );
+			} elseif ( 'ul' === $t['tag'] || 'ol' === $t['tag'] ) {
+				foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+					$txt[] = $it['text'];
+				}
+			}
+		}
+		foreach ( $txt as $x ) {
+			foreach ( preg_split( '/(?<=[.!?:;])\s+|\s+[–—]\s+|\(/u', $x ) as $sn ) {
+				$ws = preg_split( '/[^\p{L}\'’-]+/u', $sn, -1, PREG_SPLIT_NO_EMPTY );
+				foreach ( array_slice( $ws, 1 ) as $w ) {
+					$l = mb_strtolower( $w );
+					if ( preg_match( '/^\p{Lu}\p{Ll}/u', $w ) ) {
+						$cap[ $l ] = ( isset( $cap[ $l ] ) ? $cap[ $l ] : 0 ) + 1;
+					} elseif ( preg_match( '/^\p{Ll}/u', $w ) ) {
+						$low[ $l ] = ( isset( $low[ $l ] ) ? $low[ $l ] : 0 ) + 1;
+					}
+				}
+			}
+		}
+		$keep = array();
+		foreach ( $cap as $l => $n ) {
+			if ( $n >= ( isset( $low[ $l ] ) ? $low[ $l ] : 0 ) ) {
+				$keep[] = (string) $l;
+			}
+		}
+		foreach ( preg_split( '/[^\p{L}\'’-]+/u', (string) $extra, -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+			if ( preg_match( '/^\p{Lu}/u', $w ) ) {
+				$keep[] = mb_strtolower( $w );
+			}
+		}
+		return array_values( array_unique( $keep ) );
+	}
+
+	/**
+	 * A plot as the buyer picked it: the type with its servicing or use note, "Residential, unserviced" (so two plots that
+	 * differ only in servicing are told apart in the lead). A note that starts with a name ("Lulu Park") keeps its capital.
+	 */
+	function blockke_dev_land_kind( $u ) {
+		$note = trim( (string) $u['note'] );
+		if ( '' === $note ) {
+			return (string) $u['type'];
+		}
+		if ( 0 === strpos( $note, '+' ) ) {
+			return $u['type'] . ' ' . $note;
+		}
+		if ( preg_match( '/^\p{Lu}\p{Ll}[\p{L}\'’-]*(?:\s+(\S+))?/u', $note, $m ) && ! ( isset( $m[1] ) && preg_match( '/^\p{Lu}/u', $m[1] ) ) ) {
+			$note = mb_strtolower( mb_substr( $note, 0, 1 ) ) . mb_substr( $note, 1 );
+		}
+		return $u['type'] . ', ' . $note;
+	}
+
+	/**
+	 * The plot table's lead labels, by row: "Residential, unserviced · 1/8 acre"; when two rows would still read the same,
+	 * each gets its price too ("… · KES 3M"). At most 150 characters (the lead's unit field takes 160).
+	 */
+	function blockke_dev_land_unit_labels( $units ) {
+		$out = array();
+		foreach ( $units as $i => $u ) {
+			$out[ $i ] = blockke_dev_land_kind( $u ) . ( '' !== (string) $u['size'] ? ' · ' . $u['size'] : '' );
+		}
+		$n = array_count_values( $out );
+		foreach ( $out as $i => $l ) {
+			if ( $n[ $l ] > 1 && $units[ $i ]['price'] > 0 ) {
+				$out[ $i ] = $l . ' · ' . blockke_dev_short( $units[ $i ]['price'] );
+			}
+			$out[ $i ] = blockke_dev_trim_words( $out[ $i ], 150 );
+		}
+		return $out;
+	}
+
+	/**
+	 * "Which plot?" and "Interested in" choices for land: the plot kinds ("Residential, unserviced", "Residential, fully
+	 * serviced") when they are short enough for a chip, else the filter groups.
+	 */
+	function blockke_dev_land_choices( $units ) {
+		$kinds = array();
+		foreach ( $units as $u ) {
+			$k = blockke_dev_land_kind( $u );
+			if ( '' !== $k && ! in_array( $k, $kinds, true ) ) {
+				$kinds[] = $k;
+			}
+		}
+		$long = false;
+		foreach ( $kinds as $k ) {
+			$long = $long || mb_strlen( $k ) > 40;
+		}
+		return count( $kinds ) > 1 && count( $kinds ) <= 8 && ! $long ? $kinds : blockke_dev_unit_groups( $units );
+	}
+
+	/** A plot type as a filter group: "Residential Plots" -> "Residential", "High-Density" -> "High-density". */
+	function blockke_dev_land_group( $type ) {
+		$g = trim( preg_replace( '/\s+(?:plots?|land)$/iu', '', trim( (string) $type ) ) );
+		$g = '' !== $g ? $g : trim( (string) $type );
+		return blockke_dev_land_sentence( $g, blockke_dev_land_generic_words() );
+	}
+
+	/**
+	 * The plots: the description's plot table (a plot type, size and price), else a land master's plot listings. A table is
+	 * read when it has a size or price column; a price column headed deposit, instalment, monthly or similar is never the price.
+	 */
+	function blockke_dev_land_units( $tokens, $subs ) {
+		foreach ( $tokens as $t ) {
+			if ( 'table' !== $t['tag'] ) {
+				continue;
+			}
+			$tb = blockke_dev_table( $t['html'] );
+			if ( ! $tb || ! $tb['head'] || ! $tb['rows'] || preg_match( '/feature|facilit|amenit|item/', strtolower( $tb['head'][0] ) ) ) {
+				continue;
+			}
+			$ti  = -1;
+			$si  = -1;
+			$vi  = -1;
+			$pis = array();
+			foreach ( $tb['head'] as $i => $hd ) {
+				$hl = strtolower( $hd );
+				if ( preg_match( '/price|cost|kes|ksh|amount|^\s*(?:from|starting)\b/', $hl ) ) {
+					if ( ! preg_match( '/deposit|instal|monthly|per month|reserv|balance|booking/', $hl ) ) {
+						$pis[] = $i;
+					}
+				} elseif ( $vi < 0 && preg_match( '/servic/', $hl ) ) {
+					$vi = $i;
+				} elseif ( $si < 0 && preg_match( '/size|acre|acreage|dimension|area|sq\.?\s*(?:m|ft)|m²/', $hl ) ) {
+					$si = $i;
+				} elseif ( $ti < 0 && preg_match( '/plot|type|use|zon|categor|class|unit|option/', $hl ) ) {
+					$ti = $i;
+				}
+			}
+			$pi = $pis ? $pis[0] : -1;
+			foreach ( $pis as $i ) { // a cash and an instalment price: the cash one
+				if ( preg_match( '/cash/', strtolower( $tb['head'][ $i ] ) ) ) {
+					$pi = $i;
+					break;
+				}
+			}
+			if ( ( $si < 0 && $pi < 0 ) || ( $ti < 0 && $si < 0 ) ) {
+				continue;
+			}
+			$units = array();
+			foreach ( $tb['rows'] as $r ) {
+				if ( count( $units ) >= 12 ) {
+					break;
+				}
+				$c  = $r['cells'];
+				$tc = $ti >= 0 ? $ti : $si; // no type column: the size names the row
+				if ( ! isset( $c[ $tc ] ) || '' === $c[ $tc ] ) {
+					continue;
+				}
+				$sz = $si >= 0 && isset( $c[ $si ] ) ? blockke_dev_land_parse( $c[ $si ] ) : array( 0, '' );
+				if ( $ti >= 0 ) {
+					list( $type, $note ) = blockke_dev_type_note( $c[ $ti ] );
+					$size                = $sz[1];
+				} else {
+					$type = '' !== $sz[1] ? $sz[1] : $c[ $si ];
+					$note = '';
+					$size = '';
+				}
+				$sv = $vi >= 0 && isset( $c[ $vi ] ) ? trim( $c[ $vi ] ) : '';
+				if ( '' !== $sv ) {
+					$note = trim( $note . ( '' !== $note ? '; ' : '' ) . ucfirst( $sv ) );
+				}
+				$price = $pi >= 0 && isset( $c[ $pi ] ) ? blockke_dev_land_money( $c[ $pi ] ) : 0;
+				$url   = '';
+				foreach ( $r['links'] as $l ) {
+					if ( $l ) {
+						$url = $l;
+						break;
+					}
+				}
+				$units[] = array(
+					'type'  => $type,
+					'note'  => $note,
+					'key'   => '',
+					'group' => blockke_dev_land_group( $type ),
+					'size'  => $size,
+					'price' => $price,
+					'pnote' => $price > 0 ? blockke_dev_price_note( $c[ $pi ] ) : '',
+					'url'   => $url,
+					'acres' => $sz[0],
+					'from'  => $sz[1],
+				);
+			}
+			if ( $units ) {
+				return $units;
+			}
+		}
+		$units = array(); // no plot table: the plot listings of a land master
+		foreach ( $subs as $s ) {
+			$sz      = blockke_dev_land_parse( '', (float) get_post_meta( $s['id'], 'property_size', true ) );
+			$units[] = array(
+				'type'  => $s['label'],
+				'note'  => '',
+				'key'   => '',
+				'group' => $s['label'],
+				'size'  => $sz[1],
+				'price' => $s['price'],
+				'pnote' => '',
+				'url'   => $s['url'],
+				'acres' => $sz[0],
+				'from'  => $sz[1],
+			);
+		}
+		return $units;
+	}
+
+	/** The hero's "Plots from": the smallest plot, else a "Starting plot size" / "Plot sizes" row, else property_size. */
+	function blockke_dev_land_from( $id, $kv, $units ) {
+		$best = null;
+		foreach ( $units as $u ) {
+			if ( ! empty( $u['acres'] ) && '' !== (string) $u['from'] && ( null === $best || $u['acres'] < $best['acres'] ) ) {
+				$best = $u;
+			}
+		}
+		if ( $best ) {
+			return $best['from'];
+		}
+		foreach ( $kv as $p ) {
+			if ( preg_match( '/starting plot|minimum plot|smallest plot|plots? from|plot sizes?|land size/i', $p[0] ) && ! preg_match( '/option|type|use/i', $p[0] ) ) {
+				$v = blockke_dev_land_size( $p[1] );
+				if ( '' !== $v ) {
+					return $v;
+				}
+			}
+		}
+		$sq = (float) get_post_meta( $id, 'property_size', true );
+		return $sq > 0 ? blockke_dev_land_size( '', $sq ) : '';
+	}
+
+	/** Whether the headline price is a starting price: several plots, or a "Starting plot size | From 1/8 acre" row. */
+	function blockke_dev_land_from_label( $kv, $units ) {
+		if ( count( $units ) > 1 ) {
+			return true;
+		}
+		foreach ( $kv as $p ) {
+			if ( preg_match( '/plot size|starting plot|price/i', $p[0] ) && preg_match( '/\bfrom\b|starting|and (?:larger|above)|\+/i', $p[1] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** "Not provided", "To be confirmed", "On request": a row or paragraph that states nothing. */
+	function blockke_dev_land_unstated() {
+		return '/not (?:been )?(?:provided|stated|available|published)|to be confirmed|on request|at (?:the )?point of enquiry/i';
+	}
+
+	/** A plan length in words: 36 -> "3 years", 12 -> "1 year", 18 -> "18 months". */
+	function blockke_dev_land_term( $months ) {
+		$months = (int) $months;
+		if ( $months <= 0 ) {
+			return '';
+		}
+		if ( 0 === $months % 12 ) {
+			$y = (int) ( $months / 12 );
+			return $y . ( 1 === $y ? ' year' : ' years' );
+		}
+		return $months . ' months';
+	}
+
+	/** Key facts for land: Estate, Land use, Servicing, Tenure, Payment plan, Title, From Nairobi, Plots (at most 6, short values). */
+	function blockke_dev_land_facts( $id, $kv, $units, $plan ) {
+		$raw = trim( (string) get_post_meta( $id, 'bke_dev_facts', true ) );
+		if ( '' !== $raw ) {
+			$facts = array();
+			foreach ( preg_split( '/\r?\n/', $raw ) as $line ) {
+				$p = array_map( 'trim', explode( '|', $line, 2 ) );
+				if ( 2 === count( $p ) && '' !== $p[0] && '' !== $p[1] ) {
+					$facts[] = $p;
+				}
+			}
+			return array_slice( $facts, 0, 6 );
+		}
+		$facts = array();
+		$add   = function ( $label, $v ) use ( &$facts ) {
+			$v = trim( (string) $v );
+			if ( mb_strlen( $v ) > 24 ) { // "Leasehold (99 years from 2019)" -> "Leasehold"
+				$v = trim( preg_replace( '/\s*(?:[(,;]|\s[–—]).*$/u', '', $v ) );
+			}
+			if ( '' !== $v && mb_strlen( $v ) <= 24 ) {
+				$facts[] = array( $label, $v );
+			}
+		};
+		$no    = blockke_dev_land_unstated();
+		// 1. Estate
+		$est = blockke_dev_kv_get( $kv, '/estate size|total (?:area|land|size)|acreage|land area|project size|^size$|^estate$/i' );
+		if ( '' !== $est ) {
+			$add( 'Estate', blockke_dev_land_size( $est ) );
+		}
+		// 2. Land use: from the row, else the plot types
+		$uses = array( 'residential' => 'Residential', 'high[- ]density' => 'High-density', 'commercial' => 'Commercial', 'industrial' => 'Industrial', 'education' => 'Educational', 'recreation' => 'Recreational', 'agricultur' => 'Agricultural' );
+		$lu   = blockke_dev_kv_get( $kv, '/^land use|zoning|^uses?$/i' );
+		$src  = '' !== $lu && ! preg_match( $no, $lu ) ? $lu : '';
+		if ( '' === $src ) {
+			foreach ( $units as $u ) {
+				$src .= ' ' . $u['group'];
+			}
+		}
+		$found = array();
+		foreach ( $uses as $re => $name ) {
+			if ( preg_match( '/' . $re . '/i', $src ) ) {
+				$found[] = $name;
+			}
+		}
+		if ( count( $found ) >= 3 ) {
+			$add( 'Land use', 'Mixed use' );
+		} elseif ( $found ) {
+			$add( 'Land use', $found[0] . ( isset( $found[1] ) ? ' and ' . strtolower( $found[1] ) : '' ) );
+		} elseif ( '' !== $lu && '' !== $src ) {
+			$add( 'Land use', ucfirst( $lu ) );
+		}
+		// 3. Servicing: the rows that mention it, else the plot table
+		$sv = '';
+		foreach ( $kv as $p ) {
+			if ( preg_match( '/servic/i', $p[0] . ' ' . $p[1] ) ) {
+				$sv .= ' ' . $p[1];
+			}
+		}
+		if ( ! preg_match( '/servic/i', $sv ) ) {
+			foreach ( $units as $u ) {
+				$sv .= ' ' . $u['type'] . ' ' . $u['note'];
+			}
+		}
+		$un  = (bool) preg_match( '/\bun-?servic|\bnon-?servic|\bnot servic/i', $sv );
+		$ser = (bool) preg_match( '/(?<!un)(?<!un-)(?<!non)(?<!non-)(?<!not )servic/i', $sv ); // semi-serviced counts as serviced
+		if ( $un || $ser ) {
+			$add( 'Servicing', $un && $ser ? 'Serviced and unserviced' : ( $ser ? 'Serviced' : 'Unserviced' ) );
+		}
+		// 4. Tenure
+		$ten = blockke_dev_kv_get( $kv, '/^(?:tenure|land tenure|title type)$/i' );
+		if ( ! preg_match( '/leasehold|freehold/i', $ten ) ) {
+			$ten = '';
+			foreach ( $kv as $p ) {
+				if ( preg_match( '/title|tenure/i', $p[0] ) && preg_match( '/leasehold|freehold/i', $p[1] ) ) {
+					$ten = $p[1];
+					break;
+				}
+			}
+		}
+		if ( preg_match( '/leasehold|freehold/i', $ten, $m ) ) {
+			$add( 'Tenure', ucfirst( strtolower( $m[0] ) ) . ( preg_match( '/(\d{2,3})[- ]years?/i', $ten, $y ) ? ', ' . $y[1] . ' years' : '' ) );
+		}
+		// 5. Payment plan: a short "Payment term | Up to 3 years" row as written, else the plan's length
+		$pp = '';
+		foreach ( $kv as $p ) {
+			if ( preg_match( '/payment (?:term|period|plan)/i', $p[0] ) ) {
+				$pp = mb_strlen( $p[1] ) <= 24 && ! preg_match( $no, $p[1] ) ? $p[1] : '';
+				break;
+			}
+		}
+		$add( 'Payment plan', '' !== $pp ? $pp : blockke_dev_land_term( isset( $plan['term'] ) ? $plan['term'] : 0 ) );
+		// 6. Title: only a row called that (never "Ownership")
+		$ti = blockke_dev_kv_get( $kv, '/^(?:title|title deeds?|title status)$/i' );
+		if ( '' !== $ti && ! preg_match( $no, $ti ) ) {
+			$add( 'Title', ucfirst( $ti ) );
+		}
+		// 7. From Nairobi: the kilometres only
+		if ( preg_match( '/(\d+(?:\.\d+)?)\s*(?:km|kilomet)/i', blockke_dev_kv_get( $kv, '/distance from nairobi|from nairobi|nairobi cbd/i' ), $m ) ) {
+			$add( 'From Nairobi', $m[1] . ' km' );
+		}
+		// 8. Plots: how many (a "Plots | From 1/8 acre" row holds a size, not a count)
+		$pc = blockke_dev_kv_get( $kv, '/total plots|number of plots|no\.? of plots|^plots$|^units$/i' );
+		if ( ! preg_match( '/\d\s*\/\s*\d|[½¼¾⅛]|acre|\bha\b|hectare|\bsq|ft\b|feet|m²|×|\d\s*x\s*\d|%|\bkm\b|kes|ksh/iu', $pc ) && preg_match( '/\d[\d,]*/', $pc, $m ) ) {
+			$add( 'Plots', $m[0] );
+		}
+		return array_slice( $facts, 0, 6 );
+	}
+
+	/**
+	 * The payment plan for land: plan_info()'s deposit and reservation, with steps, text, instalments and the plan's length
+	 * read only from what the listing states (a "Payment details to confirm" checklist gives no steps), and no completion.
+	 */
+	function blockke_dev_land_plan( $post ) {
+		$plan   = blockke_dev_plan_info( $post );
+		$id     = $post->ID;
+		$parsed = blockke_dev_parsed( $post );
+		$no     = blockke_dev_land_unstated();
+		$i      = blockke_dev_find( $parsed['sections'], '/payment/i' );
+		$ptoks  = $i >= 0 ? $parsed['sections'][ $i ]['tokens'] : array();
+		if ( $i < 0 ) {
+			$sub   = blockke_dev_sub_section( $parsed, '/payment (plan|terms|schedule)/i' );
+			$ptoks = $sub ? $sub['tokens'] : array();
+		}
+		$steps = array();
+		$said  = ''; // the kept steps, as text
+		$text  = '';
+		$costs = ''; // the listing's own line on the buyer's costs on top of the price (stamp duty, legal fees)
+		$first = true; // only the section's first paragraph is its plan text
+		$skip  = false;
+		foreach ( $ptoks as $t ) {
+			if ( 'h' === $t['tag'] ) {
+				$skip = (bool) preg_match( '/confirm|check|request|ask|documents?|fees|costs/i', blockke_dev_text( $t['inner'] ) );
+				continue;
+			}
+			if ( 'p' === $t['tag'] && '' === $costs ) {
+				$tx = blockke_dev_text( $t['inner'] );
+				if ( ( ! $first || $skip ) && mb_strlen( $tx ) <= 400 && ! preg_match( $no, $tx ) && preg_match( '/stamp duty|legal fees?|buyer[\'’]?s costs|transfer (?:costs?|fees?)|valuation fees?|survey (?:and beacon )?fees?|on top of the (?:plot )?price/i', $tx ) ) {
+					$costs = $tx;
+				}
+			}
+			if ( $skip ) {
+				continue;
+			}
+			if ( 'p' === $t['tag'] ) {
+				$tx = blockke_dev_text( $t['inner'] );
+				if ( $first && mb_strlen( $tx ) > 20 ) {
+					$first = false;
+					$text  = preg_match( $no, $tx ) ? '' : $tx;
+				}
+			} elseif ( 'ul' === $t['tag'] ) {
+				foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+					$p = blockke_dev_split_kv( $it );
+					if ( '' === $p[0] && ! preg_match( '/\d|%/', $it['text'] ) ) {
+						continue;
+					}
+					$steps[] = '' !== $p[0] ? array( $p[0], ucfirst( $p[1] ) ) : array( $it['text'], '' );
+					$said   .= ' ' . $it['text'] . '.';
+				}
+			} elseif ( 'table' === $t['tag'] ) {
+				$tb = blockke_dev_table( $t['html'] );
+				foreach ( $tb ? $tb['rows'] : array() as $r ) {
+					if ( count( $r['cells'] ) >= 2 && ! preg_match( $no, $r['cells'][1] ) ) {
+						$steps[] = array( $r['cells'][0], $r['cells'][1] );
+						$said   .= ' ' . $r['cells'][0] . ': ' . $r['cells'][1] . '.';
+					}
+				}
+			}
+		}
+		if ( ! empty( $plan['own_text'] ) ) {
+			$text = $plan['text'];
+		}
+		$rows = '';
+		foreach ( blockke_dev_glance( $post ) as $p ) {
+			if ( preg_match( '/deposit|reserv|balance|instal|payment/i', $p[0] ) && ! preg_match( $no, $p[1] ) ) {
+				$rows .= ' ' . $p[0] . ': ' . $p[1] . '.';
+			}
+		}
+		$all  = $text . ' ' . $said . ' ' . $rows;
+		$term = (int) get_post_meta( $id, 'bke_dev_plan_months', true );
+		if ( $term <= 0 ) { // from a sentence about paying: "the balance over up to three years", "12 quarterly instalments", "Payment term: 36 months"
+			$words = array( 'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5 );
+			$cands = array_merge( preg_split( '/(?<=[.!?])\s+/u', $text ), preg_split( '/(?<=\.)\s+/u', trim( $said ) ), preg_split( '/(?<=\.)\s+/u', trim( $rows ) ) );
+			$re    = '/(?<n>\d{1,3})\s+(?:equal\s+)?(?<f>monthly|quarterly)\s+instal'
+				. '|\b(?:over|up to|within|for|in)\s+(?:a\s+(?:period|term)\s+of\s+)?(?:up to\s+)?(?<m>\d{1,3})\s*months?\b'
+				. '|\b(?:term|period|plan|instal\w*)\s*(?::|of|is)\s*(?:up to\s+)?(?<m2>\d{1,3})\s*months?\b'
+				. '|\b(?<m3>\d{1,3})[\s-]*months?\s+(?:payment\s+|instal\w*\s+)?plan'
+				. '|\b(?<y>\d{1,2}|one|two|three|four|five)[\s-]*years?\b/i';
+			foreach ( $cands as $sn ) {
+				if ( '' === trim( $sn ) || ! preg_match( '/pay|plan|instal|balance/i', $sn ) || preg_match( $no, $sn ) ) {
+					continue;
+				}
+				if ( preg_match( '/\b(?:title|transfer|issu\w*|process\w*|handover|valuation)\b/i', $sn ) && ! preg_match( '/balance|instal/i', $sn ) ) {
+					continue; // "the title is issued within 6 months of full payment" is not the plan's length
+				}
+				if ( ! preg_match_all( $re, $sn, $mm, PREG_SET_ORDER ) ) {
+					continue;
+				}
+				foreach ( $mm as $m ) { // the first length that can be a plan: a "99-year lease" before "the balance in 12 months" is skipped
+					$t = 0;
+					if ( ! empty( $m['y'] ) ) {
+						$y = strtolower( $m['y'] );
+						$t = 12 * ( isset( $words[ $y ] ) ? $words[ $y ] : (int) $y );
+					} elseif ( ! empty( $m['m'] ) ) {
+						$t = (int) $m['m'];
+					} elseif ( ! empty( $m['m2'] ) ) {
+						$t = (int) $m['m2'];
+					} elseif ( ! empty( $m['m3'] ) ) {
+						$t = (int) $m['m3'];
+					} elseif ( ! empty( $m['n'] ) ) {
+						$t = (int) $m['n'] * ( 'quarterly' === strtolower( $m['f'] ) ? 3 : 1 );
+					}
+					if ( $t >= 3 && $t <= 120 ) {
+						$term = $t;
+						break 2;
+					}
+				}
+			}
+		}
+		$term                  = $term >= 3 && $term <= 120 ? $term : 0;
+		$plan['steps']         = array_slice( $steps, 0, 6 );
+		$plan['text']          = $text;
+		$plan['costs']         = $costs;
+		$plan['instalments']   = (bool) preg_match( '/instal+ment/i', $all );
+		$plan['quarterly']     = (bool) preg_match( '/quarter|bi-?annual|semi-?annual/i', preg_replace( '/\b(?:three[\s-])?quarters?[\s-]+(?:of\s+an?\s+)?acres?\b/i', ' ', $all ) ); // a "quarter-acre plot" is not a quarterly plan
+		$plan['flexible']      = (bool) preg_match( '/flexib/i', $all );
+		$plan['term']          = $term;
+		$plan['completion']    = '';
+		$plan['until']         = '';
+		$plan['months']        = 0;
+		$plan['on_completion'] = 0; // a plot has no completion: nothing falls due "on completion"
+		$plan['inst_pct']      = 0;
+		$plan['inst_every']    = 0;
+		$plan['land']          = true;
+		$plan['found']         = $plan['deposit'] > 0 || $term > 0 || ! empty( $plan['own_text'] ) || '' !== $text || (bool) $steps;
+		return $plan;
+	}
+
+	/**
+	 * The Amenities section's closing words on a land page: the paragraphs after its last list, when no heading follows
+	 * them ("The developer also lists … Ask which are built and working today."). They become the line under
+	 * "Also listed", so what the developer lists without a list item is not lost. '' when there are none.
+	 */
+	function blockke_dev_land_amenity_note( $sections ) {
+		$ai = blockke_dev_find( $sections, '/amenit|facilit|lifestyle/i', '/finish|spec/i' );
+		if ( $ai < 0 ) {
+			return '';
+		}
+		$after = null;
+		foreach ( $sections[ $ai ]['tokens'] as $t ) {
+			if ( 'ul' === $t['tag'] || 'ol' === $t['tag'] ) {
+				$after = array();
+			} elseif ( 'h' === $t['tag'] ) {
+				$after = null === $after ? null : array();
+			} elseif ( 'p' === $t['tag'] && is_array( $after ) ) {
+				$x = trim( blockke_dev_text( $t['inner'] ) );
+				if ( '' !== $x ) {
+					$after[] = $x;
+				}
+			}
+		}
+		$note = $after ? implode( ' ', $after ) : '';
+		return mb_strlen( $note ) > 320 ? blockke_dev_trim_words( $note, 320 ) : $note;
+	}
+
+	/**
+	 * Amenity groups for land: the Amenities section's lists, each under its heading (paragraphs no longer reset the heading),
+	 * and a heading with paragraphs but no list as one item, its first sentence ('head' => true). One group is enough.
+	 */
+	function blockke_dev_land_amenities( $id, $sections ) {
+		$ai     = blockke_dev_find( $sections, '/amenit|facilit|lifestyle/i', '/finish|spec/i' );
+		$groups = array();
+		if ( $ai >= 0 ) {
+			$title = '';
+			$list  = false;
+			$first = '';
+			$close = function () use ( &$groups, &$title, &$list, &$first ) {
+				if ( '' !== $title && ! $list && '' !== $first ) {
+					$groups[] = array( 'title' => $title, 'icon' => blockke_dev_amenity_icon( $title ), 'items' => array( $first ), 'head' => true );
+				}
+			};
+			foreach ( $sections[ $ai ]['tokens'] as $t ) {
+				if ( 'h' === $t['tag'] || ( 'p' === $t['tag'] && preg_match( '#^\s*<(strong|b)\b[^>]*>(.*?)</\1>\s*:?\s*$#is', $t['inner'], $s ) ) ) {
+					$close();
+					$title = 'h' === $t['tag'] ? blockke_dev_text( $t['inner'] ) : rtrim( blockke_dev_text( $s[2] ), ': ' );
+					$list  = false;
+					$first = '';
+				} elseif ( 'p' === $t['tag'] ) {
+					if ( '' !== $title && '' === $first ) {
+						$first = blockke_dev_sentences( blockke_dev_text( $t['inner'] ), 1 );
+					}
+				} elseif ( 'ul' === $t['tag'] ) {
+					$items = array();
+					foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+						$items[] = $it['text'];
+					}
+					if ( $items ) {
+						$groups[] = array( 'title' => $title, 'icon' => blockke_dev_amenity_icon( $title ), 'items' => $items );
+						$list     = true;
+					}
+				}
+			}
+			$close();
+		}
+		return $groups ? $groups : blockke_dev_feature_groups( $id );
+	}
+
+	/**
+	 * Land tiles: pattern on the lower-case item, kind, title, icon, rank (first match wins). Anything else goes in the
+	 * checklist. An item that names both power and water fills one "Power and water" tile; a spring is a natural feature,
+	 * not the water supply, unless the item says it supplies or fills something. The natural-water title is built from
+	 * what the item names (blockke_dev_land_water_title()), so "A dam." is never headed "Dam and river".
+	 */
+	function blockke_dev_land_amenity_lib() {
+		return array(
+			array( '/murram|tarmac|cabro|paved|internal roads?|access roads?|road network/u', 'roads', 'Roads', 'route', 95 ),
+			array( '/(?:electric\w*|\bpower)\b.*\bwater\b|\bwater\b.*\b(?:electric\w*|power)\b/u', 'power', 'Power and water', 'bolt', 94 ),
+			array( '/electric|transformer|power (?:supply|connection)|mains power|solar/u', 'power', 'Power', 'bolt', 94 ),
+			array( '/water (?:supply|tanks?|storage|connection|reticulation|point)|borehole|piped water|storage tanks?|\bspring\b.*\b(?:suppl\w*|piped|connect\w*|tanks?)\b|\b(?:suppl\w*|piped|tanks?)\b.*\bspring\b/u', 'water', 'Water', 'drop', 93 ),
+			array( '/dispensar|clinic|health (?:centre|center|facility)|hospital/u', 'health', 'Health care', 'medical', 86 ),
+			array( '/\bdams?\b|\briver(?:side|front|s)?\b|\blakes?\b|\bstreams?\b|water features?|\bspring\b|\bnatural springs\b/u', 'dam', '', 'waves', 84 ),
+			array( '/indigenous|green spaces?|open spaces?|\btrees\b|\bparks?\b|greenery/u', 'green', 'Green space', 'leaf', 82 ),
+			array( '/walk|jog|cycl|\btrails?\b/u', 'trail', 'Trails', 'route', 80 ),
+			array( '/school|educational|college|universit/u', 'school', 'Schools', 'cap', 76 ),
+			array( '/gated|\bgate(?:house)?s?\b|perimeter (?:wall|fenc)|guards?|cctv/u', 'security', 'Security', 'shield', 74 ),
+		);
+	}
+
+	/** The natural-water tile's title from what the text names: "Dam", "Dam and river", "Natural spring"; else "Natural water". */
+	function blockke_dev_land_water_title( $s ) {
+		$names = array();
+		if ( preg_match_all( '/\b(dams?|river(?:side|front|s)?|lakes?|streams?|spring|natural springs|water features?)\b/u', mb_strtolower( (string) $s ), $mm ) ) {
+			foreach ( $mm[1] as $w ) {
+				$k = preg_match( '/^dam/', $w ) ? 'dam' : ( preg_match( '/^river/', $w ) ? 'river' : ( preg_match( '/^lake/', $w ) ? 'lake' : ( preg_match( '/^stream/', $w ) ? 'stream' : ( preg_match( '/spring/', $w ) ? 'spring' : 'water features' ) ) ) );
+				if ( ! in_array( $k, $names, true ) ) {
+					$names[] = $k;
+				}
+			}
+		}
+		if ( ! $names ) {
+			return 'Natural water';
+		}
+		if ( array( 'spring' ) === $names ) {
+			return 'Natural spring';
+		}
+		return ucfirst( implode( ' and ', array_slice( $names, 0, 2 ) ) );
+	}
+
+	/** The plot words that say what a plot is, not which part of an estate it is in (the filter groups' sentence case). */
+	function blockke_dev_land_generic_words() {
+		return array( 'residential', 'commercial', 'industrial', 'educational', 'recreational', 'agricultural', 'institutional', 'mixed', 'use', 'mixed-use', 'serviced', 'unserviced', 'semi-serviced', 'fully', 'partly', 'high-density', 'low-density', 'medium-density', 'density', 'light', 'heavy', 'plot', 'plots', 'land', 'zone', 'zoned', 'acre', 'acres', 'and', 'or', 'of', 'for', 'with', 'the', 'value-added', 'beacon', 'beaconed' );
+	}
+
+	/** Named parts of the estate among the plot groups ("Lulu Park"), lower case: a heading that names one is about that part. */
+	function blockke_dev_land_parts( $units ) {
+		$gen   = blockke_dev_land_generic_words();
+		$parts = array();
+		foreach ( $units as $u ) {
+			$g = trim( (string) $u['group'] );
+			foreach ( preg_split( '/[^\p{L}\'’-]+/u', $g, -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+				if ( preg_match( '/^\p{Lu}/u', $w ) && ! in_array( mb_strtolower( $w ), $gen, true ) ) {
+					$parts[] = mb_strtolower( $g );
+					break;
+				}
+			}
+		}
+		return array_values( array_unique( $parts ) );
+	}
+
+	/**
+	 * Land amenity tiles (one per kind, best first, 1-4 or 6) and the checklist. A power line is a constraint, not an
+	 * amenity, and is left out; anything potential, proposed or planned is never a tile; a tile keeps the developer's words.
+	 * A list under a heading about one part of the estate ("Lulu Park serviced plots", "Phase 2", or a named plot group in
+	 * $parts) is never a tile: its items go to the checklist with the heading ("Lulu Park serviced plots: perimeter
+	 * fencing and gatehouses"), so nothing reads as estate-wide. $keep: names that keep their capital in a heading.
+	 */
+	function blockke_dev_land_amenity_layout( $groups, $keep = array(), $parts = array() ) {
+		$lib    = blockke_dev_land_amenity_lib();
+		$no     = '/transmission line|\d\s*-?\s*kv\b|\bkv\b|ketraco|wayleave|pylon/u';
+		$soon   = '/potential|proposed|(?<!master[- ])planned|future|to be (?:built|delivered|completed)/u';
+		$norm   = function ( $s ) {
+			$s = preg_replace( '/\b(?:indicated|a|an|the|on-site)\b/u', ' ', mb_strtolower( (string) $s ) );
+			return trim( preg_replace( '/\s+/u', ' ', preg_replace( '/[^\p{L}\p{N}\s]+/u', ' ', $s ) ) );
+		};
+		$match  = function ( $s ) use ( $lib ) {
+			foreach ( $lib as $l ) {
+				if ( preg_match( $l[0], $s ) ) {
+					return $l;
+				}
+			}
+			return null;
+		};
+		$scoped = function ( $hl ) use ( $parts ) {
+			if ( '' === $hl ) {
+				return false;
+			}
+			if ( preg_match( '/\bphase\s*(?:\d+|[ivx]+\b|one|two|three|four|five|[a-e]\b)/u', $hl ) ) {
+				return true;
+			}
+			if ( preg_match( '/\bplots?\b/u', $hl ) && ! preg_match( '/\b(?:all|every|each)\s+(?:the\s+)?plots?\b|^(?:the\s+)?plots?\b|\bplots?\s+(?:amenit|facilit|feature|infrastructure|service)/u', $hl ) ) {
+				return true;
+			}
+			foreach ( $parts as $p ) {
+				if ( '' !== $p && false !== mb_strpos( $hl, $p ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		$lc1    = function ( $s ) use ( $keep ) { // "Perimeter fencing" -> "perimeter fencing"; "Juja Road frontage" and acronyms stay
+			if ( preg_match( '/^(\p{Lu}\p{Ll}[\p{L}\'’-]*)(?:\s+(\S+))?/u', $s, $m ) && ! ( isset( $m[2] ) && preg_match( '/^\p{Lu}/u', $m[2] ) ) && ! in_array( mb_strtolower( $m[1] ), $keep, true ) ) {
+				return mb_strtolower( mb_substr( $s, 0, 1 ) ) . mb_substr( $s, 1 );
+			}
+			return $s;
+		};
+		$items = array();
+		$seen  = array();
+		$lkind = array(); // kinds already given by a list item
+		foreach ( $groups as $g ) {
+			$head  = ! empty( $g['head'] );
+			$gt    = isset( $g['title'] ) ? trim( (string) $g['title'] ) : '';
+			$hl    = mb_strtolower( $gt );
+			$scope = $scoped( $hl );
+			foreach ( (array) $g['items'] as $it ) {
+				$it = trim( preg_replace( '/\s+/u', ' ', (string) $it ) );
+				$lc = mb_strtolower( $it );
+				if ( '' === $it || preg_match( $no, $lc ) || ( $head && preg_match( $no, $hl ) ) ) {
+					continue;
+				}
+				$keys = array_filter( array( $norm( $it ), $head ? $norm( $gt ) : '' ) );
+				$dup  = false;
+				foreach ( $keys as $k ) {
+					$dup = $dup || isset( $seen[ $k ] );
+				}
+				if ( $dup ) {
+					continue;
+				}
+				foreach ( $keys as $k ) {
+					$seen[ $k ] = true;
+				}
+				$later = $scope || preg_match( $soon, $lc ) || preg_match( $soon, $hl );
+				$hit   = null;
+				if ( ! $later ) {
+					$hit = $head ? $match( $hl ) : null;
+					$hit = $hit ? $hit : $match( $lc );
+				}
+				if ( $head && $hit && isset( $lkind[ $hit[1] ] ) ) {
+					continue; // the same kind as a list item: a repeat
+				}
+				if ( ! $head && $hit ) {
+					$lkind[ $hit[1] ] = true;
+				}
+				$items[] = array(
+					'text'  => $scope && ! $head ? blockke_dev_land_heading( $gt, $keep ) . ': ' . $lc1( $it ) : $it,
+					'head'  => $head ? $gt : '',
+					'lib'   => $hit,
+					'i'     => count( $items ),
+					'title' => $hit && '' === $hit[2] ? blockke_dev_land_water_title( $match( $lc ) === $hit ? $lc : $hl . ' ' . $lc ) : ( $hit ? $hit[2] : '' ),
+				);
+			}
+		}
+		// a heading-only item drops out when a later list item gives its kind
+		$items = array_values(
+			array_filter(
+				$items,
+				function ( $x ) use ( $lkind ) {
+					return ! ( '' !== $x['head'] && $x['lib'] && isset( $lkind[ $x['lib'][1] ] ) );
+				}
+			)
+		);
+		foreach ( $items as $n => $x ) {
+			$items[ $n ]['i'] = $n;
+		}
+		$cand = array();
+		foreach ( $items as $x ) {
+			if ( $x['lib'] ) {
+				$cand[] = $x;
+			}
+		}
+		usort(
+			$cand,
+			function ( $a, $b ) {
+				return $a['lib'][4] === $b['lib'][4] ? $a['i'] - $b['i'] : $b['lib'][4] - $a['lib'][4];
+			}
+		);
+		$picked = array();
+		$kinds  = array();
+		foreach ( $cand as $c ) {
+			if ( count( $picked ) >= 6 ) {
+				break;
+			}
+			// a tile whose words say no more than its title ("Dam" over "A dam.") reads empty: it goes to the checklist
+			$tw = array_filter( explode( ' ', $norm( $c['text'] ) ) );
+			$hw = array_filter( explode( ' ', $norm( $c['title'] ) ) );
+			if ( $hw && ! array_diff( $tw, $hw ) ) {
+				continue;
+			}
+			if ( ! isset( $kinds[ $c['lib'][1] ] ) ) {
+				$kinds[ $c['lib'][1] ] = true;
+				$picked[]              = $c;
+			}
+		}
+		if ( 5 === count( $picked ) ) {
+			array_pop( $picked ); // full rows: 1, 2, 3, 4 or 6 tiles
+		}
+		$tiles = array();
+		$used  = array();
+		foreach ( $picked as $c ) {
+			$used[ $c['i'] ] = true;
+			$t               = preg_replace( '/\s+(?:is|are)\s+indicated\b|\bindicated\s+|\s+indicated\b/iu', ' ', $c['text'] );
+			$t               = trim( preg_replace( array( '/\s+/u', '/\s+([,.;:])/u' ), array( ' ', '$1' ), $t ), ' .;:,' );
+			$t               = mb_strtoupper( mb_substr( $t, 0, 1 ) ) . mb_substr( $t, 1 );
+			$tiles[]         = array(
+				'icon'  => $c['lib'][3],
+				'title' => $c['title'],
+				'text'  => mb_strlen( $t ) > 139 ? blockke_dev_trim_words( $t, 139 ) : $t . '.',
+			);
+		}
+		$rest = array();
+		foreach ( $items as $x ) {
+			if ( ! isset( $used[ $x['i'] ] ) ) {
+				$rest[] = '' !== $x['head'] ? blockke_dev_land_heading( $x['head'], $keep ) : $x['text'];
+			}
+		}
+		return array(
+			'tiles'      => $tiles,
+			'rest'       => $rest,
+			'essentials' => false,
+		);
+	}
+
+	/**
+	 * Land pages' own CSS, printed only on them (#bkd-land-css). The hero facts keep their values on one line when a label
+	 * ("Plots from") wraps on a narrow phone: each fact's value sits at the bottom of its column.
+	 */
+	function blockke_dev_land_css() {
+		return '#bkd .bkd-hfacts>div{display:flex;flex-direction:column;justify-content:space-between}#bkd .bkd-nw{white-space:nowrap}';
+	}
+
+	/** The two land-only tile icons, in their own sprite (the shared sprite prints on every development page). */
+	function blockke_dev_land_sprite() {
+		return '<svg class="bkd-sprite" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">'
+			. '<symbol id="bkd-i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>'
+			. '<symbol id="bkd-i-drop" viewBox="0 0 24 24"><path d="M12 2.7s-6 6.6-6 11.3a6 6 0 0 0 12 0c0-4.7-6-11.3-6-11.3Z"/></symbol></svg>';
+	}
+
+	/** The investor view for land: up to two sentences without growth or returns talk, then the listing's own caveat (never trimmed). */
+	function blockke_dev_land_investors( $sections ) {
+		$i = blockke_dev_find( $sections, '/investor|investment|rental yield|returns/i', '/faq|question/i' );
+		if ( $i < 0 ) {
+			return '';
+		}
+		$grow   = '/\b(?:grow\w*|grew|(?<!high-)(?<!high )ris(?:e|es|ing)|rose|increas\w*|doubl\w*|demand|apprecia\w*|returns?|benefit from|positions? (?:it|itself)|yield\w*|capital gains?|profit\w*|roi)\b|\d+(?:\.\d+)?\s*%\s*(?:a|per|each|every)\s+(?:year|annum)/i';
+		$cav    = '/(?:are|is) not guaranteed|no guarantee/i';
+		$keep   = array();
+		$caveat = '';
+		foreach ( $sections[ $i ]['tokens'] as $t ) {
+			if ( 'p' !== $t['tag'] ) {
+				continue;
+			}
+			foreach ( preg_split( '/(?<=[.!?])\s+(?=[A-Z0-9“"])/u', blockke_dev_text( $t['inner'] ) ) as $sn ) {
+				if ( '' === $sn ) {
+					continue;
+				}
+				if ( preg_match( $cav, $sn ) ) {
+					if ( '' === $caveat && ! preg_match( '/^however\b/i', $sn ) ) {
+						$caveat = $sn;
+					}
+					continue;
+				}
+				if ( count( $keep ) < 2 && ! preg_match( $grow, $sn ) && ! preg_match( '/\b(see|read) our\b|\bask (block|us)\b|\bclick\b/i', $sn ) ) {
+					$keep[] = $sn;
+				}
+			}
+		}
+		if ( ! $keep ) {
+			return '';
+		}
+		if ( '' === $caveat ) {
+			$caveat = 'Capital growth, resale timelines and returns are not guaranteed.';
+		}
+		return blockke_dev_trim_words( implode( ' ', $keep ), max( 120, 640 - mb_strlen( $caveat ) - 1 ) ) . ' ' . $caveat;
+	}
+
+	/** Neighbouring areas for land pages: config land_neighbours, else 'neighbours'; as term IDs, as blockke_dev_neighbours(). */
+	function blockke_dev_land_neighbours( $slug ) {
+		$cfg = blockke_dev_config();
+		if ( ! isset( $cfg['land_neighbours'][ $slug ] ) || ! is_array( $cfg['land_neighbours'][ $slug ] ) ) {
+			return blockke_dev_neighbours( $slug );
+		}
+		$map  = array_values( $cfg['land_neighbours'][ $slug ] );
+		$want = array_merge( isset( $map[0] ) ? (array) $map[0] : array(), isset( $map[1] ) ? (array) $map[1] : array() );
+		$ids  = array();
+		if ( $want ) {
+			$terms = get_terms( array( 'taxonomy' => 'property_area', 'slug' => array_values( array_unique( $want ) ), 'hide_empty' => false ) );
+			foreach ( is_array( $terms ) ? $terms : array() as $t ) {
+				$ids[ $t->slug ] = (int) $t->term_id;
+			}
+		}
+		$out = array( array(), array() );
+		foreach ( array( 0, 1 ) as $r ) {
+			foreach ( isset( $map[ $r ] ) ? (array) $map[ $r ] : array() as $s ) {
+				if ( isset( $ids[ $s ] ) && ! in_array( $ids[ $s ], $out[0], true ) && ! in_array( $ids[ $s ], $out[1], true ) ) {
+					$out[ $r ][] = $ids[ $s ];
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Land for similar matching: published, the same Buy/Lease, not sold or let, in a land category and no home category, and
+	 * land by blockke_dev_is_land(). Real plots sell from about KES 400K, so a sale is dropped only under KES 100K or when
+	 * its label says per month or year.
+	 */
+	function blockke_dev_land_pool( $action ) {
+		$cfg  = blockke_dev_config();
+		$home = array_values( array_filter( array( 'apartments', 'villas-residential', 'houses-residential', (string) $cfg['studio_cat'] ) ) );
+		$q    = new WP_Query(
+			array(
+				'post_type'           => 'estate_property',
+				'post_status'         => 'publish',
+				'fields'              => 'ids',
+				'no_found_rows'       => true,
+				'ignore_sticky_posts' => true,
+				'posts_per_page'      => max( 20, (int) $cfg['pool_cap'] ),
+				'orderby'             => 'date',
+				'order'               => 'DESC',
+				'tax_query'           => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					'relation' => 'AND',
+					array( 'taxonomy' => 'property_action_category', 'field' => 'slug', 'terms' => array( 'rent' === $action ? 'for-rent' : 'for-sale' ) ),
+					array( 'taxonomy' => 'property_status', 'field' => 'slug', 'terms' => array( 'sold', 'let' ), 'operator' => 'NOT IN' ),
+					array( 'taxonomy' => 'property_category', 'field' => 'slug', 'terms' => array( 'land', 'residential-land', 'agricultural', 'industrial-land' ) ),
+					array( 'taxonomy' => 'property_category', 'field' => 'slug', 'terms' => $home, 'operator' => 'NOT IN' ),
+				),
+			)
+		);
+		$ids = array_map( 'intval', $q->posts );
+		$cap = max( 20, (int) $cfg['pool_cap'] );
+		if ( count( $ids ) >= $cap && ! get_transient( 'bkd_sim_cap_warn' ) ) {
+			set_transient( 'bkd_sim_cap_warn', 1, DAY_IN_SECONDS );
+			error_log( 'BLOCK development page: similar land pool reached ' . $cap . ' listings (' . $action . '); raise pool_cap if matches go missing.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+		}
+		if ( $ids && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $ids, true, false );
+		}
+		blockke_dev_pm_prime( $ids );
+		// bke_dev_kind for the whole pool in one query (it is not among the primed keys, and get_post_meta() would load every
+		// field of each listing). The query above already holds them to a land category and no home category, so with no
+		// override a listing is land unless it has bedrooms (blockke_dev_is_land()).
+		$kinds = array();
+		if ( $ids ) {
+			global $wpdb;
+			$kinds = $wpdb->get_results( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = 'bke_dev_kind' AND post_id IN (" . implode( ',', $ids ) . ')', OBJECT_K ); // phpcs:ignore WordPress.DB.PreparedSQL
+		}
+		$rows = array();
+		foreach ( $ids as $pid ) {
+			$k = isset( $kinds[ $pid ] ) ? strtolower( trim( (string) $kinds[ $pid ]->meta_value ) ) : '';
+			if ( 'homes' === $k || ( 'land' !== $k && (int) blockke_dev_pm( $pid, 'property_bedrooms' ) > 0 ) ) {
+				continue;
+			}
+			$label = strtolower( (string) blockke_dev_pm( $pid, 'property_label' ) );
+			$price = (float) blockke_dev_pm( $pid, 'property_price' );
+			if ( 'rent' === $action ? 'rent' !== blockke_dev_action( $pid ) : ( preg_match( '/month|year|annum/', $label ) || ( $price > 0 && $price < 100000 ) ) ) {
+				continue;
+			}
+			$r         = blockke_dev_sim_row( $pid );
+			$city      = blockke_dev_first_term( $pid, 'property_city' );
+			$r['city'] = $city ? (int) $city->term_id : 0;
+			$rows[]    = $r;
+		}
+		return $rows;
+	}
+
+	/** A land card's name, price and line: "Oak Grove City", "From KES 3.3M", "1/8 acre · Juja" (no badge: plots are not completed). */
+	function blockke_dev_land_card( $r, $rent, $area ) {
+		$name = blockke_dev_listing_name( $r['id'] );
+		if ( empty( $r['project'] ) ) {
+			$x    = trim( preg_replace( '/\s+(?:(?:serviced|residential)\s+)?(?:plots?|land)(?:\s+for\s+(?:sale|lease))?\b.*$/iu', '', $name ), ' ,.-' );
+			$name = '' !== $x ? $x : $name;
+		}
+		$label = strtolower( (string) blockke_dev_pm( $r['id'], 'property_label' ) );
+		if ( $r['price'] <= 0 ) {
+			$price = 'Price on request';
+		} elseif ( $rent ) {
+			$price = blockke_dev_sim_price( $r, true );
+		} elseif ( false !== strpos( $label, 'acre' ) ) {
+			$price = blockke_dev_short( $r['price'] ) . ' per acre';
+		} else {
+			$price = ( 'upto' === $r['flag'] ? 'Up to ' : 'From ' ) . blockke_dev_short( $r['price'] );
+		}
+		$m  = array();
+		$sz = $r['sqft'] > 0 ? blockke_dev_land_acres_label( $r['sqft'] * blockke_dev_sqft_factor() / 4046.86, 0.02, array( '1/8' => 0.125, '1/4' => 0.25, '1/2' => 0.5, '1' => 1.0 ) ) : '';
+		if ( '' === $sz && preg_match( '/(?:(\d+\/\d+|½|¼|⅛)(?:st|nd|rd|th)?|(\d+(?:\.\d+)?))[\s-]*(?:of\s+an?\s+)?acres?/iu', blockke_dev_text( get_the_title( $r['id'] ) ), $mm ) ) { // "1/8th of an acre" too
+			$sz = strtr( '' !== $mm[1] ? $mm[1] : $mm[2], array( '½' => '1/2', '¼' => '1/4', '⅛' => '1/8' ) ) . ' acre plots';
+		}
+		if ( '' !== $sz ) {
+			$m[] = $sz;
+		}
+		if ( '' !== $area ) {
+			$m[] = $area;
+		} else {
+			$a = blockke_dev_main_area( $r['id'] );
+			$t = $a ? null : blockke_dev_first_term( $r['id'], 'property_city' );
+			$m[] = $a ? blockke_dev_text( $a->name ) : ( $t ? blockke_dev_text( $t->name ) : '' );
+		}
+		return array( $name, $price, implode( ' · ', array_filter( $m ) ) );
+	}
+
+	/**
+	 * "Also consider" on a land page: other land, never homes. Tiers: the editor's picks (0); the main area near the price
+	 * (1), then at any price (2); land_neighbours ring 1 (3) and ring 2 (5); while under similar_min, the same county, then
+	 * anywhere (9). Cached in the same transient as the home block, under its own version.
+	 */
+	function blockke_dev_similar_land_block( $d ) {
+		$cfg = blockke_dev_config();
+		$c   = $d['ctx'];
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) )
+			. '|land1|' . md5( wp_json_encode( $cfg['land_neighbours'] ) );
+		$tk  = 'bkd_sim_' . (int) $d['id'];
+		$hit = get_transient( $tk );
+		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
+			return $hit['block'];
+		}
+		$rent   = 'rent' === $c['action'];
+		$n      = max( 1, (int) $cfg['similar_count'] );
+		$band   = (float) $cfg['dev_price_band'];
+		$p0     = (float) $d['price_from'] > 0 ? (float) $d['price_from'] : (float) $c['price'];
+		$main   = (int) $c['area_id'];
+		$rings  = $main ? blockke_dev_land_neighbours( $c['area_slug'] ) : array( array(), array() );
+		$seen   = array( $c['dkey'] => 1 );
+		$picked = blockke_dev_sim_picks( $d, $n, $seen );
+		$skip   = function ( $r ) use ( $c, $d ) {
+			return (int) $d['id'] === $r['id'] || ( $c['master_id'] && ( $r['master'] === $c['master_id'] || $r['id'] === $c['master_id'] ) ) || ( $c['project_id'] && $r['project'] === $c['project_id'] ) || 'unit' === $r['flag'];
+		};
+		$add    = function ( $rows, $tier, $banded ) use ( &$picked, &$seen, $n, $band, $p0, $skip ) {
+			usort(
+				$rows,
+				function ( $a, $b ) use ( $p0 ) {
+					$x = $p0 <= 0 ? 0 : abs( log( max( 1, $a['price'] ) / $p0 ) ) - abs( log( max( 1, $b['price'] ) / $p0 ) );
+					return 0 == $x ? $b['date'] - $a['date'] : ( $x < 0 ? -1 : 1 ); // phpcs:ignore Universal.Operators.StrictComparisons
+				}
+			);
+			foreach ( $rows as $r ) {
+				if ( count( $picked ) >= $n ) {
+					break;
+				}
+				if ( isset( $seen[ $r['dkey'] ] ) || $skip( $r ) ) {
+					continue;
+				}
+				if ( $banded && ( $p0 <= 0 || $r['price'] <= 0 || 'upto' === $r['flag'] || false !== strpos( strtolower( (string) blockke_dev_pm( $r['id'], 'property_label' ) ), 'acre' ) || abs( $r['price'] - $p0 ) > $band * $p0 ) ) {
+					continue;
+				}
+				$seen[ $r['dkey'] ] = 1;
+				$r['tier']          = $tier;
+				$picked[]           = $r;
+			}
+		};
+		$pool = blockke_dev_land_pool( $c['action'] );
+		$in_m = array();
+		$in_1 = array();
+		$in_2 = array();
+		foreach ( $pool as $r ) {
+			if ( $main && in_array( $main, $r['areas'], true ) ) {
+				$in_m[] = $r;
+			} elseif ( array_intersect( $r['areas'], $rings[0] ) ) {
+				$in_1[] = $r;
+			} elseif ( array_intersect( $r['areas'], $rings[1] ) ) {
+				$in_2[] = $r;
+			}
+		}
+		if ( $main ) {
+			$add( $in_m, 1, true );
+			$add( $in_m, 2, false );
+			$add( $in_1, 3, false );
+			$add( $in_2, 5, false );
+		}
+		if ( count( $picked ) < (int) $cfg['similar_min'] ) {
+			$ct   = blockke_dev_first_term( $d['id'], 'property_city' );
+			$city = $ct ? (int) $ct->term_id : 0;
+			if ( $city ) {
+				$add(
+					array_filter(
+						$pool,
+						function ( $r ) use ( $city ) {
+							return $r['city'] === $city;
+						}
+					),
+					9,
+					false
+				);
+			}
+			$add( $pool, 9, false );
+		}
+		$area   = $c['area_name'];
+		$noun   = $rent ? 'land for lease' : 'land for sale';
+		$em     = function ( $s ) {
+			return '<em>' . esc_html( $s ) . '</em>';
+		};
+		$tiers  = array_values( array_unique( array_map( 'intval', wp_list_pluck( $picked, 'tier' ) ) ) );
+		$around = (bool) array_intersect( $tiers, array( 3, 5 ) );
+		foreach ( $picked as $r ) {
+			if ( 0 === (int) $r['tier'] && ( ! $c['area_id'] || ! in_array( $c['area_id'], $r['areas'], true ) ) ) {
+				$around = true; // an editor's pick outside the area
+			}
+		}
+		$far = in_array( 9, $tiers, true ) || '' === (string) $area;
+		if ( ! $picked ) {
+			$title = 'No other ' . esc_html( $noun ) . ( $area ? ' in ' . esc_html( $area ) : '' ) . ' listed right now';
+		} elseif ( $far ) {
+			$title = 'More land ' . $em( $rent ? 'for lease' : 'for sale' );
+		} elseif ( $around ) {
+			$title = esc_html( ucfirst( $noun ) ) . ' in and around ' . $em( $area );
+		} else {
+			$title = 'More ' . esc_html( $noun ) . ' in ' . $em( $area );
+		}
+		$all_url  = blockke_dev_search_url( array( 'area' => $far ? '' : $area, 'action' => $c['action'], 'type' => 'land' ) );
+		$all_seg  = blockke_dev_seg_url( $all_url );
+		$all_text = 'See all ' . $noun . ( $far ? '' : ' in ' . $area );
+		$cards    = array();
+		foreach ( $picked as $r ) {
+			$same    = $c['area_id'] && in_array( $c['area_id'], $r['areas'], true );
+			$card    = blockke_dev_land_card( $r, $rent, $same ? $area : '' );
+			$cards[] = array(
+				'id'    => $r['id'],
+				'url'   => get_permalink( $r['id'] ),
+				'img'   => (int) get_post_thumbnail_id( $r['id'] ),
+				'name'  => $card[0],
+				'price' => $card[1],
+				'meta'  => $card[2],
+				'badge' => '',
+				'tier'  => (int) $r['tier'],
+				'same'  => $same ? 1 : 0,
+			);
+		}
+		$block = array(
+			'mode'     => 'land',
+			'title'    => $title,
+			'all_url'  => '' !== $all_seg ? $all_seg : $all_url,
+			'all_nf'   => '' === $all_seg && blockke_bkn_on( 'card_v16' ),
+			'all_text' => $all_text,
+			'cards'    => $cards,
+			'tier'     => $tiers ? (int) max( $tiers ) : 0,
+			'beds'     => '',
+			'area'     => $area,
+		);
+		set_transient( $tk, array( 'ver' => $ver, 'block' => $block ), max( 300, (int) $cfg['sim_ttl'] ) );
+		return $block;
+	}
+
+	/**
+	 * The development page script with land words (plots, the site plan, plot prices), applied at the development page's
+	 * script tag only. Every anchor must occur exactly once, or the script is returned unchanged (as blockke_bkn_dev_js()).
+	 */
+	function blockke_dev_land_js( $js ) {
+		$pairs = <<<'JS'
+alternatives:'with 3 similar homes and their prices'
+alternatives:'with 3 similar plots and their prices'
+compare:'to compare '+C.name+' with similar homes'
+compare:'to compare '+C.name+' with similar estates'
+comparables:'with recent rents and resale prices near '+C.name
+comparables:'with recent plot sale prices near '+C.name
+'Find me a home like this'
+'Find me a plot like this'
+comparables:'Get rental and resale comparables'
+comparables:'Get recent plot prices'
+alternatives:'Get 3 similar homes'
+alternatives:'Get 3 similar plots'
+subs={alternatives:'Similar homes'
+subs={alternatives:'Similar plots'
+'We\'ll compare '+C.name+' with similar homes on price, payment plan and completion.'
+'We\'ll compare '+C.name+' with similar estates on price, plot size, payment plan and title.'
+(source==='comparables'?'Recent rents and resale prices near '+C.name+', sent to your WhatsApp.':'Floor plans and the payment plan, sent to your WhatsApp.')
+(source==='comparables'?'Recent plot sale prices near '+C.name+', sent to your WhatsApp.':'The site plan and the payment plan, sent to your WhatsApp.')
+'with the price list and floor plans for '+C.name
+'with the price list, the site plan and the payment plan for '+C.name
+'See all '+(noun==='rentals'?'rentals':'homes for sale')+' in '+area
+'See all '+(noun==='rentals'?'rentals':noun==='land'?'land for sale':'homes for sale')+' in '+area
+(unit?'Floor plan and price':'Get the price list')
+(unit?'Price and availability':'Get the price list')
+JS;
+		$lines = explode( "\n", str_replace( "\r", '', $pairs ) );
+		$swap  = array();
+		for ( $i = 0; $i + 1 < count( $lines ); $i += 2 ) {
+			$swap[ $lines[ $i ] ] = $lines[ $i + 1 ];
+		}
+		if ( 12 !== count( $swap ) ) {
+			return $js;
+		}
+		foreach ( array_keys( $swap ) as $anchor ) {
+			if ( 1 !== substr_count( $js, $anchor ) ) {
+				return $js;
+			}
+		}
+		return strtr( $js, $swap );
+	}
+
 	function blockke_dev_data( $id ) {
 		static $cache = array();
 		if ( isset( $cache[ $id ] ) ) {
@@ -3102,6 +4503,7 @@ JS;
 		$parsed = blockke_dev_parsed( $post );
 		$secs   = $parsed['sections'];
 		$kv     = blockke_dev_glance( $post );
+		$land   = blockke_dev_is_land( $id ); // land mode: plot wording, plots, land facts and plan
 
 		// Names and place
 		$title   = blockke_dev_text( get_the_title( $id ) );
@@ -3110,6 +4512,9 @@ JS;
 		if ( '' === $name ) {
 			$parts = preg_split( '/\s+[—–]\s+|\s*\|\s*|:\s+/u', $title );
 			$name  = trim( $parts[0] );
+			if ( $land ) { // "Zuri Springs Juja Plots for Sale" -> "Zuri Springs Juja" (and, as the area follows the project, "Zuri Springs")
+				$name = preg_replace( '/\s+(?:(?:serviced|residential|commercial|industrial|value[- ]added)\s+)*(?:plots?|land)\s+for\s+(?:sale|lease|rent)\b.*$/iu', '', $name );
+			}
 			if ( mb_strlen( $name ) > 52 && $project ) {
 				$name = blockke_dev_text( $project->name );
 			}
@@ -3132,16 +4537,23 @@ JS;
 				$address = implode( ',', array_slice( explode( ',', $address ), 0, 2 ) );
 			}
 		}
-		$offplan = blockke_dev_is_offplan( $id );
+		$offplan = ! $land && blockke_dev_is_offplan( $id ); // land is never off-plan: no render labels, no "until completion"
 		$status  = $offplan ? 'Off-plan' : ( has_term( 'complete', 'property_status', $id ) || has_term( 'ready-now', 'property_completion', $id ) ? 'Ready to move in' : '' );
 		$action  = blockke_dev_first_term( $id, 'property_action_category' );
 		$chip    = implode( ' · ', array_filter( array( $status, $action ? ucfirst( strtolower( blockke_dev_text( $action->name ) ) ) : '' ) ) );
+		if ( $land ) { // plots are not moved into: no status word
+			$chip = 'rent' === blockke_dev_action( $id ) ? 'Land for lease' : 'Plots for sale';
+		}
 
 		// Units and price
-		$subs  = blockke_dev_subunits( $id );
-		$units = blockke_dev_units_from_table( $parsed['tokens'], $subs );
-		if ( ! $units ) {
-			$units = blockke_dev_units_from_subs( $subs );
+		$subs = blockke_dev_subunits( $id );
+		if ( $land ) {
+			$units = blockke_dev_land_units( $parsed['tokens'], $subs );
+		} else {
+			$units = blockke_dev_units_from_table( $parsed['tokens'], $subs );
+			if ( ! $units ) {
+				$units = blockke_dev_units_from_subs( $subs );
+			}
 		}
 		$prices = array();
 		foreach ( $units as $u ) {
@@ -3151,8 +4563,8 @@ JS;
 		}
 		$meta_price = (float) get_post_meta( $id, 'property_price', true );
 		$price_from = $prices ? min( $prices ) : $meta_price;
-		$completion = blockke_dev_completion( $post );
-		$plan       = blockke_dev_plan_info( $post );
+		$completion = $land ? '' : blockke_dev_completion( $post ); // a plot is not completed; a "Title delivery" row is not a date
+		$plan       = $land ? blockke_dev_land_plan( $post ) : blockke_dev_plan_info( $post );
 
 		// Images
 		$gal = get_post_meta( $id, 'wpestate_property_gallery', true );
@@ -3267,7 +4679,7 @@ JS;
 		}
 		$lat = (float) get_post_meta( $id, 'property_latitude', true );
 		$lng = (float) get_post_meta( $id, 'property_longitude', true );
-		if ( ! $loc['places'] ) {
+		if ( ! $loc['places'] && ! $land ) { // the landmarks are Nairobi's: no straight-line distances from a plot estate
 			foreach ( blockke_dev_nearby( $lat, $lng ) as $g ) {
 				$loc['places'][] = array( $g['places'][0][0], $g['places'][0][2] . ' · ' . blockke_dev_km_label( $g['places'][0][1] ) );
 			}
@@ -3275,7 +4687,7 @@ JS;
 				$loc['note'] = 'Straight-line distances from the map pin. Road distances and travel times will be longer.';
 			}
 		}
-		if ( ! $loc['note'] ) {
+		if ( ! $loc['note'] && ! $land ) { // land: its own note, below (it names the estate, so it waits for a unit's master name)
 			$loc['note'] = $loc['places'] ? 'Approximate travel times; they vary with traffic.' : 'Ask us for travel times to your office, school or embassy.';
 		}
 
@@ -3311,7 +4723,7 @@ JS;
 			'master_url'  => $master_id ? get_permalink( $master_id ) : '',
 			'project_id'  => $project ? (int) $project->term_id : 0,
 			'dkey'        => blockke_dev_dev_key( $id ),
-			'key'         => 'master' === $kind ? '' : blockke_dev_sim_key( $id ),
+			'key'         => 'master' === $kind || $land ? '' : blockke_dev_sim_key( $id ), // land: never a "studio" (a small plot size)
 			'beds'        => (int) get_post_meta( $id, 'property_bedrooms', true ),
 			'price'       => $meta_price,
 			'flag'        => blockke_dev_price_flag( $id ),
@@ -3323,11 +4735,30 @@ JS;
 			'area_name'   => $area,
 			'sim_off'     => '' !== (string) get_post_meta( $id, 'bke_dev_similar_off', true ),
 			'house'       => blockke_dev_is_house( $id ),
+			'land'        => $land, // read as ! empty( $c['land'] ): the area pages' stub ctx has no such key
 		);
 
 		// A unit without a project term is still named after its development (not "2 Bedroom Apartment...")
 		if ( ! $project && 'unit' === $kind && '' !== $ctx['master_name'] && '' === blockke_dev_text( get_post_meta( $id, 'bke_dev_name', true ) ) ) {
 			$short = $ctx['master_name'];
+		}
+
+		// Land location note: places named without a time or distance get no "travel times" note; with bke_dev_places set,
+		// the code's note, never the description's (it would credit Block's figures to the developer)
+		if ( $land && ( ! $loc['note'] || $own ) ) {
+			$vals  = false;
+			$timed = false;
+			$dist  = false;
+			foreach ( $loc['places'] as $p ) {
+				$v = trim( (string) $p[1] );
+				if ( '' !== $v ) {
+					$vals  = true;
+					$timed = $timed || preg_match( '/\bmin|\bhours?\b|\bhrs?\b/i', $v );
+					$dist  = $dist || preg_match( '/\d\s*(?:km|kilomet|miles?)\b/i', $v );
+				}
+			}
+			$loc['note'] = ! $loc['places'] ? 'Ask us for road distances and drive times from ' . $short . '.'
+				: ( ! $vals ? 'Ask us for drive times from ' . $short . ', or check them on a site visit.' : ( $dist && ! $timed ? 'Approximate distances; drive times vary with traffic.' : 'Approximate travel times; they vary with traffic.' ) );
 		}
 
 		// Breadcrumb: Home / For Sale / Westlands / Golden Mansion / 2 Bedroom Apartment
@@ -3364,7 +4795,7 @@ JS;
 		$gallery_note = 'none' === strtolower( $gallery_note ) ? '' : $gallery_note;
 
 		$agent     = blockke_dev_agent( (int) get_post_meta( $id, 'property_agent', true ) );
-		$amenities = blockke_dev_amenities( $id, $secs );
+		$amenities = $land ? blockke_dev_land_amenities( $id, $secs ) : blockke_dev_amenities( $id, $secs );
 		$amen_src  = $amenities ? blockke_dev_amenity_intro( $secs ) : '';
 		if ( '' !== $amen_src && $amen_src === $loc_src ) {
 			// One "Amenities & Location" paragraph feeds both sections: the travel sentences go to Location, the rest to Amenities
@@ -3395,7 +4826,7 @@ JS;
 			'offplan'    => $offplan,
 			'tagline'    => $tagline,
 			'price_from' => $price_from,
-			'from_label' => (bool) preg_match( '/^\s*from\b/i', (string) get_post_meta( $id, 'property_label_before', true ) ),
+			'from_label' => (bool) preg_match( '/^\s*from\b/i', (string) get_post_meta( $id, 'property_label_before', true ) ) || ( $land && blockke_dev_land_from_label( $kv, $units ) ),
 			'calc_price' => blockke_dev_parse_money( (string) get_post_meta( $id, 'bke_dev_calc_price', true ) ),
 			'completion' => $completion,
 			'units'      => $units,
@@ -3405,7 +4836,7 @@ JS;
 			'hero_label' => $hero_label,
 			'gallery_note' => $gallery_note,
 			'video'      => blockke_dev_video( $id ),
-			'facts'      => blockke_dev_facts( $id, $kv, $units, $completion ),
+			'facts'      => $land ? blockke_dev_land_facts( $id, $kv, $units, $plan ) : blockke_dev_facts( $id, $kv, $units, $completion ),
 			'overview'   => array(
 				'heading'    => blockke_dev_text( get_post_meta( $id, 'bke_dev_overview_heading', true ) ),
 				'paras'      => $intro_p,
@@ -3413,11 +4844,11 @@ JS;
 			),
 			'desc'       => trim( $desc ),
 			'amenities'  => $amenities,
-			'amen'       => blockke_dev_amenity_layout( $amenities ),
+			'amen'       => $land ? blockke_dev_land_amenity_layout( $amenities, blockke_dev_land_names( $parsed['tokens'], $short . ' ' . $area ), blockke_dev_land_parts( $units ) ) + array( 'note' => blockke_dev_land_amenity_note( $secs ) ) : blockke_dev_amenity_layout( $amenities ),
 			'amen_intro' => blockke_dev_fit_sentences( $amen_src, 260 ),
 			'plan'       => $plan,
 			'suits'      => blockke_dev_suits( $secs ),
-			'investors'  => blockke_dev_investors( $secs ),
+			'investors'  => $land ? blockke_dev_land_investors( $secs ) : blockke_dev_investors( $secs ),
 			'lat'        => $lat,
 			'lng'        => $lng,
 			'location'   => $loc,
@@ -3427,6 +4858,8 @@ JS;
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
 			'crumbs'     => $crumbs,
 			'crumb_here' => $here,
+			// land mode: false for homes; for land the smallest plot ("1/8 acre"), the deposit % and the plan's months
+			'land'       => $land ? array( 'from' => blockke_dev_land_from( $id, $kv, $units ), 'deposit' => (float) $plan['deposit'], 'term' => (int) $plan['term'] ) : false,
 		);
 		$cache[ $id ] = $data;
 		return $data;
@@ -3521,6 +4954,11 @@ JS;
 		return in_array( $s, blockke_dev_timelines(), true ) ? $s : '';
 	}
 
+	/** "Buying to": homes are lived in or let; land is built on or held. Each option at most 20 characters (the lead keeps 20). */
+	function blockke_dev_purposes( $land = false ) {
+		return $land ? array( 'Build', 'Invest', 'Both' ) : array( 'Live in', 'Invest', 'Both' );
+	}
+
 	function blockke_dev_unit_groups( $units ) {
 		$groups = array();
 		foreach ( $units as $u ) {
@@ -3536,11 +4974,24 @@ JS;
 	 * Not a <form>, so tools that count form submissions (GA4, Meta) don't count the lead twice.
 	 */
 	function blockke_dev_more( $d, $key ) {
+		$land   = ! empty( $d['land'] );
 		$groups = blockke_dev_unit_groups( $d['units'] );
+		$unitq  = count( $groups ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Which home?', $groups, '' ) . '</div>' : '';
+		if ( $land ) { // the plot type, else the plot size; both sent as "unit"
+			$sizes = array();
+			foreach ( $d['units'] as $u ) {
+				if ( '' !== (string) $u['size'] && ! in_array( $u['size'], $sizes, true ) ) {
+					$sizes[] = $u['size'];
+				}
+			}
+			$kinds = blockke_dev_land_choices( $d['units'] ); // "Residential, unserviced", "Residential, fully serviced"
+			$unitq = count( $kinds ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Which plot?', $kinds, '' ) . '</div>'
+				: ( count( $sizes ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Plot size', $sizes, '' ) . '</div>' : '' );
+		}
 		return '<div class="bkd-more" data-more role="group" aria-label="Optional questions" hidden><p class="bkd-more-t">Help us send the right details <small>(optional)</small></p>'
-			. ( count( $groups ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Which home?', $groups, '' ) . '</div>' : '' )
+			. $unitq
 			. blockke_dev_chips( 'timeline-' . $key, 'When would you like to buy?', blockke_dev_timelines(), '' )
-			. blockke_dev_chips( 'purpose-' . $key, 'Buying to', array( 'Live in', 'Invest', 'Both' ), '' )
+			. blockke_dev_chips( 'purpose-' . $key, 'Buying to', blockke_dev_purposes( $land ), '' )
 			. '<button class="bkd-btn bkd-btn-line bkd-btn-sm" type="button" data-more-send>Send these answers</button>'
 			. '<p class="bkd-more-done" role="status" hidden></p></div>';
 	}
@@ -3655,17 +5106,18 @@ JS;
 	}
 
 	function blockke_dev_full_form( $d ) {
-		$groups = blockke_dev_unit_groups( $d['units'] );
+		$land   = ! empty( $d['land'] );
+		$groups = $land ? blockke_dev_land_choices( $d['units'] ) : blockke_dev_unit_groups( $d['units'] ); // land: the plot kinds, servicing included
 		$h      = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
 		$h .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
 		if ( count( $groups ) > 1 ) {
 			$h .= blockke_dev_chips( 'unit', 'Interested in', array_merge( $groups, array( 'Not sure yet' ) ), 'Not sure yet' );
 		}
-		$h .= blockke_dev_chips( 'purpose', 'Buying to', array( 'Live in', 'Invest', 'Both' ), 'Live in' );
+		$h .= blockke_dev_chips( 'purpose', 'Buying to', blockke_dev_purposes( $land ), $land ? '' : 'Live in' ); // land: no default, buyers build, hold or run a business
 		$h .= blockke_dev_chips( 'timeline', 'When would you like to buy?', blockke_dev_timelines(), '' );
 		$h .= blockke_dev_chips( 'contact', 'Best way to reach you', array( 'WhatsApp', 'Phone call', 'Email' ), 'WhatsApp' );
-		$h .= '<label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="Anything we should know: budget, timing, questions."></textarea></label>';
+		$h .= '<label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="' . ( $land ? 'Anything we should know: plot size, intended use, budget, questions.' : 'Anything we should know: budget, timing, questions.' ) . '"></textarea></label>';
 		$h .= '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send my enquiry' . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok();
 		return $h;
 	}
@@ -3682,6 +5134,8 @@ JS;
 		// How the headline price reads: "From" for a development or an off-plan home; a single home's own price as
 		// it is labelled ("Up to KES 23.5M", per sq ft for offices), never a "From" it doesn't have.
 		$cx0   = $d['ctx'];
+		$land  = ! empty( $d['land'] ); // land mode (blockke_dev_is_land()): plot words; $L: the smallest plot, deposit, plan months
+		$L     = $land && is_array( $d['land'] ) ? $d['land'] : array( 'from' => '', 'deposit' => 0, 'term' => 0 );
 		$p_lab = 'From';
 		$p_txt = $d['price_from'] ? blockke_dev_short( $d['price_from'] ) : '';
 		if ( $d['price_from'] && ! $d['units'] && (float) $d['price_from'] === (float) $cx0['price'] ) {
@@ -3694,7 +5148,7 @@ JS;
 				$p_lab = 'Price';
 			}
 		}
-		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . '. Please share the price list and floor plans. ' . $d['url'] );
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . ( $land ? '. Please share the price list, the site plan and the payment plan. ' : '. Please share the price list and floor plans. ' ) . $d['url'] );
 		$o     = array();
 		$cx    = $d['ctx'];
 		// Landing pages stay a closed funnel: no search, no similar homes and none of their queries
@@ -3702,8 +5156,14 @@ JS;
 		$search = ! $lp && ! empty( $cfg['search'] );
 		$s_url  = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => blockke_dev_link_beds( $cx ) ) );
 		$s_nf   = blockke_bkn_on( 'card_v16' ) ? ' rel="nofollow"' : ''; // with the v1.6 area pages on, crawlers follow "See all" to them, not the search tools (as area pages do)
+		if ( $land ) { // land: a plain link to land in the area (its segment page, else the search, not followed); no search sheet
+			$s_url = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'type' => 'land' ) );
+			$s_seg = blockke_dev_seg_url( $s_url );
+			$s_nf  = '' === $s_seg && blockke_bkn_on( 'card_v16' ) ? ' rel="nofollow"' : '';
+			$s_url = '' !== $s_seg ? $s_seg : $s_url;
+		}
 
-		$o[] = '<div id="bkd" class="bkd' . ( $lp ? ' bkd-lpm' : '' ) . '" data-listing="' . (int) $d['id'] . '">' . blockke_dev_sprite();
+		$o[] = '<div id="bkd" class="bkd' . ( $lp ? ' bkd-lpm' : '' ) . '" data-listing="' . (int) $d['id'] . '">' . blockke_dev_sprite() . ( $land ? blockke_dev_land_sprite() : '' );
 		if ( $lp ) {
 			$o[] = blockke_dev_lp_header( $d, $wa );
 		}
@@ -3721,24 +5181,35 @@ JS;
 		$unav = $lp || empty( $cfg['unit_switcher'] ) ? array() : blockke_dev_unit_nav( $d );
 		$un   = '';
 		if ( $unav ) {
-			$un = '<nav class="bkd-un" aria-label="' . esc_attr( 'Homes at ' . $cx['master_name'] ) . '"><div class="bkd-un-in">';
+			$un = '<nav class="bkd-un" aria-label="' . esc_attr( ( $land ? 'Plots at ' : 'Homes at ' ) . $cx['master_name'] ) . '"><div class="bkd-un-in">';
 			foreach ( $unav as $u ) {
 				$pr  = $u['price'] > 0 ? '<small>' . $e( trim( str_replace( $cfg['currency'], '', blockke_dev_short( $u['price'] ) ) ) ) . '</small>' : '';
 				$un .= $u['current'] ? '<span aria-current="page">' . $e( $u['label'] ) . $pr . '</span>' : '<a href="' . esc_url( $u['url'] ) . '" data-un="' . (int) $u['id'] . '">' . $e( $u['label'] ) . $pr . '</a>';
 			}
-			$un .= '<a class="bkd-un-all" href="' . esc_url( $cx['master_url'] ) . '">All homes' . blockke_dev_icon( 'arrow' ) . '</a></div></nav>';
+			$un .= '<a class="bkd-un-all" href="' . esc_url( $cx['master_url'] ) . '">' . ( $land ? 'All plots' : 'All homes' ) . blockke_dev_icon( 'arrow' ) . '</a></div></nav>';
 		}
 		$hfacts   = array();
 		$hfacts[] = $p_txt ? array( $p_lab, $p_txt ) : array( 'Price', 'On request' );
-		if ( $d['completion'] ) {
-			$hfacts[] = array( 'Completion', $d['completion'] );
-		} elseif ( ! $d['offplan'] ) {
-			$hfacts[] = array( 'Status', 'Ready' );
-		}
-		if ( $d['offplan'] && $plan['deposit'] > 0 ) {
-			$hfacts[] = array( 'Deposit', blockke_dev_num( $plan['deposit'] ) . '%' );
-		} elseif ( $d['area'] ) {
-			$hfacts[] = array( 'Location', $d['area'] );
+		if ( $land ) { // never "Status" or "Completion"; short values (the facts cut long text with an ellipsis)
+			if ( '' !== $L['from'] ) {
+				$hfacts[] = array( 'Plots from', $L['from'] );
+			}
+			if ( $plan['deposit'] > 0 ) {
+				$hfacts[] = array( 'Deposit', blockke_dev_num( $plan['deposit'] ) . '%' );
+			} elseif ( $d['area'] ) {
+				$hfacts[] = array( 'Location', $d['area'] );
+			}
+		} else {
+			if ( $d['completion'] ) {
+				$hfacts[] = array( 'Completion', $d['completion'] );
+			} elseif ( ! $d['offplan'] ) {
+				$hfacts[] = array( 'Status', 'Ready' );
+			}
+			if ( $d['offplan'] && $plan['deposit'] > 0 ) {
+				$hfacts[] = array( 'Deposit', blockke_dev_num( $plan['deposit'] ) . '%' );
+			} elseif ( $d['area'] ) {
+				$hfacts[] = array( 'Location', $d['area'] );
+			}
 		}
 		$hf_html = '';
 		foreach ( $hfacts as $f ) {
@@ -3747,13 +5218,23 @@ JS;
 		// Landing pages on phones lay the offer and the key figures over the photo, like a cover. The area
 		// label stays above the name, so the offer names the street without repeating the area.
 		$street = $d['address'] === $d['area_line'] ? '' : preg_replace( '/,\s*' . preg_quote( $d['area'], '/' ) . '$/iu', '', $d['address'] );
-		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( blockke_dev_homes_label( $d['units'] ), $street ) ) ) ) : '';
+		$estate = '';
+		if ( $land ) { // the cover's facts already say "Plots from": the offer gives the estate's size instead ("855-acre estate")
+			foreach ( $d['facts'] as $f ) {
+				if ( 'Estate' === $f[0] && preg_match( '/^(\d[\d,.]*)\s+acres?$/u', $f[1], $em ) ) {
+					$estate = $em[1] . '-acre estate';
+					break;
+				}
+			}
+		}
+		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( $land ? $estate : blockke_dev_homes_label( $d['units'] ), $street ) ) ) ) : '';
 		// v1.6 (view_transitions): the photo comes first, 3:2 like the card it grows from (the card's own file backs it while
 		// the large one loads, set as the page reveals: blockke_bkn_vt_head()); its label moves to the gallery viewer, and
 		// the disclaimer already mentions renders
 		$vt     = ! $lp && blockke_bkn_vt_on();
 		$head   = '<div class="bkd-hero-head">' . ( $lp ? '' : '<div class="bkd-hero-top"><nav class="bkd-crumbs" aria-label="Breadcrumb">' . $crumbs . '</nav><div class="bkd-hero-tools">'
-			. ( $search ? '<a class="bkd-srch" data-bkd-search="hero" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" aria-haspopup="dialog">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> homes</span></span></a>' : '' )
+			. ( $search ? ( $land ? '<a class="bkd-srch" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search land">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> land</span></span></a>'
+				: '<a class="bkd-srch" data-bkd-search="hero" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" aria-haspopup="dialog">' . blockke_dev_icon( 'search' ) . '<span>Search<span class="bkd-srch-x"> homes</span></span></a>' ) : '' )
 			. '<button class="bkd-share" type="button" data-bkd-share aria-label="Share this property">' . blockke_dev_icon( 'share' ) . '<span>Share</span></button></div></div>' )
 			. '<p class="bkd-status">' . ( $d['chip'] ? '<b>' . $e( $d['chip'] ) . '</b>' : '' ) . '<span>' . $e( $d['area_line'] ) . '</span></p>'
 			. '<h1 class="bkd-h1">' . $e( $d['name'] ) . '</h1>' . $un
@@ -3796,7 +5277,7 @@ JS;
 		}
 		$o[]    = '<section class="bkd-hero' . ( $vt ? ' bkd-hero-vt' : '' ) . '" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">' . ( $vt ? $fig . $head : $head . $fig )
 			. '<div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
-		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">Get the price list and floor plans</div>'
+		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : 'Get the price list and floor plans' ) . '</div>'
 			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
 			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
 			. ( $d['brochure'] ? '<div class="bkd-quick-alt"><button class="bkd-link" type="button" data-bkd-enquire="brochure">Or download the brochure' . blockke_dev_icon( 'arrow' ) . '</button></div>' : '' )
@@ -3810,12 +5291,16 @@ JS;
 			$nav['overview'] = 'Overview';
 		}
 		if ( $d['units'] ) {
-			$nav['residences'] = 'Residences';
+			$nav['residences'] = $land ? 'Plots' : 'Residences';
 		}
 		if ( $d['amenities'] ) {
 			$nav['amenities'] = 'Amenities';
 		}
-		$nav['payment'] = $d['offplan'] ? 'Payment plan' : ( $plan['instalments'] ? 'Ways to pay' : 'Mortgage' );
+		if ( ! $land ) {
+			$nav['payment'] = $d['offplan'] ? 'Payment plan' : ( $plan['instalments'] ? 'Ways to pay' : 'Mortgage' );
+		} elseif ( 'rent' !== $cx['action'] ) { // land for lease has no payment section
+			$nav['payment'] = 'Payment plan';
+		}
 		if ( $d['lat'] || $d['location']['intro'] ) {
 			$nav['location'] = 'Location';
 		}
@@ -3829,7 +5314,8 @@ JS;
 		foreach ( $nav as $k => $label ) {
 			$o[] = '<a href="#bkd-' . $k . '">' . $e( $label ) . '</a>';
 		}
-		$o[] = '</div><div class="bkd-subnav-r">' . ( $search ? '<a class="bkd-subnav-srch" data-bkd-search="subnav" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" title="Search homes">' . blockke_dev_icon( 'search' ) . '</a>' : '' )
+		$o[] = '</div><div class="bkd-subnav-r">' . ( $search ? ( $land ? '<a class="bkd-subnav-srch" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search land" title="Search land">' . blockke_dev_icon( 'search' ) . '</a>'
+			: '<a class="bkd-subnav-srch" data-bkd-search="subnav" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" title="Search homes">' . blockke_dev_icon( 'search' ) . '</a>' ) : '' )
 			. '<a class="bkd-subnav-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
 			. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm" type="button" data-bkd-enquire="subnav">Get the price list</button></div></div></nav>';
 
@@ -3908,30 +5394,31 @@ JS;
 						$gbeds[ $u['group'] ] = 'studio';
 					}
 				}
-				$filters = '<div class="bkd-filters" role="group" aria-label="Filter residences"><button type="button" aria-pressed="true" data-g="*">All</button>';
+				$filters = '<div class="bkd-filters" role="group" aria-label="' . ( $land ? 'Filter plots' : 'Filter residences' ) . '"><button type="button" aria-pressed="true" data-g="*">All</button>';
 				foreach ( $groups as $g ) {
 					$filters .= '<button type="button" aria-pressed="false" data-g="' . esc_attr( $g ) . '"' . ( isset( $gbeds[ $g ] ) ? ' data-beds="' . esc_attr( $gbeds[ $g ] ) . '"' : '' ) . '>' . $e( $g ) . '</button>';
 				}
 				$filters .= '</div>';
 			}
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Residences</p><h2 class="bkd-h2">Availability <em>and pricing</em></h2></div>' . $filters . '</div>'
-				. '<table class="bkd-tbl bkd-rv"><thead><tr><th>Residence</th>' . ( $has_size ? '<th>Size</th>' : '' ) . ( $has_pr ? '<th>Price from</th>' : '' ) . '<th><span class="bkd-sr">Actions</span></th></tr></thead><tbody>';
-			foreach ( $d['units'] as $u ) {
-				$label = $u['type'] . ( $u['size'] ? ' · ' . $u['size'] : '' );
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">' . ( $land ? 'Plots' : 'Residences' ) . '</p><h2 class="bkd-h2">' . ( $land ? 'Plot sizes <em>and prices</em>' : 'Availability <em>and pricing</em>' ) . '</h2></div>' . $filters . '</div>'
+				. '<table class="bkd-tbl bkd-rv"><thead><tr><th>' . ( $land ? 'Plot' : 'Residence' ) . '</th>' . ( $has_size ? '<th>Size</th>' : '' ) . ( $has_pr ? '<th>Price from</th>' : '' ) . '<th><span class="bkd-sr">Actions</span></th></tr></thead><tbody>';
+			$ulab = $land ? blockke_dev_land_unit_labels( $d['units'] ) : array(); // land: "Residential, unserviced · 1/8 acre"
+			foreach ( $d['units'] as $ui => $u ) {
+				$label = $land ? $ulab[ $ui ] : $u['type'] . ( $u['size'] ? ' · ' . $u['size'] : '' );
 				$o[]   = '<tr data-g="' . esc_attr( $u['group'] ) . '"><td class="bkd-t">' . $e( $u['type'] ) . ( $u['note'] ? '<small>' . $e( $u['note'] ) . '</small>' : '' ) . '</td>'
 					. ( $has_size ? '<td class="bkd-s">' . $e( $u['size'] ? $u['size'] : '—' ) . '</td>' : '' )
 					. ( $has_pr ? '<td class="bkd-p">' . $e( $u['price'] ? blockke_dev_money( $u['price'] ) : 'On request' ) . ( $u['price'] && ! empty( $u['pnote'] ) ? '<small>' . $e( $u['pnote'] ) . '</small>' : '' ) . '</td>' : '' )
 					. '<td class="bkd-a">' . ( $u['url'] && ! $lp ? '<a class="bkd-link" href="' . esc_url( $u['url'] ) . '">Details</a>' : '' )
-					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">Floor plan &amp; price' . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
+					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">' . ( $land ? 'Price &amp; availability' : 'Floor plan &amp; price' ) . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
 			}
 			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">' . ( $has_pr ? 'Starting prices. ' : '' ) . 'Ask for the latest price list for current availability.</p>';
 			if ( ! $lp && $cx['area_name'] ) {
-				$noun = 'rent' === $cx['action'] ? 'rentals' : 'homes for sale';
-				$base = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'] ) );
+				$noun = $land ? ( 'rent' === $cx['action'] ? 'land for lease' : 'land for sale' ) : ( 'rent' === $cx['action'] ? 'rentals' : 'homes for sale' );
+				$base = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'] ) + ( $land ? array( 'type' => 'land' ) : array() ) );
 				// card_v16 on: the area's segment page, as under similar homes, else the search, not followed (noindex). The
 				// residence filter still writes the search with the bedrooms from data-base
 				$segu = blockke_dev_seg_url( $base );
-				$o[]  = '<p class="bkd-res-all"><a class="bkd-link" data-res-all href="' . esc_url( '' !== $segu ? $segu : $base ) . '"' . ( '' === $segu && blockke_bkn_on( 'card_v16' ) ? ' rel="nofollow"' : '' ) . ' data-base="' . esc_attr( $base ) . '" data-area="' . esc_attr( $cx['area_name'] ) . '" data-noun="' . esc_attr( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . '">'
+				$o[]  = '<p class="bkd-res-all"><a class="bkd-link" data-res-all href="' . esc_url( '' !== $segu ? $segu : $base ) . '"' . ( '' === $segu && blockke_bkn_on( 'card_v16' ) ? ' rel="nofollow"' : '' ) . ' data-base="' . esc_attr( $base ) . '" data-area="' . esc_attr( $cx['area_name'] ) . '" data-noun="' . esc_attr( $land ? 'land' : ( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) ) . '">'
 					. '<span>See all ' . $e( $noun ) . ' in ' . $e( $cx['area_name'] ) . '</span>' . blockke_dev_icon( 'arrow' ) . '</a></p>';
 			}
 			$o[] = '</div></section>';
@@ -3940,9 +5427,9 @@ JS;
 		// Amenities: feature tiles, then the checklist
 		if ( $d['amenities'] ) {
 			$am  = $d['amen'];
-			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-amenities"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Amenities</p><h2 class="bkd-h2">What comes <em>with the keys.</em></h2>'
+			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-amenities"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Amenities</p><h2 class="bkd-h2">' . ( $land ? 'Infrastructure <em>and amenities.</em>' : 'What comes <em>with the keys.</em>' ) . '</h2>'
 				. ( $d['amen_intro'] ? '<p class="bkd-lede">' . $e( $d['amen_intro'] ) . '</p>' : '' ) . '</div>';
-			$amp = blockke_dev_amenity_photos( $d['captions'] );
+			$amp = $land ? array() : blockke_dev_amenity_photos( $d['captions'] ); // its caption matching is the home library
 			if ( count( $amp ) >= 2 ) { // captioned amenity photos, swipeable on phones; each opens the gallery
 				$o[] = '<div class="bkd-amp bkd-rv" role="list" data-n="' . count( $amp ) . '">';
 				foreach ( $amp as $aid ) {
@@ -3960,8 +5447,8 @@ JS;
 				$o[] = '</div>';
 			}
 			if ( $am['rest'] ) {
-				$o[] = '<div class="bkd-ess bkd-rv' . ( $am['tiles'] ? '' : ' bkd-ess-solo' ) . '"><div><h3 class="bkd-ess-h">' . ( $am['essentials'] ? 'The everyday <em>essentials</em>' : 'Also <em>included</em>' ) . '</h3>'
-					. '<p>' . ( $am['essentials'] ? 'The practical things buyers ask about first.' : 'More of what comes with a home at ' . $e( $d['short'] ) . '.' ) . '</p></div><ul>';
+				$o[] = '<div class="bkd-ess bkd-rv' . ( $am['tiles'] ? '' : ' bkd-ess-solo' ) . '"><div><h3 class="bkd-ess-h">' . ( $land ? 'Also <em>listed</em>' : ( $am['essentials'] ? 'The everyday <em>essentials</em>' : 'Also <em>included</em>' ) ) . '</h3>'
+					. '<p>' . ( $land ? $e( ! empty( $am['note'] ) ? $am['note'] : 'More of what the developer lists for ' . $d['short'] . '. Ask which are in place today and which serve your plot.' ) :( $am['essentials'] ? 'The practical things buyers ask about first.' : 'More of what comes with a home at ' . $e( $d['short'] ) . '.' ) ) . '</p></div><ul>';
 				foreach ( $am['rest'] as $it ) {
 					$o[] = '<li>' . blockke_dev_icon( 'check' ) . '<span>' . $e( $it ) . '</span></li>';
 				}
@@ -3970,8 +5457,51 @@ JS;
 			$o[] = '</div></section>';
 		}
 
-		// Payment plan (off-plan) or mortgage (complete)
-		if ( $d['offplan'] ) {
+		// Payment plan (off-plan) or mortgage (complete); land: the developer's plan, never a mortgage (none for land for lease)
+		if ( $land ) {
+			if ( 'rent' !== $cx['action'] ) {
+				$term = (int) $plan['term'];
+				$tn   = $term > 0 && 0 === $term % 12 ? (int) ( $term / 12 ) : $term; // the number said: "3-year", "18-month"
+				$tl   = $term > 0 ? $tn . ( 0 === $term % 12 ? '-year' : '-month' ) : '';
+				$an   = in_array( $tn, array( 8, 11, 18 ), true ) || ( $tn >= 80 && $tn <= 89 ); // "an 18-month plan"
+				if ( $plan['reservation'] > 0 ) {
+					$heading = 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>';
+				} elseif ( $plan['deposit'] > 0 && $term > 0 ) {
+					$heading = '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then ' . ( $an ? 'an ' : 'a ' ) . '<span class="bkd-nw">' . $tl . ' plan</span>';
+				} elseif ( $plan['deposit'] > 0 ) {
+					$heading = '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments';
+				} elseif ( $term > 0 ) {
+					$heading = ( $an ? 'An' : 'A' ) . ' <em>' . $tl . '</em> payment plan';
+				} elseif ( $plan['flexible'] ) {
+					$heading = 'A flexible <em>payment plan</em>';
+				} elseif ( $plan['instalments'] ) {
+					$heading = 'Pay in <em>instalments</em>';
+				} else {
+					$heading = 'Ask for the <em>payment plan</em>';
+				}
+				$stated = $plan['deposit'] > 0 || $term > 0;
+				$text   = '' !== (string) $plan['text'] ? $plan['text'] : ( $plan['found'] ? 'Pay cash, or pay the deposit and the balance in instalments under the developer\'s plan. Ask us what the price includes: survey, transfer and title costs differ between estates.'
+					: 'This listing does not state a payment plan. Ask us for the developer\'s current terms before you reserve: the deposit, how long you have to pay and whether instalments are monthly or quarterly.' );
+				$o[]    = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Payment plan</p><h2 class="bkd-h2">' . $heading . '</h2>'
+					. '<p class="bkd-body bkd-mt">' . $e( $text ) . '</p>';
+				if ( $plan['steps'] ) { // only what the listing states; never a "Completion" step
+					$o[] = '<ol class="bkd-steps">';
+					foreach ( $plan['steps'] as $s ) {
+						$o[] = '<li><h3 class="bkd-h3">' . $e( $s[0] ) . '</h3>' . ( '' !== $s[1] ? '<p>' . $e( $s[1] ) . '</p>' : '' ) . '</li>';
+					}
+					$o[] = '</ol>';
+				}
+				if ( $stated ) { // the listing's own line on the costs on top of the price, else ours (unless the body already says it)
+					$costs = ! empty( $plan['costs'] ) ? $plan['costs'] : ( preg_match( '/\bcosts?\b|\bfees?\b|stamp duty/i', $text ) ? '' : 'Survey and beacon fees, transfer costs, stamp duty, legal fees and the cost of connecting power and water may be payable on top of the plot price. Ask us for the full cost before you reserve.' );
+					$o[]   = '' !== $costs ? '<p class="bkd-body bkd-mt">' . $e( $costs ) . '</p>' : '';
+					$cta   = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="payment-plan">Get the official payment plan</button></div>';
+					$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['calc_price'] > 0 ? $d['calc_price'] : $d['price_from'], $plan, $cta ) . '</div></div></section>';
+				} else { // nothing stated: no estimate on a guessed deposit
+					$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">The full cost of a plot</p><p class="bkd-body">Survey and beacon fees, transfer costs, stamp duty, legal fees and the cost of connecting power and water may be payable on top of the plot price. Ask us for the full cost before you reserve.</p>'
+						. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
+				}
+			}
+		} elseif ( $d['offplan'] ) {
 			// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
 			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
 			// "Pay in instalments" only when the listing mentions instalments and there is time for them
@@ -4026,7 +5556,7 @@ JS;
 			}
 			if ( $d['investors'] ) {
 				$o[] = '<div class="bkd-inv"><p class="bkd-inv-t">' . blockke_dev_icon( 'chart' ) . 'For investors</p><p class="bkd-inv-p">' . $e( $d['investors'] ) . '</p>'
-					. '<button class="bkd-link" type="button" data-bkd-enquire="comparables">Ask for rental and resale comparables' . blockke_dev_icon( 'arrow' ) . '</button></div>';
+					. '<button class="bkd-link" type="button" data-bkd-enquire="comparables">' . ( $land ? 'Ask for recent plot prices nearby' : 'Ask for rental and resale comparables' ) . blockke_dev_icon( 'arrow' ) . '</button></div>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -4048,15 +5578,16 @@ JS;
 				$o[] = '</ul>';
 			}
 			$o[] = '<p class="bkd-fine bkd-mt-s">' . $e( $loc['note'] ) . '</p></div>'
-				. '<div class="bkd-map bkd-rv"><iframe title="Map of ' . esc_attr( $d['short'] ) . '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="' . esc_url( 'https://maps.google.com/maps?q=' . rawurlencode( $q ) . '&z=15&output=embed' ) . '"></iframe>'
+				. '<div class="bkd-map bkd-rv"><iframe title="Map of ' . esc_attr( $d['short'] ) . '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="' . esc_url( 'https://maps.google.com/maps?q=' . rawurlencode( $q ) . ( $land ? '&z=14' : '&z=15' ) . '&output=embed' ) . '"></iframe>'
 				. '<a class="bkd-link" target="_blank" rel="noopener" href="' . esc_url( 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode( $q ) ) . '">' . blockke_dev_icon( 'pin' ) . 'Open in Google Maps</a></div></div></section>';
 		}
 
-		// Why Block
-		if ( ! empty( $cfg['why'] ) ) {
+		// Why Block (land: config land_why, else the code's own; the saved option is merged shallowly)
+		$why = $land ? ( ! empty( $cfg['land_why'] ) && is_array( $cfg['land_why'] ) ? $cfg['land_why'] : blockke_dev_land_defaults()['land_why'] ) : $cfg['why'];
+		if ( ! empty( $why ) ) {
 			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-why"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Why ' . $e( $cfg['brand'] ) . '</p><h2 class="bkd-h2">Advice first. <em>Then a decision.</em></h2></div><div class="bkd-why">';
-			foreach ( $cfg['why'] as $i => $w ) {
-				$o[] = '<div class="bkd-rv"><b>0' . ( $i + 1 ) . '</b><h3 class="bkd-h3">' . $e( $w[0] ) . '</h3><p>' . $e( ! $d['offplan'] && ! empty( $w[2] ) ? $w[2] : $w[1] ) . '</p></div>';
+			foreach ( $why as $i => $w ) {
+				$o[] = '<div class="bkd-rv"><b>0' . ( $i + 1 ) . '</b><h3 class="bkd-h3">' . $e( $w[0] ) . '</h3><p>' . $e( $land ? $w[1] : ( ! $d['offplan'] && ! empty( $w[2] ) ? $w[2] : $w[1] ) ) . '</p></div>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -4067,7 +5598,7 @@ JS;
 				. '<div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">Also consider</p><h2 class="bkd-h2">' . $sim['title'] . '</h2></div>'
 				. ( $sim['cards'] ? '<a class="bkd-link bkd-sim-top" data-sim-all href="' . esc_url( $sim['all_url'] ) . '"' . ( ! empty( $sim['all_nf'] ) ? ' rel="nofollow"' : '' ) . '>' . $e( $sim['all_text'] ) . blockke_dev_icon( 'arrow' ) . '</a>' : '' ) . '</div>';
 			if ( $sim['cards'] ) {
-				$o[] = '<div class="bkd-cards" style="--n:' . min( count( $sim['cards'] ), 3 ) . '">';
+				$o[] = '<div class="bkd-cards" style="--n:' . ( $land && 4 === count( $sim['cards'] ) ? 4 : min( count( $sim['cards'] ), 3 ) ) . '">'; // land: four cards in one row
 				foreach ( $sim['cards'] as $i => $s ) {
 					$o[] = '<a class="bkd-card bkd-rv" href="' . esc_url( $s['url'] ) . '" data-id="' . (int) $s['id'] . '" data-sim-pos="' . ( $i + 1 ) . '" data-tier="' . (int) $s['tier'] . '" data-same="' . (int) $s['same'] . '"><div class="bkd-card-img">'
 						. blockke_dev_img( $s['img'], 'medium_large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => '(min-width: 1000px) 33vw, 78vw', 'alt' => blockke_dev_alt( $s['img'], $s['name'] ), 'data-ph' => $s['name'] ) )
@@ -4075,16 +5606,16 @@ JS;
 						. '</div><h3 class="bkd-h3">' . $e( $s['name'] ) . '</h3><b>' . $e( $s['price'] ) . '</b><span>' . $e( $s['meta'] ) . '</span></a>';
 				}
 				$o[] = '<a class="bkd-card-all" data-sim-all href="' . esc_url( $sim['all_url'] ) . '"' . ( ! empty( $sim['all_nf'] ) ? ' rel="nofollow"' : '' ) . '><span>' . $e( $sim['all_text'] ) . '</span>' . blockke_dev_icon( 'arrow' ) . '</a></div>';
-				$o[] = '<div class="bkd-sim-act bkd-rv">' . ( $search ? '<a class="bkd-btn bkd-btn-line bkd-btn-sm" data-bkd-search="similar" href="' . esc_url( $s_url ) . '"' . $s_nf . '>' . blockke_dev_icon( 'search' ) . 'Refine search</a>' : '' )
+				$o[] = '<div class="bkd-sim-act bkd-rv">' . ( $search ? '<a class="bkd-btn bkd-btn-line bkd-btn-sm"' . ( $land ? '' : ' data-bkd-search="similar"' ) . ' href="' . esc_url( $s_url ) . '"' . $s_nf . '>' . blockke_dev_icon( 'search' ) . 'Refine search</a>' : '' )
 					. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm" type="button" data-bkd-enquire="compare">Compare these with an advisor</button></div>';
 			} else {
 				$o[] = '<div class="bkd-sim-empty bkd-rv"><p class="bkd-body">Tell us what you\'re looking for and an advisor will send you matches as they come up, often before they are listed.</p><div class="bkd-sim-act">'
 					. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm" type="button" data-bkd-enquire="find">Ask an advisor to find one</button>'
-					. ( $search ? '<a class="bkd-btn bkd-btn-line bkd-btn-sm" data-bkd-search="empty" href="' . esc_url( $s_url ) . '"' . $s_nf . '>' . blockke_dev_icon( 'search' ) . 'Search homes</a>' : '' ) . '</div></div>';
+					. ( $search ? '<a class="bkd-btn bkd-btn-line bkd-btn-sm"' . ( $land ? '' : ' data-bkd-search="empty"' ) . ' href="' . esc_url( $s_url ) . '"' . $s_nf . '>' . blockke_dev_icon( 'search' ) . ( $land ? 'Search land' : 'Search homes' ) . '</a>' : '' ) . '</div></div>';
 			}
 			$o[] = '</div></section>';
 		} elseif ( $lp && ! empty( $cfg['lp_alternatives'] ) ) {
-			$what = blockke_dev_key_phrase( $cx['key'], 'rent' === $cx['action'] );
+			$what = $land ? ( 'rent' === $cx['action'] ? 'land for lease' : 'plots' ) : blockke_dev_key_phrase( $cx['key'], 'rent' === $cx['action'] );
 			$what = 'similar ' . $what . ( $cx['area_name'] ? ' in ' . $cx['area_name'] : '' );
 			$o[]  = '<section class="bkd-sec' . ( $d['faqs'] ? ' bkd-sec-mist' : '' ) . ' bkd-alt" id="bkd-alternatives"><div class="bkd-wrap"><div class="bkd-alt-in bkd-rv"><div><p class="bkd-label">Also consider</p>'
 				. '<h2 class="bkd-h2">Not sure <em>' . $e( $d['short'] ) . '</em> is the one?</h2><p class="bkd-body bkd-mt">Tell us your budget and we\'ll shortlist 3 ' . $e( $what ) . ', with prices and payment plans, so you can compare before you decide.</p></div>'
@@ -4103,7 +5634,7 @@ JS;
 
 		// Enquire
 		$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-enquire"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Enquire</p><h2 class="bkd-h2">Speak to an advisor about <em>' . $e( $d['short'] ) . '</em></h2>'
-			. '<p class="bkd-body bkd-mt">Get the price list, floor plans and payment plan, or book a viewing. We usually reply within a few hours on working days.</p>';
+			. '<p class="bkd-body bkd-mt">' . ( $land ? 'Get the price list, the site plan and the payment plan, or book a site visit.' : 'Get the price list, floor plans and payment plan, or book a viewing.' ) . ' We usually reply within a few hours on working days.</p>';
 		if ( $ag['name'] ) {
 			$o[] = '<div class="bkd-agent">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" loading="lazy" width="64" height="64">' : '<div class="bkd-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</div>' )
 				. '<div><b>' . $e( $ag['name'] ) . '</b><span>' . $e( trim( $ag['role'] . ', ' . $cfg['brand_full'], ', ' ) ) . '</span>'
@@ -4113,16 +5644,16 @@ JS;
 			. '<a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'WhatsApp</a>'
 			. '<a href="mailto:' . esc_attr( $cfg['email'] ) . '?subject=' . rawurlencode( $d['short'] . ' enquiry' ) . '">' . blockke_dev_icon( 'mail' ) . $e( $cfg['email'] ) . '</a></div></div>'
 			. '<div class="bkd-formcard bkd-rv">' . blockke_dev_full_form( $d ) . '</div></div>'
-			. '<div class="bkd-wrap"><p class="bkd-disc">' . $e( $cfg['disclaimer'] ) . '</p></div></section>';
+			. '<div class="bkd-wrap"><p class="bkd-disc">' . $e( $land ? ( ! empty( $cfg['land_disclaimer'] ) && is_string( $cfg['land_disclaimer'] ) ? $cfg['land_disclaimer'] : blockke_dev_land_defaults()['land_disclaimer'] ) : $cfg['disclaimer'] ) . '</p></div></section>';
 
 		// Mobile bar, enquiry dialog, gallery viewer
 		$o[] = '<nav class="bkd-mb" id="bkd-mb" aria-label="Quick contact"><a class="bkd-mb-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '</a>'
 			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar">Get the price list</button></nav>';
 		$o[] = '<div class="bkd-md" id="bkd-md" hidden role="dialog" aria-modal="true" aria-labelledby="bkd-md-t"><div class="bkd-md-box">'
 			. '<button class="bkd-md-x" type="button" data-bkd-close aria-label="Close">' . blockke_dev_icon( 'close' ) . '</button>'
-			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">Get the price list</h2><p class="bkd-md-sub" id="bkd-md-sub">Floor plans and the payment plan, sent to your WhatsApp.</p>'
+			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">Get the price list</h2><p class="bkd-md-sub" id="bkd-md-sub">' . ( $land ? 'The site plan and the payment plan, sent to your WhatsApp.' : 'Floor plans and the payment plan, sent to your WhatsApp.' ) . '</p>'
 			. '<div id="bkd-md-form">' . blockke_dev_quick_form( 'modal', 'Send it to me', $d ) . '</div></div></div>';
-		if ( $search ) {
+		if ( $search && ! $land ) { // land pages link to land in the area instead of the homes search sheet
 			$o[] = blockke_dev_search_sheet( $d );
 		}
 		$o[] = '<div class="bkd-lb" id="bkd-lb" hidden role="dialog" aria-modal="true" aria-label="Photo gallery"><div class="bkd-lb-top"><span id="bkd-lb-n"></span>'
@@ -5115,6 +6646,15 @@ JS;
 				},
 				99
 			);
+			if ( ! empty( $data['land'] ) ) { // land pages only: their few rules in their own block; the shared stylesheet is unchanged
+				add_action(
+					'wp_head',
+					function () {
+						echo '<style id="bkd-land-css">' . blockke_dev_land_css() . "</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput -- fixed CSS.
+					},
+					100
+				);
+			}
 			add_action(
 				'wp_footer',
 				function () use ( $data, $lp ) {
@@ -5145,16 +6685,30 @@ JS;
 						'bedsMode' => $cfg['beds_mode'],
 						'studioCat' => (string) $cfg['studio_cat'],
 					);
+					$land    = ! empty( $data['land'] ); // land mode: the after-link and the script's words
 					if ( $lp && ! empty( $cfg['lp_after_link'] ) && $data['ctx']['area_name'] ) {
-						$cx          = $data['ctx'];
-						$bl          = blockke_dev_beds_label( $cx );
-						$js['after'] = array(
-							'url'   => blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => blockke_dev_link_beds( $cx ) ) ),
-							'label' => 'While you wait: see other ' . ( $bl ? $bl . ' ' : '' ) . ( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . ' in ' . $cx['area_name'],
-						);
+						$cx = $data['ctx'];
+						if ( $land ) {
+							$lu          = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'type' => 'land' ) );
+							$ls          = blockke_dev_seg_url( $lu );
+							$js['after'] = array(
+								'url'   => '' !== $ls ? $ls : $lu,
+								'label' => 'While you wait: see other ' . ( 'rent' === $cx['action'] ? 'land for lease' : 'land for sale' ) . ' in ' . $cx['area_name'],
+							);
+						} else {
+							$bl          = blockke_dev_beds_label( $cx );
+							$js['after'] = array(
+								'url'   => blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'], 'beds' => blockke_dev_link_beds( $cx ) ) ),
+								'label' => 'While you wait: see other ' . ( $bl ? $bl . ' ' : '' ) . ( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . ' in ' . $cx['area_name'],
+							);
+						}
+					}
+					$script = blockke_dev_js();
+					if ( $land ) {
+						$script = blockke_dev_land_js( $script );
 					}
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
-					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_js() . "\n" . blockke_dev_calc_js() . "</script>\n";
+					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $script . "\n" . blockke_dev_calc_js() . "</script>\n";
 				},
 				20
 			);
@@ -5259,7 +6813,7 @@ JS;
 		$row      = $log[ $key ];
 		$unit     = $get( 'unit', 160 );
 		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ) );
-		$purpose  = in_array( $get( 'purpose', 20 ), array( 'Live in', 'Invest', 'Both' ), true ) ? $get( 'purpose', 20 ) : '';
+		$purpose  = in_array( $get( 'purpose', 20 ), array_unique( array_merge( blockke_dev_purposes( false ), blockke_dev_purposes( true ) ) ), true ) ? $get( 'purpose', 20 ) : ''; // homes' and land's answers
 		if ( '' === $unit . $timeline . $purpose ) {
 			return new WP_REST_Response( array( 'ok' => true ), 200 );
 		}
@@ -5445,6 +6999,12 @@ JS;
 			'find'         => 'Find-me-one request (no similar homes listed)',
 		);
 		$forms['dev_index'] = 'Shortlist request (new developments page)';
+		$land_lead          = $lid && ! $at && ! $ix && blockke_dev_is_land( $lid ); // a land listing's own page (blockke_dev_is_land())
+		if ( $land_lead ) {
+			$forms['floorplan']   = 'Plot price and availability request';
+			$forms['comparables'] = 'Plot price comparables request';
+			$forms['compare']     = 'Compare request (similar plots)';
+		}
 		if ( $at ) {
 			$forms['hero'] = 'Hero form (send me matches)';
 			$forms['find'] = 'Find-me-one request (none listed)';
@@ -5466,6 +7026,9 @@ JS;
 		} else {
 			$lines[] = 'DEVELOPMENT ENQUIRY (property page)';
 			$lines[] = 'Development: ' . $dev_name . ( $price > 0 ? ' - from ' . blockke_dev_money( $price ) : '' );
+			if ( $land_lead ) {
+				$lines[] = 'Type: Land (plots)';
+			}
 			$lines[] = 'Interested in: ' . ( $unit ? $unit : '-' );
 		}
 		$lines[] = '';
@@ -5603,12 +7166,14 @@ JS;
 	function blockke_dev_fields() {
 		return array(
 			'bke_dev_layout'           => array( 'Layout', 'select' ),
+			'bke_dev_kind'             => array( 'Listing kind', 'text', 'land or homes. Empty: from the categories (a land category, no home category, no bedrooms).' ),
 			'bke_dev_tagline'          => array( 'Hero line', 'textarea', 'One or two sentences under the name. Empty: the excerpt or SEO description.' ),
 			'bke_dev_overview_heading' => array( 'Overview headline', 'text', 'Empty: "About {development}".' ),
 			'bke_dev_facts'            => array( 'Key facts', 'textarea', 'One per line as Label | Value, e.g. Residences | 328. Empty: read from the "at a Glance" section and the units.' ),
 			'bke_dev_deposit_pct'      => array( 'Deposit %', 'number', 'Empty: read from the Payment Plan section.' ),
 			'bke_dev_reservation'      => array( 'Reservation fee (KES)', 'number', 'Empty: read from the Payment Plan section.' ),
 			'bke_dev_plan_until'       => array( 'Instalments until (YYYY-MM)', 'text', 'Empty: the completion date.' ),
+			'bke_dev_plan_months'      => array( 'Instalment period (months)', 'number', 'Land: how many months the balance can be paid over, e.g. 36. Empty: read from the Payment Plan section.' ),
 			'bke_dev_plan_text'        => array( 'Payment plan text', 'textarea', 'Empty: the first paragraph of the Payment Plan section. On a ready home it replaces the Finance text.' ),
 			'bke_dev_calc_price'       => array( 'Calculator price (KES)', 'number', 'The price the calculator starts from, e.g. the mortgage price when the cash price shown is lower. A ready home\'s calculator then reads "Mortgage price". Empty: the "from" price.' ),
 			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Shown under Address and in Location. Empty: the description\'s Location section, else straight-line distances from the map pin.' ),
@@ -5706,7 +7271,7 @@ JS;
 			$bkd_hook,
 			function ( $mid, $object_id, $meta_key ) {
 				// the last four feed the v1.6 cards (layout, the editor's line, the photo count), often written without a post save
-				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label', 'prop_featured', 'bke_dev_layout', 'bke_index_line', 'wpestate_property_gallery', 'image_to_attach' ), true ) && blockke_dev_sim_live( $object_id ) ) {
+				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label', 'prop_featured', 'bke_dev_layout', 'bke_index_line', 'wpestate_property_gallery', 'image_to_attach', 'bke_dev_kind' ), true ) && blockke_dev_sim_live( $object_id ) ) {
 					blockke_dev_sim_bump();
 				}
 			},

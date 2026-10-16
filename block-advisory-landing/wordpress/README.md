@@ -61,6 +61,18 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 **Turn it on for every development at once.** Set the option `blockke_dev_page['auto'] = true`. Every listing with units (`property_has_subunits = 1`) then uses the layout unless its box says *Off*.
 
+**Land estates (v1.6.1).** A plot estate such as Zuri Springs gets the same layout in land words. A listing counts as land when it has a land category (Land, Residential land, Agricultural, Industrial land), no home category (Apartments, Villas, Houses, Studio) and no bedrooms; a plot listed under a land estate counts too. Set **Listing kind** in the box (`bke_dev_kind`: `land` or `homes`) to override that, for example on an estate that sells both plots and built homes. On a land page:
+
+- the hero reads "Plots for sale" with *From*, *Plots from* (the smallest plot) and the deposit, and its form offers the price list and site plan;
+- the key facts come from the *at a glance* rows: estate size, land use, servicing, tenure, payment plan and distance from Nairobi;
+- a *Plot type | Size | Price from* table becomes *Plot sizes and prices*, filtered by plot type, with each row's servicing kept in the enquiry ("Residential, unserviced · 1/8 acre");
+- *Infrastructure and amenities* puts roads, power and water first; items under a heading that names one part of the estate ("Lulu Park serviced plots") go in the checklist with that heading, never as estate-wide tiles; a power line or wayleave is left out; a paragraph after the last list becomes the line under *Also listed*;
+- the payment section shows the developer's plan and the instalment calculator only when the listing states a deposit or a term (*Instalment period* in the box, `bke_dev_plan_months`, or "over up to three years" in the text); otherwise *Ask for the payment plan* and what a plot costs on top of its price. Never a mortgage calculator;
+- *Also consider* shows other land for sale in the area and its neighbours (config `land_neighbours`), with "See all land for sale in Juja";
+- *Why Block*, the disclaimer, the forms (*Build / Invest / Both*), the pop-ups and the lead email ("Type: Land (plots)") use land wording, and the search button links to land in the area.
+
+The landing page (`?lp=1`) of a land listing for sale uses the same words. Switching `land_layout` off returns every page to the v1.6 wording.
+
 ## 4. Ad landing pages (for Google Ads and other campaigns)
 
 Every for-sale listing has a landing page for paid campaigns, with nothing to set up: its URL plus `?lp=1`, for example `https://block.ke/property/santorini-residences-westlands-1-4-bed-apartments-lofts/?lp=1`. For a tidier address, create a page under the private page *Landing pages* (slug `lp`) and add a custom field `bke_lp_listing` holding the listing's ID. Santorini's is ready as a draft: `https://block.ke/lp/santorini-residences/` (page 42708, listing 40401); publish it once the v1.3 snippet is on. On these pages, tick Rank Math's *No Index* so they stay out of the sitemap, and set the listing's main photo as the featured image so WhatsApp and Facebook link previews show it. The page's own text appears only if the snippet is switched off, so a line linking to the listing is a good fallback.
@@ -255,6 +267,9 @@ The option `blockke_dev_page` (an array) overrides any of these defaults:
 | `search_params`, `search_ignore` | | The search form's parameter aliases; parameters ignored (utm, gclid…) |
 | `view_transitions` | `false` | The card photo grows into the development's main photo, which comes first at 3:2 (preview `?bke_vt=1`) |
 | `prefetch` | `false` | Fetch a development page while the pointer rests on its card; those fetches are not counted as views |
+| `land_layout` | `true` | Land estates on the development layout read as land (v1.6.1); `false` keeps the v1.6 wording everywhere |
+| `land_why`, `land_disclaimer` | | *Why Block* and the disclaimer on land pages |
+| `land_neighbours` | Juja, Ruiru, Thika | Nearby areas for a land page's *Also consider*: area slug => (nearest areas, the next ring); other areas use `neighbours` |
 
 ## Install and roll back
 
@@ -292,6 +307,8 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
 - v1.6: on a copy seeded with block.ke's inventory (about 850 listings, 340 developments) and with snippet 41011 running on the search copy, every part with its switch on: the new developments page (65 checks, plus 103 for Ready now, server-drawn views matching the script's on 6 addresses, the filter sheet, focus, campaign tags and the A–Z), area and segment pages (132), search results (162, plus 77), the card-to-development transition and context (164, Chromium 141, with and without the back/forward cache, slow phones and reduced motion), card photos that fail to load (25) and the development hero's top bar at 13 widths (221). A review in five lenses (PHP, browser behaviour, SEO, visual design against SERHANT and Compass, and copy) confirmed 73 findings; all were fixed over three rounds and re-checked. With every switch off, 26 pages (home, the two pages v1.6 would take over, area and segment pages, three development pages and their landing pages, Capella and Super Westbury, two classic listings) are byte for byte as with v1.5, except one Westlands card whose link alternates between two identical homes on every rebuild in v1.5 itself. The development page suites (v1.4, 78; Capella, 49) pass with the switches off.
 - v1.3.1: the landing page's "Speak to an advisor" form at phone and desktop widths: sent, saved and emailed, with the Zoho and email results written onto the saved lead; no field called `company` and the anti-spam field not drawn; an AutoFilled `company` from a cached older page accepted; bot sends caught and kept aside; error codes for a firewall page, a crash and a non-JSON answer, the site's own refusal message, and the plain message with no connection; and the enquiry kept when the mail server crashes mid-send;
 - v1.2: on classic pages built with WPResidence's own *Features* and *Address* markup, the tiles and checklist replace the feature groups, and *What's nearby* follows the address. The checks covered expected distances for Santorini Residences (MP Shah Hospital 0.4 km, Sarit Centre 1.5 km, JKIA 14 km), listings with only essentials, no map pin, a default pin and their own places list, both config switches, the page without JavaScript, no sideways scrolling from 320px to 1440px, and the development layout's Location fallback.
+
+- v1.6.1 land estates: Zuri Springs on the test copy with block.ke's live text and with its rewrite, at 320, 390 and 1440px, page and `?lp=1`: every section's land wording, the plot table and lead labels, the calculator (KES 3M at 10% over 36 months: KES 300,000, then 36 × KES 75,000 or 12 × KES 225,000), every pop-up and lead email, no PHP notices, no sideways scroll. The gate on nine land listings, Pazuri at Vipingo (land category, homes with bedrooms) staying homes, and both overrides. Byte for byte, about 2,900 pages (every listing and its `?lp=1`, every area and segment page, the new developments page, search and the home page) with the v1.6 code, with `land_layout` off and with it on: the only pages that change are the land listings' own pages and landing pages. The earlier suites give the same results on both codes.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.
 
