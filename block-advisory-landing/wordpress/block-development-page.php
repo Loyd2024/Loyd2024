@@ -7578,6 +7578,9 @@ JS;
 
 	/** "Completion Sep 2028", "Completion Q2 2027", "Completion late 2027", "Completion 2027", "Ready to move in", or ''. */
 	function blockke_bkn_done_text( $c, $flat = false ) {
+		if ( isset( $c['kind'] ) && 'land' === $c['kind'] ) { // plots are not moved into or completed
+			return '';
+		}
 		if ( 'ready' === $c['st'] ) {
 			return 'Ready to move in';
 		}
@@ -8394,6 +8397,9 @@ JS;
 			}
 			if ( $t ) {
 				$to  = function_exists( 'blockke_area_on' ) && blockke_area_on( $t ) ? blockke_area_url( $t, 'homes-for-sale' ) : get_term_link( $t );
+				if ( function_exists( 'blockke_area_on' ) && blockke_area_on( $t ) && blockke_bkn_on( 'card_v16' ) ) { // the page that answers for it: the segment, or the area page it folds into
+					$to = blockke_area_page( $t, 'homes-for-sale' )['canon'];
+				}
 				$o[] = '<li class="bkn-azall"><a href="' . esc_url( is_wp_error( $to ) ? '' : $to ) . '">' . $e( 'All homes for sale in ' . $nm ) . '</a></li>';
 			}
 			$o[] = '</ul></details>';
@@ -8523,7 +8529,7 @@ JS;
 #bkd .bkn-x .bkd-i{width:20px;height:20px}
 #bkd .bkn-count{display:none}
 #bkd .bkn-clear{display:none}
-#bkd .bkn-bar-in>.bkn-f{margin-left:auto}
+#bkd .bkn-bar-in>.bkn-f,#bkd .bkn-bar-in>.bkn-f:last-of-type{margin-left:auto}
 }
 #bkd .bkn-body{padding-bottom:var(--sec)}
 #bkd .bkn-group{padding-top:56px}
