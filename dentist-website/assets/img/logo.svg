@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 48" width="330" height="48" role="img" aria-label="Brightwater Dental">
+<!-- Full logo: mark + wordmark. Text needs Bricolage Grotesque / Commissioner (loaded by the site); outline the text for print use. -->
+<style>.t{fill:#3A2C8C}.w{fill:none;stroke:#C93B28;stroke-width:2.6;stroke-linecap:round}
+.n{font:780 31px 'Bricolage Grotesque','Arial Narrow',sans-serif;font-stretch:84%;letter-spacing:-.01em;fill:#3A2C8C}
+.s{font:700 13px 'Commissioner',Arial,sans-serif;letter-spacing:.16em;fill:#554D72}
+@media (prefers-color-scheme:dark){.t,.n{fill:#B8ACFF}.w{stroke:#FF7B67}.s{fill:#B6AFD2}}</style>
+<g transform="translate(0 2)"><g class="t"><rect x="-2.5" y="-3.3" width="5" height="6.6" rx="2.2" transform="translate(8.9 23.6) rotate(282.9)"/><rect x="-2.5" y="-3.3" width="5" height="6.6" rx="2.2" transform="translate(11.9 17.3) rotate(308.6)"/><rect x="-2.8" y="-3.7" width="5.6" height="7.4" rx="2.2" transform="translate(17.3 13) rotate(334.3)"/><rect x="-2.8" y="-3.7" width="5.6" height="7.4" rx="2.2" transform="translate(24 11.5)"/><rect x="-2.8" y="-3.7" width="5.6" height="7.4" rx="2.2" transform="translate(30.7 13) rotate(25.7)"/><rect x="-2.5" y="-3.3" width="5" height="6.6" rx="2.2" transform="translate(36.1 17.3) rotate(51.4)"/><rect x="-2.5" y="-3.3" width="5" height="6.6" rx="2.2" transform="translate(39.1 23.6) rotate(77.1)"/></g><path class="w" d="M6 37.5c3 0 3-2.6 6-2.6s3 2.6 6 2.6 3-2.6 6-2.6 3 2.6 6 2.6 3-2.6 6-2.6 3 2.6 6 2.6"/></g>
+<text x="58" y="33"><tspan class="n">Brightwater</tspan><tspan class="s" dx="9">DENTAL</tspan></text>
+</svg>

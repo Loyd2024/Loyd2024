@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEMPLATE: replace https://www.brightwater-dental.example/ with the live domain (also in robots.txt and each page's canonical). 404.html is left out on purpose. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.brightwater-dental.example/</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+  <url>
+    <loc>https://www.brightwater-dental.example/services.html</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+  <url>
+    <loc>https://www.brightwater-dental.example/about.html</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+  <url>
+    <loc>https://www.brightwater-dental.example/new-patients.html</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+  <url>
+    <loc>https://www.brightwater-dental.example/contact.html</loc>
+    <lastmod>2026-10-15</lastmod>
+  </url>
+</urlset>

@@ -1,0 +1,5 @@
+# Brightwater Dental (template): replace the domain below with the live site before launch.
+User-agent: *
+Allow: /
+
+Sitemap: https://www.brightwater-dental.example/sitemap.xml
