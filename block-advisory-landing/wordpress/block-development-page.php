@@ -7721,7 +7721,10 @@ CSS;
 		// the list has been restored. The development page reads it (blockke_bkn_dev_js()). The way back is also kept in the
 		// list's own history entry (history.state.bkn: id, n, y, k; r once restored), because sessionStorage holds only the
 		// last list clicked: after two lists, Back to the first still finds its card, and its paused scroll restoration is
-		// switched back on. blockke_bkn_vt_head() reads it too, to hold the first paint until the card is parsed.
+		// switched back on. blockke_bkn_vt_head() reads it too, to hold the first paint until the card is parsed and centre it as
+		// the page reveals; a card already in view then stays where it is (on a long list the page can be too short to centre
+		// it at that moment, and a second move would undo the photo's landing). The focus ring shows only to visitors who
+		// opened the card from the keyboard (or a screen reader), not after a tap or a click.
 		// window.bknVT exists only while the photo transition is on. Print this after the list's own script, so the cards
 		// are in place.
 		$js = <<<'JS'
@@ -7747,15 +7750,13 @@ CSS;
     manual(true); /* only when leaving by a card, so other ways back keep the browser's own scroll */
     if(V&&im){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;} /* only the card's own photo moves */
   });
-  /* back without the back/forward cache: the card in view and focused, else where the visitor was. The focus ring
-     shows only to visitors who opened the card from the keyboard (or a screen reader), not after a tap or a click. */
+  /* back without the back/forward cache: the card in view and focused (its ring only after a keyboard Enter), else where the visitor was */
   function done(){var x=get();if(x&&x.from===L.href&&!x.r){x.r=1;put(x);}}
   function restore(late){
     var r=st().bkn,x=get(),l,c,f,s;if(!r){r=x&&x.from===L.href?x:null;}if(!r||r.r){return;}
     l=all(r.id);c=seen(l[r.n])?l[r.n]:l.filter(seen)[0];
     if(!c&&!late&&document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){restore(1);});return;} /* cards a list script adds later */
-    if(c){s=c.getBoundingClientRect();if(s.top<0||s.bottom>innerHeight){c.scrollIntoView({block:'center'});} /* in view already (centred as the page revealed): no second move */
-      f=c.querySelector('a[data-bkn]');
+    if(c){s=c.getBoundingClientRect();if(s.top<0||s.bottom>innerHeight){c.scrollIntoView({block:'center'});}f=c.querySelector('a[data-bkn]');
       if(f){if(!r.k){s=document.createElement('style');s.textContent='#bkd .bkn-quiet:focus-visible,#bkd .bkn-quiet:focus-visible::after{outline:0}';document.head.appendChild(s);f.classList.add('bkn-quiet');f.addEventListener('blur',function(){f.classList.remove('bkn-quiet');},{once:true});}
         try{f.focus({preventScroll:true});}catch(e){}}}else{window.scrollTo(0,+r.y||0);}
     mark({id:r.id,n:r.n,y:r.y,k:r.k,r:1});done();
