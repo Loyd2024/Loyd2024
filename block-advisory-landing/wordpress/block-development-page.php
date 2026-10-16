@@ -9550,8 +9550,10 @@ JS;
 
 	/**
 	 * The segment page's filter bar, as on the index: bedrooms (homes), price, completion (homes for sale) and sort; a GET form.
-	 * Below 1000px "Filters" opens the fields as a sheet. The count shows only while a filter is set ("12 matches"): the
-	 * standfirst carries it otherwise. No bar when there is nothing to choose. $f: the page's state (blockke_area_v16_state()).
+	 * Below 1000px "Filters" opens the fields as a sheet, the same sheet as the index's and search's: "Filters" and a close
+	 * button, each field's label above it, and at the foot the live "Show 12 matches" and "Clear filters" (labels are for
+	 * screen readers in the bar). The count shows only while a filter is set ("12 matches"): the standfirst carries it
+	 * otherwise. No bar when there is nothing to choose. $f: the page's state (blockke_area_v16_state()).
 	 */
 	function blockke_area_v16_bar( $p, $cards, $n = null, $f = null ) {
 		$e     = 'esc_html';
@@ -9559,7 +9561,7 @@ JS;
 		$homes = 'home' === $p['kind'];
 		$f     = null === $f ? blockke_area_v16_state( $rent ) : $f;
 		$sel   = function ( $name, $label, $opts ) use ( $e, $f ) {
-			$h = '<label class="bkn-f"><span class="bkd-sr">' . $e( $label ) . '</span><select name="' . esc_attr( $name ) . '" data-bka-f="' . esc_attr( $name ) . '"' . ( '' !== $f[ $name ] ? ' class="on"' : '' ) . '>';
+			$h = '<label class="bkn-f"><span class="bkn-lab">' . $e( $label ) . '</span><select name="' . esc_attr( $name ) . '" data-bka-f="' . esc_attr( $name ) . '"' . ( '' !== $f[ $name ] ? ' class="on"' : '' ) . '>';
 			foreach ( $opts as $v => $l ) {
 				$h .= '<option value="' . esc_attr( $v ) . '"' . selected( (string) $v, (string) $f[ $name ], false ) . '>' . $e( $l ) . '</option>';
 			}
@@ -9601,7 +9603,8 @@ JS;
 		return '<form class="bkn-bar bka16-bar" method="get" data-bka-bar role="search" aria-label="' . esc_attr( 'Filter ' . strtolower( $p['label'] ) ) . '"><div class="bkd-wrap bkn-bar-in">'
 			. ( '' !== $fs ? '<button class="bkn-fbtn" type="button" data-bka-sheet aria-expanded="false" aria-controls="bka-fields">Filters' . ( $nset ? ' · ' . $nset : '' ) . '</button>'
 				. '<div class="bkn-fields" id="bka-fields" data-bka-fields><div class="bkn-sheet-head"><b>Filters</b><button type="button" class="bkn-x" data-bka-close aria-label="Close filters">' . blockke_dev_icon( 'close' ) . '</button></div>' . $fs
-				. '<div class="bkn-sheet-foot"><button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit" data-bka-show>' . $e( $nset ? 'Show ' . $n . ( 1 === $n ? ' match' : ' matches' ) : 'Show all' ) . '</button></div></div>' : '' )
+				. '<div class="bkn-sheet-foot"><button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit" data-bka-show>' . $e( 'Show ' . $n . ( 1 === $n ? ' match' : ' matches' ) ) . '</button>'
+				. '<a class="bkn-sclear" href="' . esc_url( blockke_area_url( $p['term'], $p['slug'] ) ) . '" data-bka-sclear' . ( $nset ? '' : ' hidden' ) . '>Clear filters</a></div></div>' : '' )
 			. '<p class="bkn-count bka16-count" data-bka-count aria-live="polite"' . ( $nset && $n ? '>' . $e( $n . ( 1 === $n ? ' match' : ' matches' ) ) : ' hidden>' ) . '</p>'
 			. '<a class="bkn-clear" href="' . esc_url( blockke_area_url( $p['term'], $p['slug'] ) ) . '" data-bka-clear' . ( $nset || '' !== $f['sort'] ? '' : ' hidden' ) . '>Clear filters</a>'
 			. $sort . $keep . '<noscript><button class="bkn-apply" type="submit">Apply</button></noscript></div>'
@@ -9692,6 +9695,25 @@ JS;
 #bkd .bka16-bar{margin:0 0 40px}
 @media (max-width:999px){#bkd .bka16-bar .bkn-bar-in>.bkn-f{margin-left:auto}}
 @media (scripting:none) and (max-width:999px){#bkd .bka16-bar .bkn-fbtn{display:none}#bkd .bka16-bar .bkn-fields{display:flex;flex-wrap:wrap;gap:0 24px}#bkd .bka16-bar .bkn-bar-in{flex-wrap:wrap}}
+/* the phone and tablet sheet, one design with the new developments page's and search's: "Filters" (17px) and a 44px close
+   button, each field's label above a boxed 52px select, and at the foot the live "Show 12 matches" with "Clear filters";
+   in the bar the labels are for screen readers */
+#bkd .bka16-bar .bkn-lab{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#bkd .bka16-bar .bkn-sclear{display:none}
+@media (max-width:999px){
+#bkd .bka16-bar .bkn-fields.on{gap:0;padding:0;overscroll-behavior:contain}
+#bkd .bka16-bar .bkn-fields.on .bkn-sheet-head{position:sticky;top:0;z-index:1;gap:16px;min-height:60px;padding:0 calc(var(--gutter) - 12px) 0 var(--gutter);background:var(--paper);border-bottom:1px solid var(--line);font:600 17px/1.2 var(--font)}
+#bkd .bka16-bar .bkn-fields.on .bkn-sheet-head b{font-weight:600}
+#bkd .bka16-bar .bkn-fields.on .bkn-f{display:grid;gap:8px;margin:20px var(--gutter) 0}
+#bkd .bka16-bar .bkn-fields.on .bkn-f:last-of-type{margin-bottom:32px}
+#bkd .bka16-bar .bkn-fields.on .bkn-lab{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal;font-size:14px;font-weight:600;line-height:1.4;color:var(--ink)}
+#bkd .bka16-bar .bkn-fields.on select{width:100%;height:52px;padding:0 44px 0 16px;border:1px solid var(--line-2)!important;border-radius:0!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 16px center!important;font:400 16px/1.2 var(--font)!important;color:var(--navy)!important}
+#bkd .bka16-bar .bkn-fields.on select:focus-visible{outline:2px solid var(--brass-d);outline-offset:2px}
+#bkd .bka16-bar .bkn-fields.on .bkn-sheet-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:12px 24px;margin-top:auto;padding:12px var(--gutter) calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#bkd .bka16-bar .bkn-sheet-foot .bkd-btn{flex:1 1 auto;width:auto}
+#bkd .bka16-bar .bkn-fields.on .bkn-sclear{flex:none;display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;color:var(--slate)!important;text-decoration:underline;text-underline-offset:4px}
+#bkd .bka16-bar .bkn-fields.on .bkn-sclear[hidden]{display:none}
+}
 #bkd .bka16-grid>.bkn-card[hidden]{display:none}
 #bkd .bka16-text{margin-top:56px;max-width:720px}
 #bkd .bka16-text ul{margin-top:12px;border-top:1px solid var(--line)}
@@ -9736,7 +9758,7 @@ CSS;
   var bands={};try{bands=JSON.parse(form.querySelector('[data-bka-bands]').textContent);}catch(e){}
   var cards=[].slice.call(grid.querySelectorAll('.bkn-card')),page=+grid.getAttribute('data-page')||24,n=page,rent=grid.getAttribute('data-rent')==='1';
   var more=root.querySelector('[data-bka-more]'),none=root.querySelector('[data-bka-none]'),count=root.querySelector('[data-bka-count]'),clear=root.querySelector('[data-bka-clear]');
-  var fields=root.querySelector('[data-bka-fields]'),fbtn=root.querySelector('[data-bka-sheet]'),show=root.querySelector('[data-bka-show]');
+  var fields=root.querySelector('[data-bka-fields]'),fbtn=root.querySelector('[data-bka-sheet]'),show=root.querySelector('[data-bka-show]'),sclear=root.querySelector('[data-bka-sclear]');
   var KEYS=['beds','price','completion','sort'],labels={beds:'Any bedrooms',price:'Any price',completion:'Any completion'};
   function read(){var f={};KEYS.forEach(function(k){var s=form.querySelector('[name="'+k+'"]');f[k]=s?s.value:'';});return f;}
   function num(c,k){return +c.getAttribute('data-'+k)||0;}
@@ -9766,8 +9788,17 @@ CSS;
     if(f.completion){s+=f.completion==='ready-now'?' ready to move into':' completing in '+said(f,'completion');}
     return s;}
   function sheetOpen(){return !!fields&&fields.classList.contains('on');}
-  /* after a change from the sticky bar the results start just under it, not above the screen */
-  function toResults(){var t=grid.getBoundingClientRect().top-form.getBoundingClientRect().bottom;if(t<0){window.scrollBy(0,t);}}
+  /* after a change from the sticky bar the results start just under it, not above the screen. Measured in page
+     coordinates (the bar stuck at --top), so the browser's scroll anchoring, which can move the page as the list grows or
+     shrinks, and a bar not stuck at that moment don't throw it off */
+  function sy(){return window.scrollY||window.pageYOffset||0;}
+  function toResults(){var top=parseFloat(getComputedStyle(root).getPropertyValue('--top'))||0,y=Math.max(0,Math.round(grid.getBoundingClientRect().top+sy()-top-form.offsetHeight));if(sy()>y){window.scrollTo(0,y);}}
+  /* filter and sort events: one per choice, not one per arrow key on a closed select (each step still applies at once). Sent
+     when the select loses focus, after a 600ms pause, or before any other event */
+  var pend=null,pendT=0;
+  function flush(){clearTimeout(pendT);if(pend){var x=pend;pend=null;track(x[0],x[1]);}}
+  function soon(ev,o){if(pend&&(pend[0]!==ev||pend[1].filter!==o.filter)){flush();}pend=[ev,o];clearTimeout(pendT);pendT=setTimeout(flush,600);}
+  function now(ev,o){flush();track(ev,o);}
   function first(){var a=grid.querySelector('.bkn-card:not([hidden]) a.bkn-a');if(a){a.focus({preventScroll:true});}}
   function apply(user){
     var f=read(),set=!!(f.beds||f.price||f.completion),nset=0,list=cards.filter(function(c){return match(c,f);});
@@ -9779,9 +9810,9 @@ CSS;
     prices(!!f.price);
     /* the count only while a filter is set, and not at 0: the sentence below says so */
     if(count){count.hidden=!set||!list.length;count.textContent=matches(list.length);}
-    if(clear){clear.hidden=!set&&!s;}
+    if(clear){clear.hidden=!set&&!s;}if(sclear){sclear.hidden=!set;}
     if(fbtn){fbtn.textContent='Filters'+(nset?' · '+nset:'');}
-    if(show){show.textContent=set?'Show '+matches(list.length):'Show all';}
+    if(show){show.textContent='Show '+matches(list.length);}
     var u=new URLSearchParams(location.search);KEYS.forEach(function(k){if(f[k]){u.set(k,f[k]);}else{u.delete(k);}});if(n>page){u.set('n',n);}else{u.delete('n');}
     var qs=u.toString();try{history.replaceState(history.state,'',location.pathname+(qs?'?'+qs:'')+location.hash);}catch(e){}
     if(more){more.hidden=list.length<=n;more.textContent='Show '+Math.min(page,list.length-n)+' more';u.set('n',n+page);more.href=location.pathname+'?'+u.toString();}
@@ -9789,7 +9820,7 @@ CSS;
     if(!list.length){root.querySelector('[data-bka-none-t]').textContent='No '+phrase(f)+'.';var rl=root.querySelector('[data-bka-relax]'),opts=[];rl.innerHTML='';
       ['beds','price','completion'].forEach(function(k){if(!f[k]){return;}var c=cards.filter(function(x){return match(x,f,k);}).length;if(c){opts.push([c,k]);}});
       opts.sort(function(a,b){return b[0]-a[0];}).forEach(function(o){var li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=labels[o[1]]+' ('+o[0]+')';
-        b.addEventListener('click',function(){form.querySelector('[name="'+o[1]+'"]').value='';n=page;apply(true);track('area_filter',{filter:o[1],value:'any'});toResults();first();});li.appendChild(b);rl.appendChild(li);});}
+        b.addEventListener('click',function(){form.querySelector('[name="'+o[1]+'"]').value='';n=page;apply(true);now('area_filter',{filter:o[1],value:'any'});toResults();first();});li.appendChild(b);rl.appendChild(li);});}
     C.listLabel=(C.leadName||'').replace(/ on block\.ke$/,'');C.ctxBeds=f.beds;
   }
   /* the phone and tablet sheet: a dialog above the theme's header, Tab kept inside it; it closes itself if the screen widens */
@@ -9803,10 +9834,16 @@ CSS;
     var wide=window.matchMedia?window.matchMedia('(min-width:1000px)'):null,onWide=function(){if(wide.matches){closeSheet(false);}};
     if(wide){if(wide.addEventListener){wide.addEventListener('change',onWide);}else if(wide.addListener){wide.addListener(onWide);}}}
   var q=new URLSearchParams(location.search);n=Math.max(page,+q.get('n')||page);
-  form.addEventListener('change',function(e){var t=e.target;if(!t.name){return;}n=page;if(t.name==='sort'){track('area_sort',{sort:t.value||'recommended'});}else{track('area_filter',{filter:t.name,value:t.value||'any'});}apply(true);if(!sheetOpen()){toResults();}});
-  form.addEventListener('submit',function(e){e.preventDefault();apply(true);closeSheet();toResults();});
-  if(clear){clear.addEventListener('click',function(e){e.preventDefault();KEYS.forEach(function(k){var x=form.querySelector('[name="'+k+'"]');if(x){x.value='';}});n=page;apply(true);track('area_filter',{filter:'clear',value:''});});}
-  if(more){more.addEventListener('click',function(e){e.preventDefault();var was=n;n+=page;apply();var nf=grid.querySelectorAll('.bkn-card:not([hidden]) a.bkn-a')[was];if(nf){nf.focus({preventScroll:true});}track('area_more',{shown:n});});} /* the first card it added */
+  form.addEventListener('change',function(e){var t=e.target;if(!t.name){return;}n=page;if(t.name==='sort'){soon('area_sort',{sort:t.value||'recommended'});}else{soon('area_filter',{filter:t.name,value:t.value||'any'});}apply(true);if(!sheetOpen()){toResults();}});
+  form.addEventListener('focusout',function(e){if(e.target&&e.target.tagName==='SELECT'){flush();}});
+  window.addEventListener('pagehide',flush);
+  form.addEventListener('submit',function(e){e.preventDefault();flush();apply(true);closeSheet();toResults();});
+  function reset(keys){keys.forEach(function(k){var x=form.querySelector('[name="'+k+'"]');if(x){x.value='';}});n=page;apply(true);now('area_filter',{filter:'clear',value:''});}
+  /* "Clear filters" hides itself: the results start under the bar and the focus goes to the first card */
+  if(clear){clear.addEventListener('click',function(e){e.preventDefault();reset(KEYS);toResults();first();});}
+  /* in the sheet: the filters only (the sort is in the bar), and the focus stays in the sheet */
+  if(sclear){sclear.addEventListener('click',function(e){e.preventDefault();reset(['beds','price','completion']);var x=fields.querySelector('select');if(x){x.focus();}});}
+  if(more){more.addEventListener('click',function(e){e.preventDefault();var was=n;n+=page;apply();var nf=grid.querySelectorAll('.bkn-card:not([hidden]) a.bkn-a')[was];if(nf){nf.focus({preventScroll:true});}now('area_more',{shown:n});});} /* the first card it added */
   apply(false);
 })();
 JS;
