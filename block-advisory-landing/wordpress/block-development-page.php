@@ -7126,6 +7126,20 @@ JS;
 	}
 
 	/** One listing's row, or null when it is sold or let. */
+	/** A listing for several sizes ("Studio, 1-Bed & 2-Bed Apartments"): it stands for its development, never for one home. */
+	function blockke_bkn_is_range( $r ) {
+		return 'home' === $r['kind'] && ! $r['dev'] && '' === $r['k'];
+	}
+
+	/** How many homes (or listings) a card stands for: its single listings, at least 1. Area, segment and search pages all count this way. */
+	function blockke_bkn_homes( $rows ) {
+		$n = 0;
+		foreach ( $rows as $r ) {
+			$n += $r['dev'] || blockke_bkn_is_range( $r ) ? 0 : 1;
+		}
+		return max( 1, $n );
+	}
+
 	/** A listing for several sizes ("Studio, 1-Bed & 2-Bed Apartments") has no bedroom key of its own: its sizes from the title. */
 	function blockke_bkn_range_beds( $r ) {
 		if ( 'home' !== $r['kind'] || $r['dev'] || '' !== $r['k'] ) {
@@ -9068,7 +9082,7 @@ JS;
 			$ps    = array();
 			$homes = 0; // what the page counts: each card's homes (a development listed without them counts once)
 			foreach ( $cards as $c ) {
-				$homes += max( 1, count( $c['match'] ) );
+				$homes += blockke_bkn_homes( $c['match'] );
 				foreach ( $rent ? array( $c['rfrom'], $c['rto'] ) : array( $c['from'], $c['to'] ) as $v ) {
 					if ( $v > 0 ) {
 						$ps[] = $v;
@@ -10203,7 +10217,7 @@ JS;
 
 	/** A listing for several sizes ("Studio, 1-Bed & 2-Bed Apartments"): it stands for its development, not for one home. */
 	function blockke_search_is_range( $r ) {
-		return 'home' === $r['kind'] && ! $r['dev'] && '' === $r['k'];
+		return blockke_bkn_is_range( $r );
 	}
 
 	/** Bedroom ranges are read from titles: load those listings in one query, once. */
