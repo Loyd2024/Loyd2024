@@ -8048,6 +8048,9 @@ JS;
 		$far  = 0; // off-plan developments outside index_metro (Diani, Nyali, Nanyuki...): not "Nairobi and nearby"
 		$rows = blockke_bkn_rows();
 		$near = array_map( 'strtolower', (array) $cfg['index_metro'] );
+		if ( function_exists( '_prime_post_caches' ) ) { // their modified dates in one query, not one each
+			_prime_post_caches( array_map( 'intval', wp_list_pluck( $grid, 'id' ) ), false, false );
+		}
 		foreach ( $grid as $c ) {
 			$mod = max( $mod, (int) get_post_modified_time( 'U', true, $c['id'] ) );
 			$cy  = isset( $rows[ $c['id'] ]['cy'] ) ? strtolower( $rows[ $c['id'] ]['cy'] ) : '';
