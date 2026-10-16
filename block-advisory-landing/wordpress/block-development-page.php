@@ -3724,6 +3724,23 @@ JS;
 			. ( ! $vt && $hero && '' !== $d['hero_label'] ? '<figcaption>' . $e( $d['hero_label'] ) . '</figcaption>' : '' )
 			. ( $n_img > 1 ? '<button class="bkd-btn bkd-btn-white bkd-btn-sm bkd-all" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View ' . $n_img . ' photos</button>' : '' )
 			. '</figure>';
+		if ( $vt ) {
+			// From 1000px the 3:2 photo is shorter than the name, facts and form beside it, so photos 2 and 3 sit under it,
+			// two across, each opening the viewer there (hidden on smaller screens, where the photo is above the text)
+			$thumbs = '';
+			if ( $n_img >= 3 ) {
+				foreach ( array( 1, 2 ) as $i ) {
+					$t = wp_get_attachment_image( $imgs[ $i ], 'medium_large', false, array( 'alt' => '', 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => '(min-width: 1000px) 340px, 1px' ) );
+					if ( '' === $t ) {
+						$thumbs = '';
+						break;
+					}
+					$cap     = isset( $d['captions'][ $imgs[ $i ] ] ) ? $d['captions'][ $imgs[ $i ] ] : '';
+					$thumbs .= '<button type="button" data-bkd-open="' . $i . '" aria-label="' . esc_attr( 'Open photo ' . ( $i + 1 ) . ( '' !== $cap ? ': ' . $cap : '' ) ) . '">' . $t . '</button>';
+				}
+			}
+			$fig = '<div class="bkd-hero-side">' . $fig . ( '' !== $thumbs ? '<div class="bkd-hero-thumbs">' . $thumbs . '</div>' : '' ) . '</div>';
+		}
 		$o[]    = '<section class="bkd-hero' . ( $vt ? ' bkd-hero-vt' : '' ) . '" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">' . ( $vt ? $fig . $head : $head . $fig )
 			. '<div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
 		$o[] = '</dl><div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">Get the price list and floor plans</div>'
@@ -4969,7 +4986,7 @@ JS;
 			return;
 		}
 		if ( ! empty( $cfg['prefetch'] ) && isset( $_SERVER['HTTP_SEC_PURPOSE'] ) && false !== stripos( (string) $_SERVER['HTTP_SEC_PURPOSE'], 'prefetch' ) ) {
-			return; // v1.6: a card prefetch is not a visit (the visitor may never open it)
+			return; // v1.6: a card prefetch is not a visit (the visitor may never open it); if opened, the page counts it (blockke_bkn_view())
 		}
 		$total = (int) get_post_meta( $id, 'wpestate_total_views', true );
 		update_post_meta( $id, 'wpestate_total_views', $total + 1 );
@@ -7701,8 +7718,12 @@ CSS;
 		// A card click writes sessionStorage bkn_ctx: id (the card's data-id), n (which copy of that card, when a list shows it
 		// twice), path (where it leads), from (this list's URL), label (window.BKDEV.listLabel), src (data-bkn), beds (?beds= or
 		// window.BKDEV.ctxBeds), vt (its photo moves), im (the file the card showed), k (opened from the keyboard), y, t; r once
-		// the list has been restored. The development page reads it (blockke_bkn_dev_js()). window.bknVT exists only while the
-		// photo transition is on (blockke_bkn_vt_head()). Print this after the list's own script, so the cards are in place.
+		// the list has been restored. The development page reads it (blockke_bkn_dev_js()). The way back is also kept in the
+		// list's own history entry (history.state.bkn: id, n, y, k; r once restored), because sessionStorage holds only the
+		// last list clicked: after two lists, Back to the first still finds its card, and its paused scroll restoration is
+		// switched back on. blockke_bkn_vt_head() reads it too, to hold the first paint until the card is parsed.
+		// window.bknVT exists only while the photo transition is on. Print this after the list's own script, so the cards
+		// are in place.
 		$js = <<<'JS'
 (function(){
   'use strict';
@@ -7710,35 +7731,40 @@ CSS;
   var B=window.BKDEV||{},V=window.bknVT,K='bkn_ctx',L=location;
   function get(){try{return JSON.parse(sessionStorage.getItem(K)||'null');}catch(e){return null;}}
   function put(x){try{sessionStorage.setItem(K,JSON.stringify(x));}catch(e){}}
+  function st(){var s=history.state;return s&&typeof s==='object'?s:{};}
+  function mark(r){try{history.replaceState(Object.assign({},st(),{bkn:r}),'');}catch(e){}}
   function manual(on){try{if('scrollRestoration' in history){history.scrollRestoration=on?'manual':'auto';}}catch(e){}}
   function all(id){return Array.prototype.slice.call(document.querySelectorAll('[id="d-'+(+id)+'"]'));}
   function seen(c){return c&&c.getClientRects().length>0;}
   function beds(){var b='';try{b=new URLSearchParams(L.search).get('beds')||'';}catch(e){}b=String(b||B.ctxBeds||'').toLowerCase();return /^(studio|\d)$/.test(b)?b:'';}
   /* a plain click on a card: remember the list, its place on it and the visitor's bedrooms; the URL stays clean */
   document.addEventListener('click',function(e){
-    var a=e.target.closest&&e.target.closest('a[data-bkn]'),c,im,vt;
+    var a=e.target.closest&&e.target.closest('a[data-bkn]'),c,im,vt,x;
     if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||(a.target&&a.target!=='_self')||a.hasAttribute('download')||a.origin!==L.origin){return;}
     c=a.closest('[data-id]');vt=!!(c&&a.classList.contains('bkn-a')&&c.getAttribute('data-vt')==='1');im=vt?c.querySelector('.bkn-img img'):null;
-    put({id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,im:im?String(im.currentSrc||im.src||''):'',k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()});
+    x={id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,im:im?String(im.currentSrc||im.src||''):'',k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()};
+    put(x);mark({id:x.id,n:x.n,y:x.y,k:x.k});
     manual(true); /* only when leaving by a card, so other ways back keep the browser's own scroll */
     if(V&&im){V.c();im.style.viewTransitionName='bkn-photo';V.i=im;V.h=a.href;} /* only the card's own photo moves */
   });
   /* back without the back/forward cache: the card in view and focused, else where the visitor was. The focus ring
      shows only to visitors who opened the card from the keyboard (or a screen reader), not after a tap or a click. */
+  function done(){var x=get();if(x&&x.from===L.href&&!x.r){x.r=1;put(x);}}
   function restore(late){
-    var x=get(),l,c,f,s;if(!x||x.r||x.from!==L.href){return;}
-    l=all(x.id);c=seen(l[x.n])?l[x.n]:l.filter(seen)[0];
+    var r=st().bkn,x=get(),l,c,f,s;if(!r){r=x&&x.from===L.href?x:null;}if(!r||r.r){return;}
+    l=all(r.id);c=seen(l[r.n])?l[r.n]:l.filter(seen)[0];
     if(!c&&!late&&document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){restore(1);});return;} /* cards a list script adds later */
-    if(c){c.scrollIntoView({block:'center'});f=c.querySelector('a[data-bkn]');
-      if(f){if(!x.k){s=document.createElement('style');s.textContent='#bkd .bkn-quiet:focus-visible,#bkd .bkn-quiet:focus-visible::after{outline:0}';document.head.appendChild(s);f.classList.add('bkn-quiet');f.addEventListener('blur',function(){f.classList.remove('bkn-quiet');},{once:true});}
-        try{f.focus({preventScroll:true});}catch(e){}}}else{window.scrollTo(0,+x.y||0);}
-    x.r=1;put(x);
+    if(c){s=c.getBoundingClientRect();if(s.top<0||s.bottom>innerHeight){c.scrollIntoView({block:'center'});} /* in view already (centred as the page revealed): no second move */
+      f=c.querySelector('a[data-bkn]');
+      if(f){if(!r.k){s=document.createElement('style');s.textContent='#bkd .bkn-quiet:focus-visible,#bkd .bkn-quiet:focus-visible::after{outline:0}';document.head.appendChild(s);f.classList.add('bkn-quiet');f.addEventListener('blur',function(){f.classList.remove('bkn-quiet');},{once:true});}
+        try{f.focus({preventScroll:true});}catch(e){}}}else{window.scrollTo(0,+r.y||0);}
+    mark({id:r.id,n:r.n,y:r.y,k:r.k,r:1});done();
     var auto=function(){setTimeout(function(){manual(false);},0);};
     if(document.readyState==='complete'){auto();}else{window.addEventListener('load',auto);}
   }
   var nv=window.performance&&performance.getEntriesByType?performance.getEntriesByType('navigation')[0]:null;
   if(nv&&nv.type==='back_forward'){restore();}
-  window.addEventListener('pageshow',function(e){if(!e.persisted){return;}if(V){V.c();}var x=get();if(x&&x.from===L.href&&!x.r){x.r=1;put(x);}manual(false);});
+  window.addEventListener('pageshow',function(e){if(!e.persisted){return;}if(V){V.c();}var r=st().bkn;if(r&&!r.r){r.r=1;mark(r);}done();manual(false);});
 })();
 JS;
 		if ( blockke_bkn_on( 'prefetch' ) ) { // fetched while the pointer rests on a card (or on touch); never prerendered, so analytics run once
@@ -7748,8 +7774,11 @@ JS;
 		return "\n" . $js . "\n";
 	}
 
-	/** In <head> on every #bkd page when view_transitions is on: the transition styles and the early listener script. */
-	function blockke_bkn_vt_head() {
+	/**
+	 * In <head> on every #bkd page when view_transitions is on: the transition styles and the early listener script. $list:
+	 * the page is a list of cards (index, area, segment, search), which also gets the early part of the way back.
+	 */
+	function blockke_bkn_vt_head( $list = true ) {
 		// pagereveal fires before deferred or footer scripts can listen, so this script stays inline and unoptimised. Slow
 		// phones (Save-Data, 2G, 2 GB of memory or less) skip the transition. window.bknVT: c() clears the photo a card click
 		// named (i), h is that card's link. Each handler gets the transition, the context, the hero image, m (this is the
@@ -7759,13 +7788,22 @@ JS;
 		//   photo never lands on an empty box while the large file loads. On the image itself, not its box: the box stays in
 		//   the page's cross-fade, and a photo there would show twice while the card's photo is still moving.
 		// - arriving back on the list: the card's photo, when on screen, takes the hero's place, then loses its name
+		// - back on a list the browser did not keep (history.state.bkn from blockke_bkn_nav_js(), not yet restored; lists
+		//   only): the first paint waits until that card is parsed (<link rel=expect>, allowed while <body> is not), and the
+		//   card is centred as the page reveals, before its photo is named. Without this a long list (the index on a phone)
+		//   revealed at the top and jumped to the card only when the footer script ran, so the photo never moved back. The
+		//   footer script still focuses the card, and does it all where this can't run.
 		$css = '@view-transition{navigation:auto}@media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}'
 			. '#bkd .bkd-hero-media>img{view-transition-name:bkn-photo}'
 			. '::view-transition-group(bkn-photo){animation-duration:280ms;animation-timing-function:cubic-bezier(.2,0,0,1)}'
 			. '::view-transition-old(bkn-photo),::view-transition-new(bkn-photo){width:100%;height:100%;object-fit:cover;overflow:clip}'
 			. '::view-transition-old(root),::view-transition-new(root){animation-duration:160ms}';
-		$js  = <<<'JS'
-!function(w,d){var n=navigator,k=n.connection||{},s=k.saveData||/2g$/.test(k.effectiveType)||n.deviceMemory<=2,N='viewTransitionName',L=location,V=w.bknVT={c:function(){V.i&&(V.i.style[N]='',V.i=0)}};function on(t,f){w.addEventListener(t,function(e){var v=e.viewTransition,c,h=d.querySelector('#bkd-hero-media>img');if(v)if(s)v.skipTransition();else{try{c=JSON.parse(sessionStorage.bkn_ctx)}catch(x){}c=c||{};f(v,c,h,c.vt&&c.path==L.pathname,c.vt&&c.from==L.href,e)}})}on('pageswap',function(v,c,h,m,b,e){var t=e.activation.entry.url;t!=V.h&&V.c();h&&!(m&&t==c.from)&&(h.style[N]='none')});on('pagereveal',function(v,c,h,m,b,i){V.c();h&&m&&c.im&&(h.style.background='url('+JSON.stringify(c.im)+') 50%/cover');if(b&&(i=d.querySelectorAll('#d-'+(c.id|0)+' .bkn-img img'),i=i[c.n]||i[0])){h=i.getBoundingClientRect();h.top<innerHeight&&h.bottom>0&&(i.style[N]='bkn-photo',V.i=i,v.finished.then(V.c))}})}(window,document);
+		$back = $list ? "try{r=history.state.bkn;q=performance.getEntriesByType('navigation')[0].type}catch(x){}if(r&&!r.r&&q=='back_forward'){q=d.createElement('link');q.rel='expect';q.href=h='#d-'+(r.id|0);q.blocking='render';d.head.appendChild(q);w.addEventListener('pagereveal',function(c){c=d.querySelectorAll(h);(c=c[r.n]||c[0])&&c.scrollIntoView({block:'center'})},{once:!0})}" : '';
+		$js   = <<<'JS'
+!function(w,d){var n=navigator,k=n.connection||{},s=k.saveData||/2g$/.test(k.effectiveType)||n.deviceMemory<=2,N='viewTransitionName',L=location,V=w.bknVT={c:function(){V.i&&(V.i.style[N]='',V.i=0)}},r,q,h;
+JS;
+		$js  .= $back . <<<'JS'
+function on(t,f){w.addEventListener(t,function(e){var v=e.viewTransition,c,h=d.querySelector('#bkd-hero-media>img');if(v)if(s)v.skipTransition();else{try{c=JSON.parse(sessionStorage.bkn_ctx)}catch(x){}c=c||{};f(v,c,h,c.vt&&c.path==L.pathname,c.vt&&c.from==L.href,e)}})}on('pageswap',function(v,c,h,m,b,e){var t=e.activation.entry.url;t!=V.h&&V.c();h&&!(m&&t==c.from)&&(h.style[N]='none')});on('pagereveal',function(v,c,h,m,b,i){V.c();h&&m&&c.im&&(h.style.background='url('+JSON.stringify(c.im)+') 50%/cover');if(b&&(i=d.querySelectorAll('#d-'+(c.id|0)+' .bkn-img img'),i=i[c.n]||i[0])){h=i.getBoundingClientRect();h.top<innerHeight&&h.bottom>0&&(i.style[N]='bkn-photo',V.i=i,v.finished.then(V.c))}})}(window,document);
 JS;
 		return '<style id="bkn-vt">' . $css . "</style>\n" . '<script id="bkn-vt-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $js . "</script>\n";
 	}
@@ -11117,18 +11155,30 @@ JS;
     /* this page, clicked in the last 30 minutes, and not reached since from somewhere else */
     if(C.lp||!x||typeof x.from!=='string'||x.path!==location.pathname||!(Date.now()-x.t<18e5)||(rf&&rf!==x.from.split('#')[0])){return;}
     C.bkn=x;
-    var b=String(x.beds||''),f=/^(studio|\d)$/.test(b)?$('.bkd-filters button[data-beds="'+b+'"]'):null,tb=$('.bkd-tbl'),all=$('.bkd-filters button[data-g="*"]');
+    var b=String(x.beds||''),f=/^(studio|\d)$/.test(b)?$('.bkd-filters button[data-beds="'+b+'"]'):null,tb=$('.bkd-tbl'),all=$('.bkd-filters button[data-g="*"]'),nv;
     if(!f||!tb||!all){return;}
+    /* on the lists 4 means four and more (so does any number on search results while the site reads bedrooms as a minimum):
+       when the table also has larger homes it stays on All, as pressing one size would hide some of them */
+    if((b==='4'||(C.bedsMode==='min'&&x.src==='search'))&&$$('.bkd-filters button[data-beds]').some(function(o){return +o.getAttribute('data-beds')>+b;})){return;}
     C.quiet=1;f.click();C.quiet=0;
     var p=document.createElement('p');p.className='bkd-ctxb';
-    p.innerHTML=esc('Showing '+(b==='studio'?'studio':b+' bed')+' homes from your search.')+' <button type="button">Show all</button>';
+    p.innerHTML=esc('Showing '+(b==='studio'?'studios':b+' bed homes')+(x.src==='search'?' from your search.':' only.'))+' <button type="button">Show all</button>';
     tb.parentNode.insertBefore(p,tb);
     $$('.bkd-filters button').forEach(function(o){o.addEventListener('click',function(){if(!C.quiet){p.hidden=true;}});});
     p.querySelector('button').addEventListener('click',function(){all.click();try{all.focus({preventScroll:true});}catch(e){}});
-    track('context_beds',{beds:b});
+    try{nv=performance.getEntriesByType('navigation')[0];}catch(e){nv=null;}
+    if(!nv||nv.type==='navigate'){track('context_beds',{beds:b});} /* once: not again on a reload, Back or Forward */
   })();
 
 JS;
+		if ( blockke_bkn_on( 'prefetch' ) && is_singular( 'estate_property' ) ) {
+			// A page opened from a prefetched copy was not counted when it was fetched (blockke_dev_count_view()), so it counts
+			// now that it is shown: once, through blockke_bkn_view(). Reloads and history visits are fetched again and counted there.
+			$ctx .= "  /* v1.6: opened from a prefetched copy: count the view now */\n"
+				. "  (function(){try{var n=performance.getEntriesByType('navigation')[0];if(!C.lp&&n&&n.deliveryType==='navigational-prefetch'&&n.type==='navigate'&&navigator.sendBeacon){navigator.sendBeacon("
+				. wp_json_encode( esc_url_raw( rest_url( 'block/v1/view' ) ), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS )
+				. ",new URLSearchParams({id:String(C.id)}));}}catch(e){}})();\n\n";
+		}
 		$back = <<<'JS'
 
     /* v1.6: back to the list the card was on, by its name ("Back to new developments"); the history.back() path stays */
@@ -11155,18 +11205,79 @@ JS;
 		return strtr( $js, $swap );
 	}
 
-	/** Development page styles for the v1.6 additions: the bedrooms note, and the photo-first 3:2 hero while the transition is on. */
+	/**
+	 * Development page styles for the v1.6 additions: the bedrooms note, the back link on a line of its own, and the
+	 * photo-first 3:2 hero while the transition is on.
+	 */
 	function blockke_bkn_dev_css( $vt ) {
+		// The way back (from a card, or the older "Back to results"): 44px to tap. From 700px it heads the breadcrumb on a line
+		// of its own, without the "/" after it, so a long "Back to homes for sale in Westlands" never breaks the trail.
 		$css = '#bkd .bkd-ctxb{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;margin:-8px 0 8px;font-size:14px;line-height:1.5;color:var(--slate)}'
-			. '#bkd .bkd-ctxb button{display:inline-flex;align-items:center;min-height:40px;margin:0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;font:600 14px/1.4 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;cursor:pointer}';
-		if ( $vt ) { // photo first and full-bleed on phones, 7 of 12 columns from 1000px (held in view beside the text), 3:2 throughout like the cards
-			$css .= '#bkd .bkd-hero-vt .bkd-hero-media{aspect-ratio:3/2}'
+			. '#bkd .bkd-ctxb button{display:inline-flex;align-items:center;min-height:44px;margin:0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;font:600 14px/1.4 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;cursor:pointer}'
+			. '@media (max-width:699px){#bkd .bkd-crumbs .bkd-cr-back{min-height:44px;margin:-2px 0}}'
+			. '@media (min-width:700px){#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back{display:flex;align-items:center;width:100%;min-height:44px;margin:-10px 0 -4px}#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:none}}';
+		if ( $vt ) {
+			// Photo first and full-bleed on phones, 7 of 12 columns from 1000px (held in view beside the text, with photos 2
+			// and 3 under it so that column is not left half empty), 3:2 throughout like the cards
+			$css .= '#bkd .bkd-hero-vt .bkd-hero-media{aspect-ratio:3/2}#bkd .bkd-hero-side{grid-area:media;min-width:0}#bkd .bkd-hero-thumbs{display:none}'
 				. '@media (max-width:999px){#bkd .bkd-hero-vt{padding-top:0}#bkd .bkd-hero-vt .bkd-hero-grid{grid-template-areas:"media" "head" "body";row-gap:24px}}'
 				. '@media (min-width:1000px){#bkd .bkd-hero-vt .bkd-hero-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);column-gap:56px}'
-				. '#bkd .bkd-hero-vt .bkd-hero-media{position:sticky;top:calc(var(--top) + 24px)}}';
+				. '#bkd .bkd-hero-side{position:sticky;top:calc(var(--top) + 24px)}'
+				. '#bkd .bkd-hero-thumbs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}'
+				. '#bkd .bkd-hero-thumbs button{position:relative;display:block;aspect-ratio:3/2;margin:0;padding:0!important;border:0!important;border-radius:0!important;overflow:hidden;background:var(--mist)!important;box-shadow:none!important;cursor:zoom-in}'
+				. '#bkd .bkd-hero-thumbs img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover}}';
 		}
 		return $css;
 	}
+
+	/**
+	 * POST block/v1/view (id): a development page opened from a prefetched copy counts its view (see blockke_bkn_dev_js()).
+	 * Only a published listing on the development layout; not an editor's own visit (as on the page itself); one count per
+	 * connection and listing every 10 minutes. Always answers 204, so nothing can be learned from it.
+	 */
+	function blockke_bkn_view( $req ) {
+		$id = absint( $req->get_param( 'id' ) );
+		$p  = $id ? get_post( $id ) : null;
+		if ( ! $p || 'estate_property' !== $p->post_type || 'publish' !== $p->post_status || ! blockke_dev_layout_on( $id ) ) {
+			return new WP_REST_Response( null, 204 );
+		}
+		$uid = (int) wp_validate_auth_cookie( '', 'logged_in' ); // REST calls without a nonce run as a visitor, so the cookie says who it is
+		if ( $uid && user_can( $uid, 'edit_post', $id ) ) {
+			return new WP_REST_Response( null, 204 );
+		}
+		$ip = '';
+		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR' ) as $h ) {
+			if ( ! empty( $_SERVER[ $h ] ) ) {
+				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $h ] ) );
+				break;
+			}
+		}
+		$rk = 'bkd_rl_v_' . md5( $ip . '|' . $id );
+		if ( get_transient( $rk ) ) {
+			return new WP_REST_Response( null, 204 );
+		}
+		set_transient( $rk, 1, 10 * MINUTE_IN_SECONDS );
+		blockke_dev_count_view( $id );
+		return new WP_REST_Response( null, 204 );
+	}
+
+	add_action(
+		'rest_api_init',
+		function () {
+			if ( empty( blockke_dev_config()['prefetch'] ) ) { // only while prefetch is on, as only then are prefetches left uncounted
+				return;
+			}
+			register_rest_route(
+				'block/v1',
+				'/view',
+				array(
+					'methods'             => 'POST',
+					'callback'            => 'blockke_bkn_view',
+					'permission_callback' => '__return_true',
+				)
+			);
+		}
+	);
 
 	// The transition's styles and listeners on every #bkd page (development layout, area, segment, index and search pages),
 	// early in <head>; development pages also hold their first paint until the hero is parsed, so the photo lands on it.
@@ -11177,7 +11288,7 @@ JS;
 				return;
 			}
 			$GLOBALS['blockke_bkn_vt_printed'] = true; // once per page (the search page checks the same flag)
-			echo blockke_bkn_vt_head(); // phpcs:ignore WordPress.Security.EscapeOutput -- fixed markup.
+			echo blockke_bkn_vt_head( ! is_singular( 'estate_property' ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- fixed markup.
 			if ( is_singular( 'estate_property' ) ) {
 				echo '<link rel="expect" href="#bkd-hero-media" blocking="render">' . "\n";
 			}
