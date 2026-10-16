@@ -4764,7 +4764,6 @@ CSS;
     var p={listing:C.id,name:d.name,phone:d.phone,email:d.email||'',unit:d.unit&&d.unit!=='Not sure yet'?d.unit:(form.getAttribute('data-unit')||''),purpose:d.purpose||'',timeline:d.timeline||'',contact:d.contact||'',message:d.message||'',
       source:form.getAttribute('data-bkd-lead'),intent:form.getAttribute('data-intent')||'',page:location.href.slice(0,300),attr:attr(),hp:d.bkd_hp||''};
     if(C.areaPage){p.area=C.areaId||0;p.seg=C.seg||'';p.look=d.look||'';p.ptype=d.ptype||'';p.budget=d.budget||'';p.beds=d.beds||'';}
-    if(C.indexPage){p.index='1';p.filters=location.search.slice(1,200);p.budget=d.budget||'';}
     remembered={name:d.name,phone:d.phone,email:d.email||remembered.email||''};try{sessionStorage.setItem('bkd_lead',JSON.stringify(remembered));}catch(er){}
     var btn=form.querySelector('[type=submit]');btn.disabled=true;
     var al=form.querySelector('.bkd-alert');if(al){al.remove();}
@@ -4981,6 +4980,9 @@ CSS;
   }else{rv.forEach(function(x){x.classList.add('in');});}
 })();
 JS;
+		if ( blockke_bkn_on( 'dev_index', 'bke_index' ) ) { // v1.6: the new developments page's shortlist form sends its filters; with dev_index off the script is as in v1.5
+			$js = str_replace( "p.beds=d.beds||'';}\n", "p.beds=d.beds||'';}\n    if(C.indexPage){p.index='1';p.filters=location.search.slice(1,200);p.budget=d.budget||'';}\n", $js );
+		}
 		return blockke_bkn_dev_js( $js ); // v1.6: the card context (bedrooms, "Back to …"), only while its switches are on
 	}
 
