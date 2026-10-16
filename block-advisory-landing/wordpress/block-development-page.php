@@ -10875,7 +10875,9 @@ CSS;
   function fade(box){[].forEach.call(box.querySelectorAll('.bkn-img img'),function(im){var on=function(){im.classList.add('bks-in');};if(im.complete){on();}else{im.addEventListener('load',on,{once:true});im.addEventListener('error',on,{once:true});}});}
   fade(root);root.classList.add('bks-fade');
   track('search_view',{count_devs:+at(root,'data-devs'),count_homes:+at(root,'data-homes'),segments:at(root,'data-segs')});
-  if(root.hasAttribute('data-none')){track('index_no_results',{filters:at(root,'data-filters')});}
+  /* once per search: not again when the same empty search is reloaded or comes back from history */
+  var nav=null;try{nav=performance.getEntriesByType('navigation')[0];}catch(x){}
+  if(root.hasAttribute('data-none')&&(!nav||nav.type==='navigate')){track('index_no_results',{filters:at(root,'data-filters')});}
   root.addEventListener('click',function(e){
     var a=e.target&&e.target.closest?e.target.closest('a'):null;if(!a){return;}
     var card=a.closest('.bkn-card');
