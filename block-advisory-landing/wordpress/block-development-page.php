@@ -9560,6 +9560,7 @@ JS;
 @media (min-width:768px){#bkd .bka16-ask .bkd-form{grid-template-columns:minmax(0,1fr) auto;align-items:end}#bkd .bka16-ask .bkd-qgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}#bkd .bka16-ask .bkd-consent{grid-column:1/-1}}
 #bkd .bka16-list{padding:0}
 #bkd .bka16-bar{margin:0 0 40px}
+@media (max-width:999px){#bkd .bka16-bar .bkn-bar-in>.bkn-f{margin-left:auto}}
 @media (scripting:none) and (max-width:999px){#bkd .bka16-bar .bkn-fbtn{display:none}#bkd .bka16-bar .bkn-fields{display:flex;flex-wrap:wrap;gap:0 24px}#bkd .bka16-bar .bkn-bar-in{flex-wrap:wrap}}
 #bkd .bka16-grid>.bkn-card[hidden]{display:none}
 #bkd .bka16-text{margin-top:56px;max-width:720px}
