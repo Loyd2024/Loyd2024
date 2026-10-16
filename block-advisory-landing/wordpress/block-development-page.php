@@ -10267,6 +10267,43 @@ JS;
 		return $n;
 	}
 
+	/**
+	 * The phone sheet's button for a count of homes: "Show 12 homes", "Show 1 home"; "Show 5 listings" when the results hold
+	 * commercial property or land too, as the count under the H1 says. $kinds: the kinds found (none: the kinds the query asks
+	 * for, so an empty search for 3 bed homes says "Show 0 homes").
+	 */
+	function blockke_search_show_label( $homes, $kinds, $q ) {
+		if ( $kinds ) {
+			$only = array( 'home' ) === array_keys( $kinds );
+		} else {
+			$tt   = blockke_search_types();
+			$only = ! $q['cats'] && ( $q['types'] || '' !== $q['beds'] );
+			foreach ( $q['types'] as $t ) {
+				$only = $only && 'home' === $tt[ $t ][0];
+			}
+		}
+		return 'Show ' . (int) $homes . ' ' . ( $only ? ( 1 === (int) $homes ? 'home' : 'homes' ) : ( 1 === (int) $homes ? 'listing' : 'listings' ) );
+	}
+
+	/** What a query finds, counted as the results page counts it: array( cards, homes, kinds found ). For the sheet's live button. */
+	function blockke_search_total( $q ) {
+		$devs  = 0;
+		$homes = 0;
+		$kinds = array();
+		foreach ( blockke_search_match( $q ) as $key => $groups ) {
+			$cards = blockke_search_cards( $groups, $key, $q );
+			if ( ! $cards ) {
+				continue;
+			}
+			$kinds[ explode( '|', $key )[0] ] = 1;
+			$devs                            += count( $cards );
+			foreach ( $cards as $c ) {
+				$homes += $c['homes'];
+			}
+		}
+		return array( $devs, $homes, $kinds );
+	}
+
 	/** One section's cards, sorted: what each shows and how it sorts. Recommended is the theme's order: featured, then newest. */
 	function blockke_search_cards( $groups, $key, $q ) {
 		list( $kind, $act ) = explode( '|', $key );
@@ -10425,7 +10462,10 @@ JS;
 		return $h;
 	}
 
-	/** A result with no photo at all, as a line in "Also listed": name, then where, what and the price. Never a placeholder tile. */
+	/**
+	 * A result with no photo at all, as a line in "Also listed": name, then where, what and the price ("From" when one price
+	 * covers several sizes). Never a placeholder tile.
+	 */
 	function blockke_search_text_item( $card, $sec ) {
 		$d    = blockke_bkn_devs()['devs'][ $card['g'] ];
 		$rent = 'rent' === $sec['act'];
@@ -10439,7 +10479,8 @@ JS;
 		} else {
 			$url   = $d['url'];
 			$what  = 'home' === $sec['kind'] ? blockke_bkn_beds( $d['beds'], $d['types'] ) : '';
-			$price = $rent ? blockke_bkn_price( $d['rfrom'], $d['rto'], true ) : blockke_bkn_price( $d['from'], $d['to'] );
+			$many  = '' !== $what && count( $d['beds'] ) > 1; // "1–2 bed · From KES 8.4M": one price for several sizes is a "from" price, as on the cards
+			$price = $rent ? blockke_bkn_price( $d['rfrom'], $d['rto'], true, false, $many ) : blockke_bkn_price( $d['from'], $d['to'], false, false, $many );
 			$id    = (int) $d['id'];
 		}
 		$bits = array_filter( array( $d['place'], $what, $price ) );
@@ -10801,6 +10842,7 @@ JS;
 			'near'   => $relax[1],
 			'filter' => implode( ',', $filt ),
 			'nset'   => count( array_filter( array( (bool) $q['area'], '' !== $q['beds'], '' !== $q['price'], '' !== $q['completion'] ) ) ),
+			'show_n' => blockke_search_show_label( $homes, $kinds, $q ),
 		);
 	}
 
@@ -10893,10 +10935,13 @@ JS;
 			$hidden .= '<input type="hidden" name="bke_search" value="1">';
 		}
 		$clear = $s['nset'] ? '<a class="bks-clear" href="' . esc_url( blockke_search_url( $q, array( 'area' => array(), 'beds' => '', 'price' => '', 'lo' => 0, 'hi' => 0, 'completion' => '', 'sort' => '', 'n' => 0 ) ) ) . '">Clear filters</a>' : '';
+		// The sheet is the index's and the area pages' design: "Filters" and a close button, labelled boxed selects, and a button
+		// that counts as you choose ("Show 12 homes", asked of this page with ?bke_count=1). Without JavaScript the fields open
+		// in the page and the button says "Show results", since nothing can count them there.
 		return '<form class="bkn-bar bks-bar" id="bks-bar" method="get" action="' . esc_url( get_permalink( blockke_search_page_id() ) ) . '" data-bke-own>' . $hidden
 			. '<div class="bkd-wrap bks-bar-in"><a class="bks-ftog" href="#bks-f" aria-controls="bks-f" aria-expanded="false">Filters' . ( $s['nset'] ? ' · ' . (int) $s['nset'] : '' ) . '</a>'
-			. '<div class="bks-f" id="bks-f" role="group" aria-label="Filters"><div class="bks-fh"><b>Filters</b><a class="bks-x" href="#" data-bks-close>Close</a></div>'
-			. '<div class="bks-fl">' . implode( '', $f ) . '</div><div class="bks-ff"><button class="bks-apply" type="submit">Show results</button>' . $clear . '</div></div>'
+			. '<div class="bks-f" id="bks-f" role="group" aria-label="Filters"><div class="bks-fh"><b>Filters</b><a class="bks-x" href="#" data-bks-close aria-label="Close filters">' . blockke_dev_icon( 'close' ) . '</a></div>'
+			. '<div class="bks-fl">' . implode( '', $f ) . '</div><div class="bks-ff"><button class="bks-apply" type="submit" data-bks-show="' . esc_attr( $s['show_n'] ) . '">Show results</button>' . $clear . '</div></div>'
 			. str_replace( 'class="bks-sel"', 'class="bks-sel bks-sort"', $sel( 'sort', 'Sort', $sorts, $q['sort'] ) ) . '</div></form>';
 	}
 
@@ -10906,7 +10951,7 @@ JS;
 		$e    = 'esc_html';
 		$q    = $s['q'];
 		$o    = array();
-		$o[]  = '<div id="bkd" class="bkd bkn bks" data-bkn-src="search" data-bkn-label="your search" data-devs="' . (int) $s['devs'] . '" data-homes="' . (int) $s['homes'] . '" data-segs="' . esc_attr( implode( ',', array_keys( $s['secs'] ) ) ) . '" data-filters="' . esc_attr( $s['filter'] ) . '"' . ( $s['devs'] ? '' : ' data-none' ) . '>' . blockke_dev_sprite( array( 'wa' ) );
+		$o[]  = '<div id="bkd" class="bkd bkn bks" data-bkn-src="search" data-bkn-label="your search" data-devs="' . (int) $s['devs'] . '" data-homes="' . (int) $s['homes'] . '" data-segs="' . esc_attr( implode( ',', array_keys( $s['secs'] ) ) ) . '" data-filters="' . esc_attr( $s['filter'] ) . '"' . ( $s['devs'] ? '' : ' data-none' ) . '>' . blockke_dev_sprite( array( 'wa', 'close' ) );
 		$tabs = '';
 		foreach ( $s['tabs'] as $t ) {
 			$tabs .= '<a href="' . esc_url( $t[1] ) . '"' . ( $t[2] ? ' aria-current="page"' : '' ) . '>' . $e( $t[0] ) . '</a>';
@@ -11024,26 +11069,33 @@ JS;
 #bkd .bks-bar{position:sticky;top:var(--top);z-index:30;margin:0;background:var(--paper);border-bottom:1px solid var(--line)}
 #bkd .bks-bar.bks-up{z-index:100050}
 #bkd .bks-bar-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 16px;min-height:52px}
-#bkd .bks-ftog,#bkd .bks-x{display:inline-flex;align-items:center;min-height:44px;font-size:15px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
+/* phones and tablets: "Filters" and Sort in the bar, as on the index and area pages; the sheet is their design too: "Filters"
+   (17px) and a 44px close button, each field labelled above a boxed 52px select, the counting button and "Clear filters" */
+#bkd .bks-ftog{display:inline-flex;align-items:center;height:44px;border-bottom:1px solid var(--line-2);font:600 15px/1 var(--font);color:var(--navy)!important;text-decoration:none!important}
+#bkd .bks-x{display:grid;place-items:center;flex:none;width:44px;height:44px;color:var(--navy)!important}
+#bkd .bks-x .bkd-i{width:20px;height:20px}
+#bkd .bks-f:not(.bks-open) .bks-x{margin-right:-12px}
 #bkd .bks-f{display:none;order:3;flex:1 0 100%;padding:4px 0 24px}
 #bkd .bks-f:target,#bkd .bks-f.bks-open{display:block}
-#bkd .bks-fh{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px}
-#bkd .bks-fh b{font:var(--display-w) 30px/1.1 var(--display);letter-spacing:var(--display-ls);color:var(--navy)}
-#bkd .bks-fl{display:grid;gap:18px}
-#bkd .bks-sel{display:grid;gap:6px;min-width:0;margin:0}
+#bkd .bks-fh{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px}
+#bkd .bks-fh b{font:600 17px/1.2 var(--font);letter-spacing:0;color:var(--navy)}
+#bkd .bks-fl{display:grid;gap:20px}
+#bkd .bks-sel{display:grid;gap:8px;min-width:0;margin:0}
 #bkd .bks-sel[hidden]{display:none}
 #bkd .bks-lab{font-size:14px;font-weight:600;line-height:1.4;color:var(--ink)}
-#bkd .bks-bar select{display:block;width:100%;max-width:none;height:48px;min-height:0;margin:0;padding:0 40px 0 14px;border:1px solid var(--line-2)!important;border-radius:2px!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center/12px 8px!important;box-shadow:none!important;font:400 16px/1.2 var(--font)!important;color:var(--navy)!important;-webkit-appearance:none;appearance:none;cursor:pointer}
-#bkd .bks-ff{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;margin-top:24px}
+#bkd .bks-bar select{display:block;width:100%;max-width:none;height:52px;min-height:0;margin:0;padding:0 44px 0 16px;border:1px solid var(--line-2)!important;border-radius:0!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 16px center/12px 8px!important;box-shadow:none!important;font:400 16px/1.2 var(--font)!important;color:var(--navy)!important;-webkit-appearance:none;appearance:none;cursor:pointer}
+#bkd .bks-bar select:focus-visible{outline:2px solid var(--brass-d);outline-offset:2px}
+#bkd .bks-ff{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;margin-top:32px}
 #bkd .bks-apply{display:inline-flex;align-items:center;justify-content:center;flex:1 1 auto;min-height:52px;margin:0;padding:0 24px!important;border:0!important;border-radius:0!important;background:var(--navy)!important;box-shadow:none!important;font:600 15px/1.2 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:#fff!important;cursor:pointer}
 #bkd .bks-clear{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:500;color:var(--slate)!important;text-decoration:underline;text-underline-offset:4px}
 #bkd .bks-sort{display:block}
 #bkd .bks-sort .bks-lab{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-#bkd .bks-bar .bks-sort select,#bkd .bks-bar .bks-sort select.on{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 14px/1.2 var(--font)!important}
+#bkd .bks-bar .bks-sort select{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-bottom:1px solid var(--line-2)!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 15px/1.2 var(--font)!important}
+#bkd .bks-bar .bks-sort select.on{border-bottom:2px solid var(--brass)!important}
 #bkd .bks-f.bks-open{position:fixed;inset:0;z-index:100050;display:flex;flex-direction:column;padding:0;background:var(--paper);overflow:auto;overscroll-behavior:contain}
-#bkd .bks-open .bks-fh{position:sticky;top:0;z-index:1;padding:0 20px;background:var(--paper);border-bottom:1px solid var(--line)}
-#bkd .bks-open .bks-fl{padding:20px}
-#bkd .bks-open .bks-ff{position:sticky;bottom:0;margin:auto 0 0;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#bkd .bks-open .bks-fh{position:sticky;top:0;z-index:1;padding:0 calc(var(--gutter) - 12px) 0 var(--gutter);background:var(--paper);border-bottom:1px solid var(--line)}
+#bkd .bks-open .bks-fl{padding:20px var(--gutter) 32px}
+#bkd .bks-open .bks-ff{position:sticky;bottom:0;flex-wrap:nowrap;margin:auto 0 0;padding:12px var(--gutter) calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
 #bkd .bks-sec{padding:32px 0 0}
 #bkd .bks-sec+.bks-sec{padding-top:48px;content-visibility:auto;contain-intrinsic-size:auto 480px}
 #bkd .bks-h2{margin:0 0 24px!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:30px!important;line-height:1.1!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
@@ -11051,7 +11103,7 @@ JS;
 #bkd .bks-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:40px 24px}
 #bkd .bks-grid>.bkn-card{scroll-margin-top:calc(var(--top) + 88px)}
 #bkd .bks-more-w{margin:40px 0 0}
-#bkd .bks-more,#bkd .bks-wa{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:15px;font-weight:600;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
+#bkd .bks-more,#bkd .bks-wa{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:15px;font-weight:500;color:var(--navy)!important;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px}
 #bkd .bks-more[aria-busy]{opacity:.6;cursor:progress}
 #bkd .bks-none-t{max-width:38ch;font-size:18px;line-height:1.5;color:var(--ink)}
 #bkd .bks-relax{margin:12px 0 0;padding:0;list-style:none}
@@ -11093,7 +11145,7 @@ JS;
 #bkd .bks-ff{display:contents}
 #bkd .bks-sort{flex:none;margin-left:auto;padding:10px 0}
 #bkd .bks-lab{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-#bkd .bks-bar select{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-bottom:1px solid var(--line-2)!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 14px/1.2 var(--font)!important}
+#bkd .bks-bar select{width:auto;height:44px;padding:0 22px 0 0;border:0!important;border-bottom:1px solid var(--line-2)!important;border-radius:0!important;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230D2440' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right center/10px 7px!important;font:500 15px/1.2 var(--font)!important}
 #bkd .bks-bar select{field-sizing:content;min-width:72px}
 #bkd .bks-bar select.on{border-bottom:2px solid var(--brass)!important}
 #bkd .bks-apply{flex:none;min-height:44px;padding:0!important;background:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:5px}
@@ -11137,16 +11189,27 @@ CSS;
   });
   /* the bar: changes apply at once from 1000px (and Sort everywhere); on phones and tablets the sheet applies them together.
      A change made from the keyboard (arrow keys step through a closed select) waits for Enter or for the select to lose focus,
-     so each key press doesn't reload the page */
+     so each key press doesn't reload the page. Keys that open the select's list (Space, F4, Alt+arrow) don't count: what is
+     picked from the open list is a choice, and applies at once like a click */
   var form=document.getElementById('bks-bar');
   if(form){
     var box=document.getElementById('bks-f'),tog=form.querySelector('.bks-ftog'),wide=window.matchMedia('(min-width:1000px)'),last=null,kb=0,dirty=0;
     var all=function(){return [].slice.call(form.querySelectorAll('select,input'));};
     var go=function(){all().forEach(function(x){if(x.name&&x.value===''){x.disabled=true;}});form.submit();};
     var now=function(t){return wide.matches||!box||!box.contains(t);};
+    /* the sheet's button counts as you choose ("Show 12 homes"), asked of this page with ?bke_count=1; until it answers it keeps
+       the last count, and says "Show results" if it can't */
+    var show=form.querySelector('[data-bks-show]'),seq=0,wait=null;
+    if(show&&show.getAttribute('data-bks-show')){show.textContent=show.getAttribute('data-bks-show');}
+    var count=function(){if(!show||!window.fetch||!window.URLSearchParams){return;}clearTimeout(wait);wait=setTimeout(function(){
+      var u=new URLSearchParams(),me=++seq,a=form.action;all().forEach(function(x){if(x.name&&x.value!==''&&!x.disabled){u.append(x.name,x.value);}});u.set('bke_count','1');
+      var said=function(t){if(me===seq){show.textContent=t;}};
+      fetch(a+(a.indexOf('?')<0?'?':'&')+u.toString(),{credentials:'same-origin',headers:{Accept:'application/json'}}).then(function(r){if(!r.ok){throw new Error('count');}return r.json();})
+        .then(function(j){said(j&&j.show?j.show:'Show results');}).catch(function(){said('Show results');});},150);};
     form.addEventListener('submit',function(e){e.preventDefault();go();});
     window.addEventListener('pageshow',function(){all().forEach(function(x){x.disabled=false;});kb=0;dirty=0;});
     form.addEventListener('keydown',function(e){var t=e.target;if(!t||t.tagName!=='SELECT'){return;}
+      if(e.key===' '||e.key==='F4'||(e.altKey&&(e.key==='ArrowDown'||e.key==='ArrowUp'))){kb=0;return;}
       if(e.key==='Enter'){setTimeout(function(){if(dirty){kb=0;dirty=0;if(now(t)){go();}}},0);}
       else if(e.key!=='Tab'&&e.key!=='Shift'&&e.key!=='Escape'){kb=1;}});
     form.addEventListener('pointerdown',function(){kb=0;});
@@ -11155,8 +11218,9 @@ CSS;
       if(t.name==='for'){var p=form.querySelector('select[name="price"]'),c=form.querySelector('[data-bks-done]');
         if(p){var b={};try{b=JSON.parse(p.getAttribute('data-bands')||'{}');}catch(x){b={};}p.length=1;(b[t.value==='rent'?'rent':'sale']||[]).forEach(function(o){p.add(new Option(o[1],o[0]));});p.value='';p.classList.remove('on');}
         if(c){c.hidden=t.value==='rent';if(c.hidden){c.querySelector('select').value='';}}}
+      if(!now(t)){count();return;}
       if(kb){dirty=1;return;}
-      if(now(t)){go();}
+      go();
     });
     var trap=function(e){if(e.key==='Escape'){shut();return;}if(e.key!=='Tab'){return;}
       var f=[].slice.call(box.querySelectorAll('a[href],button,select')).filter(function(x){return x.offsetParent!==null&&!x.disabled;});if(!f.length){return;}
@@ -11191,6 +11255,34 @@ CSS;
 })();
 JS;
 	}
+
+	add_action(
+		'template_redirect',
+		function () {
+			// The phone sheet's live button: ?bke_count=1 on the results page answers with the button's words for that query
+			// ({"show":"Show 12 homes"}), counted as the results would count them, without drawing the page. Only while the
+			// results are ours (search_layout, or an editor's preview); a query we can't read answers {"show":""}.
+			if ( is_admin() || ! isset( $_GET['bke_count'] ) || ! is_page( blockke_search_page_id() ) || ! blockke_bkn_on( 'search_layout', 'bke_search' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				return;
+			}
+			$get = wp_unslash( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification
+			unset( $get['bke_count'] );
+			$show = '';
+			try {
+				$q = blockke_search_parse( $get );
+				if ( null !== $q && blockke_bkn_rows() ) {
+					list( , $homes, $kinds ) = blockke_search_total( $q );
+					$show                    = blockke_search_show_label( $homes, $kinds, $q );
+				}
+			} catch ( Throwable $x ) {
+				$show = '';
+			}
+			nocache_headers();
+			header( 'X-Robots-Tag: noindex' );
+			wp_send_json( array( 'show' => $show ) );
+		},
+		4
+	);
 
 	add_action(
 		'template_redirect',
