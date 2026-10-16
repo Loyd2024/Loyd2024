@@ -2721,7 +2721,9 @@ JS;
 	/**
 	 * While the v1.6 area pages are on (card_v16): the area segment page a search link stands for, as search would redirect
 	 * it ("?location=Kilimani&property_action_category[]=for-sale" → /property_area/kilimani/homes-for-sale/, with ?beds=2
-	 * kept), at the page's canonical when it has no filter. '' when there is none (switch off, area page off, nothing listed).
+	 * kept), at the page's canonical when it has no filter. These links are always about homes ("See all homes for sale in
+	 * Kilimani"), so a link without bedrooms or a category is read as homes: search itself keeps a search with no type on the
+	 * results, which show every kind. '' when there is none (switch off, area page off, nothing listed).
 	 */
 	function blockke_dev_seg_url( $url ) {
 		if ( ! function_exists( 'blockke_search_redirect_url' ) || ! blockke_bkn_on( 'card_v16' ) ) {
@@ -2731,6 +2733,9 @@ JS;
 		$q = blockke_search_parse( $get );
 		if ( ! $q || 1 !== count( $q['area'] ) || 1 !== count( $q['for'] ) ) {
 			return '';
+		}
+		if ( ! $q['types'] && ! $q['cats'] ) {
+			$q['types'] = array( 'homes' );
 		}
 		$to   = blockke_search_redirect_url( $q, $get );
 		$term = get_term_by( 'slug', $q['area'][0], 'property_area' );
@@ -2787,7 +2792,7 @@ JS;
 		if ( $c['sim_off'] ) {
 			return null;
 		}
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? $cfg['area_pages'] : 0 ) ) );
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) ); // 'homes': blocks cached before "See all" was read as homes (blockke_dev_seg_url) are rebuilt
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -2948,10 +2953,36 @@ JS;
 		return $lists;
 	}
 
-	/** The search sheet: Buy/Rent, area, bedrooms, budget and completion, filled in from this listing. */
+	/**
+	 * Config budget_bands for the search sheet and its script (window.BKDEV.bands): while the v1.6 pages are on (card_v16,
+	 * preview ?bke_cards=1) each label is written as the v1.6 filters write it ("KES 8–12M", "KES 80–150K a month"), so a
+	 * page never words one budget two ways; otherwise exactly as configured.
+	 */
+	function blockke_dev_sheet_bands() {
+		$all = blockke_dev_config()['budget_bands'];
+		if ( ! is_array( $all ) || ! function_exists( 'blockke_search_band_label' ) || ! blockke_bkn_on( 'card_v16', 'bke_cards' ) ) {
+			return $all;
+		}
+		foreach ( $all as $k => $list ) {
+			foreach ( is_array( $list ) ? $list : array() as $i => $b ) {
+				if ( is_array( $b ) && count( $b ) >= 2 ) {
+					$all[ $k ][ $i ][2] = blockke_search_band_label( (float) $b[0], (float) $b[1], 'rent' === $k );
+				}
+			}
+		}
+		return $all;
+	}
+
+	/**
+	 * The search sheet: Buy/Rent, area, bedrooms, budget and completion, filled in from this listing. While the v1.6 pages are
+	 * on (card_v16) budgets and completion years read as the v1.6 filters do ("KES 8–12M", "Any completion", "2029 and later");
+	 * while the v1.6 results page is on (search_layout), which reads 4 bedrooms as four and more, the last chip is "4+".
+	 */
 	function blockke_dev_search_sheet( $d ) {
 		$cfg   = blockke_dev_config();
 		$c     = $d['ctx'];
+		$v16   = blockke_bkn_on( 'card_v16', 'bke_cards' );
+		$four  = 'min' !== $cfg['beds_mode'] && blockke_bkn_on( 'search_layout' );
 		$lists = blockke_dev_search_lists();
 		$areas = $lists['areas'];
 		if ( $c['area_name'] && ! in_array( $c['area_name'], $areas, true ) ) {
@@ -2959,8 +2990,13 @@ JS;
 		}
 		$rent  = 'rent' === $c['action'];
 		$beds  = blockke_dev_link_beds( $c );
-		$beds  = ctype_digit( $beds ) && 'min' !== $cfg['beds_mode'] ? (string) min( 5, (int) $beds ) : $beds;
-		$bands = isset( $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] ) ? (array) $cfg['budget_bands'][ $rent ? 'rent' : 'sale' ] : array();
+		$beds  = ctype_digit( $beds ) && 'min' !== $cfg['beds_mode'] ? (string) min( $four ? 4 : 5, (int) $beds ) : $beds;
+		$all   = blockke_dev_sheet_bands();
+		$bands = isset( $all[ $rent ? 'rent' : 'sale' ] ) ? (array) $all[ $rent ? 'rent' : 'sale' ] : array();
+		$years = $lists['years'];
+		if ( $v16 && $years ) { // the years the v1.6 filters offer, in their words, of those the Completion taxonomy has
+			$years = array_intersect_key( blockke_index_years(), $years );
+		}
 		$pick  = '';
 		if ( $c['price'] > 0 && ! $c['flag'] ) {
 			foreach ( $bands as $b ) {
@@ -2991,7 +3027,7 @@ JS;
 		}
 		$h .= '</select></label><input type="hidden" name="price_low" disabled><input type="hidden" name="price_max" disabled>';
 		$h .= '<fieldset class="bkd-f bkd-sf-wide"><legend>Bedrooms</legend><div class="bkd-chips">';
-		$chips = 'min' === $cfg['beds_mode'] ? array( '' => 'Any', '1' => '1+', '2' => '2+', '3' => '3+', '4' => '4+' ) : array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5' );
+		$chips = 'min' === $cfg['beds_mode'] ? array( '' => 'Any', '1' => '1+', '2' => '2+', '3' => '3+', '4' => '4+' ) : ( $four ? array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4+' ) : array( '' => 'Any', '1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5' ) );
 		if ( '' !== (string) $cfg['studio_cat'] ) {
 			$chips = array_slice( $chips, 0, 1, true ) + array( 'studio' => 'Studio' ) + array_slice( $chips, 1, null, true );
 		}
@@ -3002,9 +3038,9 @@ JS;
 		if ( '' !== (string) $cfg['studio_cat'] ) { // sent instead of componentsbeds when Studio is picked
 			$h .= '<input type="hidden" name="property_category[]" value="' . esc_attr( $cfg['studio_cat'] ) . '" data-sf-studio disabled>';
 		}
-		if ( $lists['years'] ) {
-			$h .= '<label class="bkd-f bkd-sf-wide" data-sf-comp' . ( $rent ? ' hidden' : '' ) . '><span>Completion</span><select name="completion"><option value="">Any time</option>';
-			foreach ( $lists['years'] as $slug => $label ) {
+		if ( $years ) {
+			$h .= '<label class="bkd-f bkd-sf-wide" data-sf-comp' . ( $rent ? ' hidden' : '' ) . '><span>Completion</span><select name="completion"><option value="">' . ( $v16 ? 'Any completion' : 'Any time' ) . '</option>';
+			foreach ( $years as $slug => $label ) {
 				$h .= $opt( $slug, $label, '' );
 			}
 			$h .= '</select></label>';
@@ -3892,7 +3928,10 @@ JS;
 			if ( ! $lp && $cx['area_name'] ) {
 				$noun = 'rent' === $cx['action'] ? 'rentals' : 'homes for sale';
 				$base = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'] ) );
-				$o[]  = '<p class="bkd-res-all"><a class="bkd-link" data-res-all href="' . esc_url( $base ) . '" data-base="' . esc_attr( $base ) . '" data-area="' . esc_attr( $cx['area_name'] ) . '" data-noun="' . esc_attr( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . '">'
+				// card_v16 on: the area's segment page, as under similar homes, else the search, not followed (noindex). The
+				// residence filter still writes the search with the bedrooms from data-base
+				$segu = blockke_dev_seg_url( $base );
+				$o[]  = '<p class="bkd-res-all"><a class="bkd-link" data-res-all href="' . esc_url( '' !== $segu ? $segu : $base ) . '"' . ( '' === $segu && blockke_bkn_on( 'card_v16' ) ? ' rel="nofollow"' : '' ) . ' data-base="' . esc_attr( $base ) . '" data-area="' . esc_attr( $cx['area_name'] ) . '" data-noun="' . esc_attr( 'rent' === $cx['action'] ? 'rentals' : 'homes' ) . '">'
 					. '<span>See all ' . $e( $noun ) . ' in ' . $e( $cx['area_name'] ) . '</span>' . blockke_dev_icon( 'arrow' ) . '</a></p>';
 			}
 			$o[] = '</div></section>';
@@ -5099,7 +5138,7 @@ JS;
 						'gallery'  => $gallery,
 						'lp'       => $lp ? 1 : 0,
 						'area'     => $data['ctx']['area_name'],
-						'bands'    => $cfg['budget_bands'],
+						'bands'    => blockke_dev_sheet_bands(), // the search sheet's budgets (in the v1.6 words while card_v16 is on)
 						'back'     => ! $lp && ! empty( $cfg['back_to_results'] ) ? 1 : 0,
 						'bedsMode' => $cfg['beds_mode'],
 						'studioCat' => (string) $cfg['studio_cat'],
@@ -6951,7 +6990,7 @@ JS;
 						'gallery'   => array(),
 						'lp'        => 0,
 						'area'      => $p['area'],
-						'bands'     => $cfg['budget_bands'],
+						'bands'     => blockke_dev_sheet_bands(), // the search sheet's budgets (in the v1.6 words on v1.6 pages)
 						'back'      => 0,
 						'bedsMode'  => $cfg['beds_mode'],
 						'studioCat' => (string) $cfg['studio_cat'],
@@ -7043,9 +7082,13 @@ JS;
 	}
 
 	/**
-	 * Every published listing as a row: what cards, filters and grouping need. Cached in transient bkn_rows (rebuilt when
-	 * any listing changes, option bkd_sim_ver); while one request rebuilds, others serve the copy they have (in the same row
-	 * format). An empty build never replaces a good copy. The version of the rows in use is kept for blockke_bkn_ver().
+	 * Every published listing as a row: what cards, filters and grouping need. Cached in transient bkn_rows, rebuilt when any
+	 * listing changes (option bkd_sim_ver), when the row format or the settings the rows read change, and once a day. The copy
+	 * itself is kept for a week, so it is always there to serve: while one request rebuilds (transient bkn_build_lock), the
+	 * others serve the copy they have (in the same row format) instead of building it too. When there is no copy they can use
+	 * (the first request after the row format changed, or a cache that lost it), they wait up to 3 seconds for the request that
+	 * is building it before building it themselves. An empty build never replaces a good copy. The version of the rows in use
+	 * is kept for blockke_bkn_ver().
 	 */
 	function blockke_bkn_rows() {
 		static $rows = null;
@@ -7053,16 +7096,40 @@ JS;
 			return $rows;
 		}
 		$ver = blockke_bkn_ver( true );
-		$hit = get_transient( 'bkn_rows' );
-		$hit = is_array( $hit ) && isset( $hit['ver'], $hit['rows'] ) && is_array( $hit['rows'] ) ? $hit : null;
 		$fmt = function ( $v ) { // the row format part of a version ("v163"): old rows are only any use in the same format
 			$p = explode( '|', (string) $v );
 			return isset( $p[1] ) ? $p[1] : '';
 		};
-		if ( $hit && ( $hit['ver'] === $ver || ( $fmt( $hit['ver'] ) === $fmt( $ver ) && get_transient( 'bkn_build_lock' ) ) ) ) {
+		$get = function ( $peek = false ) { // the stored copy; $peek: read past this request's own cache, as another request writes it
+			if ( $peek && wp_using_ext_object_cache() ) {
+				$h = wp_cache_get( 'bkn_rows', 'transient', true );
+			} else {
+				if ( $peek ) {
+					foreach ( array( 'notoptions', '_transient_bkn_rows', '_transient_timeout_bkn_rows' ) as $k ) {
+						wp_cache_delete( $k, 'options' );
+					}
+				}
+				$h = get_transient( 'bkn_rows' );
+			}
+			return is_array( $h ) && isset( $h['ver'], $h['rows'] ) && is_array( $h['rows'] ) ? $h : null;
+		};
+		$hit = $get();
+		$day = $hit && isset( $hit['t'] ) && (int) $hit['t'] < time() - DAY_IN_SECONDS; // a day old: rebuilt once, by one request
+		if ( $hit && $hit['ver'] === $ver && ! $day ) {
 			$GLOBALS['blockke_bkn_rows_ver'] = $hit['ver'];
 			$rows                            = $hit['rows'];
 			return $rows;
+		}
+		if ( get_transient( 'bkn_build_lock' ) ) { // another request is building them
+			for ( $i = 0; $i < 12 && ! ( $hit && $fmt( $hit['ver'] ) === $fmt( $ver ) ); $i++ ) {
+				usleep( 250000 );
+				$hit = $get( true );
+			}
+			if ( $hit && $fmt( $hit['ver'] ) === $fmt( $ver ) ) {
+				$GLOBALS['blockke_bkn_rows_ver'] = $hit['ver'];
+				$rows                            = $hit['rows'];
+				return $rows;
+			}
 		}
 		set_transient( 'bkn_build_lock', 1, 60 );
 		$keep = array( isset( $_GET['completion'] ) ? $_GET['completion'] : null, isset( $_REQUEST['bke_completion'] ) ? $_REQUEST['bke_completion'] : null ); // phpcs:ignore WordPress.Security.NonceVerification
@@ -7119,7 +7186,7 @@ JS;
 			$rows                            = $hit['rows'];
 			return $rows;
 		}
-		set_transient( 'bkn_rows', array( 'ver' => $ver, 'rows' => $rows ), $rows ? DAY_IN_SECONDS : 5 * MINUTE_IN_SECONDS );
+		set_transient( 'bkn_rows', array( 'ver' => $ver, 'rows' => $rows, 't' => time() ), $rows ? WEEK_IN_SECONDS : 5 * MINUTE_IN_SECONDS );
 		delete_transient( 'bkn_build_lock' );
 		$GLOBALS['blockke_bkn_rows_ver'] = $ver;
 		return $rows;
@@ -7607,7 +7674,7 @@ JS;
 		return ( 0 === $lo ? 'Studio to ' : $lo . '–' ) . $hi . ' bed' . $t;
 	}
 
-	/** "Completion Sep 2028", "Completion Q2 2027", "Completion late 2027", "Completion 2027", "Ready to move in", or ''. */
+	/** "Completion Sep 2028", "Completion Q2 2027", "Completion late 2027", "Completion mid-2028", "Completion 2027", "Ready to move in", or ''. */
 	function blockke_bkn_done_text( $c, $flat = false ) {
 		if ( isset( $c['kind'] ) && 'land' === $c['kind'] ) { // plots are not moved into or completed
 			return '';
@@ -7620,7 +7687,8 @@ JS;
 			return $flat ? 'Completion to be confirmed' : '';
 		}
 		$mon = array( '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
-		return 'Completion ' . ( $m ? $mon[ $m ] . ' ' : ( $q ? 'Q' . $q . ' ' : ( $w ? $w . ' ' : '' ) ) ) . $y;
+		// "mid" joins its year with a hyphen ("mid-2028"); "early 2027" and "late 2027" stay two words
+		return 'Completion ' . ( $m ? $mon[ $m ] . ' ' : ( $q ? 'Q' . $q . ' ' : ( $w ? ( 'mid' === $w ? 'mid-' : $w . ' ' ) : '' ) ) ) . $y;
 	}
 
 	/** The completion as a sortable key: 202809 for Sep 2028, 202812 for "2028", 999999 when unknown or passed. */
@@ -7729,6 +7797,8 @@ JS;
 	 * The card family's styles: shared by the index, search results and area pages. Also what those list pages (#bkd.bkn) share
 	 * beyond the cards: headings set without a lone last word, and forms in sentence case (labels 14px, buttons 15px, no arrows;
 	 * development pages keep their own forms). A photo that fails to load leaves the plain photo box, never a placeholder tile.
+	 * Below 360px a row's photo is 96px wide, so "Completion Jun 2028" (kept on one line) still fits beside it. The search
+	 * sheet on a list page drops its capitals kicker: its title already says "Search homes in Westlands".
 	 */
 	function blockke_bkn_card_css() {
 		return <<<'CSS'
@@ -7764,6 +7834,7 @@ JS;
 #bkd .bkn-rt{display:block;min-width:0}
 #bkd .bkn-row .bkn-name{display:block;margin:0;font-size:18px!important;line-height:1.2!important}
 #bkd .bkn-row .bkn-data{display:block;margin-top:4px;font-size:14px}
+@media (max-width:359px){#bkd .bkn-row .bkn-a{grid-template-columns:96px minmax(0,1fr);gap:12px}#bkd .bkn-row .bkn-img{width:96px}}
 @media (min-width:1000px){#bkd .bkn-grid-4 .bkn-name{font-size:22px!important}}
 @media (max-width:639px){#bkd .bkn-name{font-size:24px!important}}
 #bkd .bkn-h1,#bkd .bkn-h2,#bkd .bkn-gy,#bkd .bka16-h3,#bkd .bks-h1,#bkd .bks-h2,#bkd .bkn-none-t{text-wrap:balance}
@@ -7771,6 +7842,7 @@ JS;
 #bkd.bkn .bkd-f>span,#bkd.bkn .bkd-f legend{font-size:14px;font-weight:500;letter-spacing:0;text-transform:none}
 #bkd.bkn .bkd-btn{font-size:15px!important;letter-spacing:0!important;text-transform:none!important}
 #bkd.bkn .bkd-btn>.bkd-i:not(.bkd-i-f){display:none}
+#bkd.bkn .bkd-sf-head .bkd-label{display:none}
 CSS;
 	}
 
