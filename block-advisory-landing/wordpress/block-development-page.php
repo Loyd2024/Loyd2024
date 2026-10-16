@@ -11096,6 +11096,8 @@ JS;
 #bkd .bks-open .bks-fh{position:sticky;top:0;z-index:1;padding:0 calc(var(--gutter) - 12px) 0 var(--gutter);background:var(--paper);border-bottom:1px solid var(--line)}
 #bkd .bks-open .bks-fl{padding:20px var(--gutter) 32px}
 #bkd .bks-open .bks-ff{position:sticky;bottom:0;flex-wrap:nowrap;margin:auto 0 0;padding:12px var(--gutter) calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:1px solid var(--line)}
+#bkd .bks-ff .bks-clear{white-space:nowrap}
+@media (max-width:379px){#bkd .bks-open .bks-ff{column-gap:16px}#bkd .bks-open .bks-apply{padding:0 14px!important}}
 #bkd .bks-sec{padding:32px 0 0}
 #bkd .bks-sec+.bks-sec{padding-top:48px;content-visibility:auto;contain-intrinsic-size:auto 480px}
 #bkd .bks-h2{margin:0 0 24px!important;font-family:var(--display)!important;font-weight:var(--display-w)!important;font-size:30px!important;line-height:1.1!important;letter-spacing:var(--display-ls)!important;text-transform:none!important;color:var(--navy)!important}
