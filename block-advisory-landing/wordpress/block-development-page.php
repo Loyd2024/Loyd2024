@@ -7810,6 +7810,7 @@ CSS;
     var a=e.target.closest&&e.target.closest('a[data-bkn]'),c,im,vt,x;
     if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||(a.target&&a.target!=='_self')||a.hasAttribute('download')||a.origin!==L.origin){return;}
     c=a.closest('[data-id]');vt=!!(c&&a.classList.contains('bkn-a')&&c.getAttribute('data-vt')==='1');im=vt?c.querySelector('.bkn-img img'):null;
+    if(im&&im.hasAttribute('data-bkd-failed')){vt=im=null;} /* a photo that failed doesn't move */
     x={id:c?+c.getAttribute('data-id'):0,n:c?all(c.getAttribute('data-id')).indexOf(c):0,path:a.pathname,from:L.href,label:String(B.listLabel||''),src:a.getAttribute('data-bkn')||'',beds:beds(),vt:vt?1:0,im:im?String(im.currentSrc||im.src||''):'',k:e.detail===0?1:0,y:Math.round(window.scrollY||window.pageYOffset||0),t:Date.now()};
     put(x);mark({id:x.id,n:x.n,y:x.y,k:x.k});
     manual(true); /* only when leaving by a card, so other ways back keep the browser's own scroll */
@@ -7828,6 +7829,11 @@ CSS;
     var auto=function(){setTimeout(function(){manual(false);},0);};
     if(document.readyState==='complete'){auto();}else{window.addEventListener('load',auto);}
   }
+  /* a card photo that fails leaves the plain photo box (no broken-image icon or alt text): one that failed before any
+     script could listen (a first-row photo loads at once), and one on a card the list adds later */
+  function gone(im){if(im.closest('.bkn-img')){im.setAttribute('data-bkd-failed','1');im.style.visibility='hidden';}}
+  document.addEventListener('error',function(e){var im=e.target;if(im&&im.tagName==='IMG'){gone(im);}},true);
+  [].forEach.call(document.querySelectorAll('.bkn-img img'),function(im){if(im.complete&&im.currentSrc&&!im.naturalWidth){gone(im);}});
   var nv=window.performance&&performance.getEntriesByType?performance.getEntriesByType('navigation')[0]:null;
   if(nv&&nv.type==='back_forward'){restore();}
   window.addEventListener('pageshow',function(e){if(!e.persisted){return;}if(V){V.c();}var r=st().bkn;if(r&&!r.r){r.r=1;mark(r);}done();manual(false);});
@@ -11501,9 +11507,56 @@ JS;
 	}
 
 	/**
+	 * True when $ip is one of Cloudflare's own addresses, as published at cloudflare.com/ips (the same lists since 2021).
+	 * If Cloudflare adds a range, visitors reaching the site through it are counted by Cloudflare's address until it is
+	 * added here: one count per listing every 10 minutes for everyone on that range, never more counts.
+	 */
+	function blockke_bkn_is_cf( $ip ) {
+		$bin = filter_var( $ip, FILTER_VALIDATE_IP ) ? inet_pton( $ip ) : false;
+		if ( false === $bin ) {
+			return false;
+		}
+		if ( 16 === strlen( $bin ) && 0 === strpos( $bin, str_repeat( "\0", 10 ) . "\xff\xff" ) ) {
+			$bin = substr( $bin, 12 ); // an IPv4 address written as IPv6 (::ffff:1.2.3.4) by a dual-stack server
+		}
+		$ranges = array(
+			'173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
+			'190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+			'104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+			'2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+		);
+		foreach ( $ranges as $r ) {
+			list( $net, $bits ) = explode( '/', $r );
+			$net  = inet_pton( $net );
+			$bits = (int) $bits;
+			$full = intdiv( $bits, 8 );
+			$rest = $bits % 8;
+			if ( strlen( $net ) !== strlen( $bin ) || substr( $net, 0, $full ) !== substr( $bin, 0, $full ) ) {
+				continue;
+			}
+			if ( ! $rest || 0 === ( ( ord( $net[ $full ] ) ^ ord( $bin[ $full ] ) ) & ( 0xff << ( 8 - $rest ) ) & 0xff ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The address the view count's limit is kept per: the visitor's own (CF-Connecting-IP) only when the request came
+	 * through Cloudflare, else the connection's (REMOTE_ADDR), so a client that reaches the server directly can't name a
+	 * new address on every request. Hosts that already put the visitor's address in REMOTE_ADDR need nothing more.
+	 */
+	function blockke_bkn_client_ip() {
+		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		$cf     = isset( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) : '';
+		return filter_var( $cf, FILTER_VALIDATE_IP ) && blockke_bkn_is_cf( $remote ) ? $cf : $remote;
+	}
+
+	/**
 	 * POST block/v1/view (id): a development page opened from a prefetched copy counts its view (see blockke_bkn_dev_js()).
 	 * Only a published listing on the development layout; not an editor's own visit (as on the page itself); one count per
-	 * connection and listing every 10 minutes. Always answers 204, so nothing can be learned from it.
+	 * visitor address and listing every 10 minutes (blockke_bkn_client_ip()). Always answers 204, so nothing can be
+	 * learned from it.
 	 */
 	function blockke_bkn_view( $req ) {
 		$id = absint( $req->get_param( 'id' ) );
@@ -11515,14 +11568,7 @@ JS;
 		if ( $uid && user_can( $uid, 'edit_post', $id ) ) {
 			return new WP_REST_Response( null, 204 );
 		}
-		$ip = '';
-		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR' ) as $h ) {
-			if ( ! empty( $_SERVER[ $h ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $h ] ) );
-				break;
-			}
-		}
-		$rk = 'bkd_rl_v_' . md5( $ip . '|' . $id );
+		$rk = 'bkd_rl_v_' . md5( blockke_bkn_client_ip() . '|' . $id );
 		if ( get_transient( $rk ) ) {
 			return new WP_REST_Response( null, 204 );
 		}
