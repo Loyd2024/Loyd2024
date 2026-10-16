@@ -11504,8 +11504,9 @@ JS;
 			. '@media (min-width:700px){#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back{display:flex;align-items:center;width:100%;min-height:44px;margin:-10px 0 -4px}#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:none}'
 			. '#bkd .bkd-hero-top:has(.bkd-has-back){position:relative;padding-top:24px}'
 			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{position:absolute;top:-20px;left:0;display:block;width:auto;max-width:100%;height:44px;min-height:0;margin:0;padding-top:20px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-			// the trail on one line: the page's own name gives way first, then the page above it (then, from 1000px, the way back)
-			. '#bkd .bkd-crumbs{flex-wrap:nowrap;align-items:center;overflow:hidden;white-space:nowrap}#bkd .bkd-crumbs>*{flex:none}'
+			// the trail on one line: the page's own name gives way first, then the page above it (the way back keeps up to
+			// 32em); 6px inside its edge so focus rings are not cut off
+			. '#bkd .bkd-crumbs{flex-wrap:nowrap;align-items:center;margin:-6px;padding:6px;overflow:hidden;white-space:nowrap}#bkd .bkd-crumbs>*{flex:none}'
 			. '#bkd .bkd-crumbs span[aria-current],#bkd .bkd-crumbs a.bkd-cr-up{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}#bkd .bkd-crumbs a.bkd-cr-up{flex-shrink:.001}}'
 			. '@media (min-width:1000px){#bkd .bkd-hero-grid{position:relative;padding-top:68px}'
 			. '#bkd .bkd-hero-top,#bkd .bkd-hero-top:has(.bkd-has-back){position:absolute;top:0;left:var(--gutter);right:var(--gutter);height:44px;margin:0;padding:0;flex-wrap:nowrap}'
