@@ -11211,11 +11211,14 @@ JS;
 	 */
 	function blockke_bkn_dev_css( $vt ) {
 		// The way back (from a card, or the older "Back to results"): 44px to tap. From 700px it heads the breadcrumb on a line
-		// of its own, without the "/" after it, so a long "Back to homes for sale in Westlands" never breaks the trail.
+		// of its own, without the "/" after it, so a long "Back to homes for sale in Westlands" never breaks the trail; where
+		// :has() works, that line runs above Search and Share too, so the label keeps to one line beside a photo.
 		$css = '#bkd .bkd-ctxb{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;margin:-8px 0 8px;font-size:14px;line-height:1.5;color:var(--slate)}'
 			. '#bkd .bkd-ctxb button{display:inline-flex;align-items:center;min-height:44px;margin:0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;font:600 14px/1.4 var(--font)!important;letter-spacing:0!important;text-transform:none!important;color:var(--navy)!important;text-decoration:underline;text-underline-offset:4px;cursor:pointer}'
 			. '@media (max-width:699px){#bkd .bkd-crumbs .bkd-cr-back{min-height:44px;margin:-2px 0}}'
-			. '@media (min-width:700px){#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back{display:flex;align-items:center;width:100%;min-height:44px;margin:-10px 0 -4px}#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:none}}';
+			. '@media (min-width:700px){#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back{display:flex;align-items:center;width:100%;min-height:44px;margin:-10px 0 -4px}#bkd .bkd-crumbs.bkd-has-back .bkd-cr-back+span[aria-hidden]{display:none}'
+			. '#bkd .bkd-hero-top:has(.bkd-has-back){position:relative;padding-top:24px}'
+			. '#bkd .bkd-hero-top:has(.bkd-has-back) .bkd-cr-back{position:absolute;top:-20px;left:0;display:block;width:auto;max-width:100%;height:44px;min-height:0;margin:0;padding-top:20px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}';
 		if ( $vt ) {
 			// Photo first and full-bleed on phones, 7 of 12 columns from 1000px (held in view beside the text, with photos 2
 			// and 3 under it so that column is not left half empty), 3:2 throughout like the cards
