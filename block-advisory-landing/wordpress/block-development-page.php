@@ -145,6 +145,33 @@
  * v1.7 also carries v1.6.2's lead topics: land-build. A lead with no listing, area or index whose topic is a key of config
  * lead_topics ('land-build' => 'Land and build') is saved, sent to Zoho and emailed as "[Block] Land and build enquiry:
  * {name} - {unit}"; without a known topic it still gets the 400, and every other lead is unchanged.
+ * v1.8 (2026-10-17): development pages read the listing more carefully (fixes from the villa assessments). The full
+ * description no longer opens with a stray piece of the hero line; "recycled water" is not a jogging track; the hero
+ * cell shows a short month ("Dec 2026"); sizes are the smallest and largest area stated, not the first two numbers
+ * ("4-bed 171 sqm" is 171 m², acres are a plot's, a terrace or plot is not the home), from "Built-up area", "Plinth
+ * area" or another home size but never a plot, site or court, else one home's size field (not for a title with a range
+ * of homes), and square feet are whole square metres; "Total homes" counts the residences; a completion row counts only
+ * with a date ("Completion status | Complete" is a status, and "To be confirmed" reads "On request", not "Ready");
+ * instalments are offered only when the listing offers them, not when it lists them as still to be confirmed or not
+ * applicable; the calculator takes no share on completion from the cash, mortgage or bank route and runs over the
+ * plan's stated length ("over 24 months"; several lengths to choose from), up to completion when the text runs the plan
+ * to it; Location reads a Destination | Drive time table, turns "~15 minutes | to Westlands" round, leaves out bold
+ * topics and sentences, and says "travel times" only when a place has one ("within Tilisi itself", "on site" and
+ * "next door" go with the place, not under travel times). The H1 is a name, not a selling phrase from the title
+ * ("3 Bedroom Villa for Sale, Tilisi Views Limuru" -> "Tilisi Views": bke_dev_name, a unit's development's,
+ * the Project term as the title writes it), without a trailing ", Kiambu Road"; bke_dev_name also names the breadcrumb,
+ * section bar, forms and photo note; a villa or house at one fixed price reads "Price" off-plan too; a long Location
+ * cell fits on phones. Who it suits keeps long bullets and reads "It may be less suitable" as its note; the investor
+ * view drops lead-ins to lists it leaves out and adds a caveat (never a claim) placed after its third sentence. Amenity
+ * tiles: coffee is not a café nor dining a lounge, yoga comes before lawns, pickleball is a court, a long item keeps
+ * its own name as the title and doesn't repeat it in the text, no "above the city", "steps from home" or "no
+ * membership", and "The everyday essentials" only when that is all the checklist holds. Residences rows link to the
+ * unit whose own words they carry, not every 4-bed row to one unit, and "3 & 4 Bedroom" is "3 – 4 Bed". Landing pages:
+ * also for a listing with no Buy/Rent term, no area repeated on the phone cover or in the map query, the cover's
+ * bedrooms (from the title: "Studio", "3 Bed", none for "4 & 5 Bedroom Homes") without a residences table. Similar
+ * homes' heading names the bedrooms its link names; a payment table's header row is not a step; houses are "built",
+ * not "the building goes up"; "until completion in late 2027". Classic pages, the classic calculator, area, index and
+ * search pages and lead emails are unchanged; land pages change only by the stray piece of the hero line.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -382,30 +409,61 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		return ( floor( $v ) == $v ) ? number_format( $v, 0 ) : number_format( $v, 1 );
 	}
 
-	/** Any size text ("84.60 – 126.49", "48 sqm", "1,390 sq ft") -> "84.6 – 126.5 m²" */
+	/**
+	 * Any size text ("84.60 – 126.49", "48 sqm", "1,390 sq ft") -> "84.6 – 126.5 m²". v1.8: the smallest and largest area in it,
+	 * not its first two numbers: bedroom counts ("4-bed 171 sqm", "(5 bedroom)") and figures in other units ("6 units",
+	 * "3 levels") are not areas, and acres or hectares are a plot's or a site's, so "14.48 acres" alone gives ''. Square
+	 * feet become whole square metres ("4,000 sq ft" -> "372 m²"). The parts of one home are not a range: a terrace, balcony,
+	 * garden or plot figure is left out ("120 sqm (internal) + 30 sqm terrace" -> "120 m²", "250 sqm house on a 1,000 sqm
+	 * plot" -> "250 m²"), and areas added up ("120 sqm + 30 sqm", "Ground floor 120 sqm, first floor 110 sqm") give ''.
+	 */
 	function blockke_dev_size( $s, $assume_ft = false ) {
 		$t = blockke_dev_text( $s );
 		if ( '' === $t ) {
 			return '';
 		}
-		if ( ! preg_match_all( '/\d+(?:\.\d+)?/', str_replace( ',', '', $t ), $m ) ) {
+		$t     = preg_replace( '/(\d),(?=\d{3}\b)/', '$1', $t ); // "1,765" -> "1765"
+		$ft    = 'sq\.?\s*f(?:ee)?t\.?|sqft|ft²|ft2\b|square f(?:ee|oo)t';
+		$sqm   = 'sq\.?\s*m(?:etres?|eters?)?\b\.?|sqm\b|m²|m2\b|square met(?:re|er)s?';
+		$is_ft = $assume_ft || preg_match( '/' . $ft . '/i', $t );
+		if ( $is_ft && preg_match( '/\d\s*(?:' . $sqm . ')/i', $t ) ) {
+			// "43 sqm (463 sq ft)": both units given, so read only the square metres
+			$t     = preg_replace( '/\([^)]*(?:' . $ft . ')[^)]*\)|\d[\d.]*(?:\s*(?:-|–|to)\s*\d[\d.]*)?\s*(?:' . $ft . ')\w*/i', ' ', $t );
+			$is_ft = false;
+		}
+		// a part that is not the home itself: "30 sqm terrace", "a 1,000 sqm plot", "plot of 1000 sqm", "Garden: 200 sqm"
+		$part = '(?:(?:private|covered|open|outdoor|roof(?:top)?)\s+)?(?:terraces?|balcon(?:y|ies)|verandah?s?|patios?|decks?|gardens?|yards?|plots?|land|compounds?|parking)\b';
+		$t    = preg_replace( '/\d+(?:\.\d+)?\s*(?:' . $ft . '|' . $sqm . ')\s*' . $part . '|\b(?:plot|land|garden|compound|yard)\s*(?:size|area)?\s*(?:of|:|–|-)?\s*(?:about\s+|approx\.?\s*|approximately\s+)?\d+(?:\.\d+)?\s*(?:' . $ft . '|' . $sqm . ')/i', ' ', $t );
+		if ( preg_match( '/\d\s*(?:' . $ft . '|' . $sqm . ')?\s*(?:\([^)]*\)\s*)?\+\s*\d+(?:\.\d+)?\s*(?:' . $ft . '|' . $sqm . ')/i', $t )
+			|| preg_match_all( '/\b(?:ground|first|second|third|upper|lower|top|basement|mezzanine)\s+(?:floor|level)\b[^0-9]{0,12}\d/i', $t ) >= 2 ) {
+			return ''; // areas added up: the home's size is not stated as such
+		}
+		$t    = preg_replace( '/\b\d+(?:\s*+(?:,|&|and|or|to|–|-)\s*+\d+)*+\s*-?\s*(?:bed(?:room)?s?|br)\b|\b(?:phase|block|unit|type|tower|floor|level)\s*\d+\b|\d+(?:\.\d+)?\s*(?:acres?|ac\b|hectares?|ha\b|units?\b|homes\b|villas\b|houses\b|floors?\b|levels?\b|storeys?\b|stor(?:y|ies)\b|cars?\b|bath(?:room)?s?\b)|\d+(?:\.\d+)?\s*%|\b(?:kes|ksh|usd)\s*[\d.]+/i', ' ', $t );
+		$vals = array();
+		if ( preg_match_all( '/(\d+(?:\.\d+)?)(?:\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?))?\s*(?:' . $ft . '|' . $sqm . ')/i', $t, $mm, PREG_SET_ORDER ) ) {
+			foreach ( $mm as $x ) { // figures with a unit, or a range that ends with one ("84 – 126 sqm")
+				$vals[] = (float) $x[1];
+				if ( isset( $x[2] ) && '' !== $x[2] ) {
+					$vals[] = (float) $x[2];
+				}
+			}
+		} elseif ( preg_match_all( '/\d+(?:\.\d+)?/', $t, $mm ) ) { // bare figures (a "Size (sqm)" column)
+			$vals = array_map( 'floatval', $mm[0] );
+		}
+		$vals = array_filter(
+			$vals,
+			function ( $v ) {
+				return $v > 0;
+			}
+		);
+		if ( ! $vals ) {
 			return '';
 		}
-		$is_ft = $assume_ft || preg_match( '/sq\.?\s*ft|sqft|ft²|square f/i', $t );
-		if ( $is_ft && preg_match( '/\d\s*(?:sq\.?\s*m\b|sqm|m²|m2\b|square met)/i', $t ) ) {
-			// "43 sqm (463 sq ft)": both units given, so read only the square metres
-			$t     = preg_replace( '/\([^)]*(?:sq\.?\s*ft|sqft|ft²|square f)[^)]*\)|\d[\d,.]*(?:\s*(?:-|–|to)\s*\d[\d,.]*)?\s*(?:sq\.?\s*ft|sqft|ft²|square f\w*)/i', ' ', $t );
-			$is_ft = false;
-			if ( ! preg_match_all( '/\d+(?:\.\d+)?/', str_replace( ',', '', $t ), $m ) ) {
-				return '';
-			}
+		$out = array();
+		foreach ( array( min( $vals ), max( $vals ) ) as $n ) {
+			$out[] = $is_ft ? blockke_dev_num( round( $n * 0.092903 ) ) : blockke_dev_num( $n );
 		}
-		$vals  = array();
-		foreach ( array_slice( $m[0], 0, 2 ) as $n ) {
-			$n      = (float) $n;
-			$vals[] = blockke_dev_num( $is_ft ? $n * 0.092903 : $n );
-		}
-		return implode( ' – ', array_unique( $vals ) ) . ' m²';
+		return implode( ' – ', array_unique( $out ) ) . ' m²';
 	}
 
 	function blockke_dev_digits( $s ) {
@@ -472,6 +530,39 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		return sprintf( '%04d-12', $year );
 	}
 
+	/**
+	 * v1.8: the hero cell's completion with a short month ("December 2026" -> "Dec 2026"). Only the month's own name is
+	 * shortened, where its year follows, so the rest stays as written ("Before Dec 2026", "Phase 2 handover Dec 2027");
+	 * quarters, seasons, ranges and values with two months or two years are left alone.
+	 */
+	function blockke_dev_completion_short( $c ) {
+		$c      = (string) $c;
+		$months = 'january|february|march|april|june|july|august|sept?(?:ember)?|october|november|december';
+		if ( 1 !== preg_match_all( '/\b(?:' . $months . ')\b/i', $c ) || 1 !== preg_match_all( '/\b20\d{2}\b/', $c ) || preg_match( '/\bQ[1-4]\b|\bH[12]\b/i', $c ) ) {
+			return $c;
+		}
+		$out = preg_replace_callback(
+			'/\b(' . $months . ')(?=,?\s+20\d{2}\b)/i',
+			function ( $m ) {
+				return ucfirst( substr( strtolower( $m[1] ), 0, 3 ) );
+			},
+			$c
+		);
+		return null === $out ? $c : $out;
+	}
+
+	/** v1.8: the completion inside a sentence: a leading qualifier in lower case ("until completion in late 2027", "mid-2027", "end of 2026"). */
+	function blockke_dev_completion_mid( $c ) {
+		$out = preg_replace_callback(
+			'/^(?:late|early|mid|middle|end|start|beginning|around|approximately|approx\.|expected|estimated|by|from)\b(?=[\s-]+(?:of\s+|in\s+)?(?:Q[1-4]\s+|H[12]\s+|[a-z]+\s+)?20\d{2}\b)/iu',
+			function ( $m ) {
+				return strtolower( $m[0] );
+			},
+			(string) $c
+		);
+		return null === $out ? (string) $c : $out; // invalid UTF-8: as written
+	}
+
 	function blockke_dev_months_until( $ym ) {
 		if ( ! preg_match( '/^(\d{4})-(\d{2})$/', (string) $ym, $m ) ) {
 			return 0;
@@ -521,6 +612,18 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 
 	function blockke_dev_is_for_sale( $id ) {
 		return has_term( 'for-sale', 'property_action_category', $id ) && ! has_term( 'sold', 'property_status', $id );
+	}
+
+	/**
+	 * v1.8: a listing that may have an ad landing page (?lp=1): for sale, or with no Buy/Rent term at all and a title that
+	 * does not say rent (Verde Vista, a Samsara duplicate), never sold.
+	 */
+	function blockke_dev_lp_ok( $id ) {
+		if ( blockke_dev_is_for_sale( $id ) ) {
+			return true;
+		}
+		$act = get_the_terms( $id, 'property_action_category' );
+		return ! ( is_array( $act ) && $act ) && 'sale' === blockke_dev_action( $id ) && ! has_term( 'sold', 'property_status', $id );
 	}
 
 	function blockke_dev_sqft_factor() {
@@ -754,9 +857,21 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		return $i >= 0 ? blockke_dev_kv( $parsed['sections'][ $i ]['tokens'] ) : array();
 	}
 
-	function blockke_dev_completion( $post ) {
+	/**
+	 * The completion date. $layout (v1.8, the development layout): a glance row counts only when it names a time (a year
+	 * or a period such as "24 months"), so "Completion status | Complete" or "Handover | To be confirmed at point of
+	 * enquiry" is a status, not a date. The classic calculator keeps reading the first such row.
+	 */
+	function blockke_dev_completion( $post, $layout = false ) {
 		$c = trim( blockke_dev_text( get_post_meta( $post->ID, 'bke_completion_stated', true ) ) );
-		if ( '' === $c ) {
+		if ( '' === $c && $layout ) {
+			foreach ( blockke_dev_glance( $post ) as $p ) {
+				if ( preg_match( '/completion|occupation|handover|delivery/i', $p[0] ) && preg_match( '/\b20\d{2}\b|\b\d{1,3}\s*-?\s*(?:months?|years?|weeks?)\b/i', $p[1] ) ) {
+					$c = $p[1];
+					break;
+				}
+			}
+		} elseif ( '' === $c ) {
 			$c = blockke_dev_kv_get( blockke_dev_glance( $post ), '/completion|occupation|handover|delivery/i' );
 		}
 		if ( '' === $c ) {
@@ -772,13 +887,19 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 	   Payment plan (both the classic calculator and the development layout)
 	   ===================================================================== */
 
-	function blockke_dev_plan_info( $post ) {
+	/**
+	 * The payment plan as the calculators read it. $layout (v1.8, the development layout): instalments, a share on
+	 * completion and the plan's length come from what the listing offers (blockke_dev_plan_read()), and a glance row names
+	 * the completion only with a date; the classic calculator keeps v1.7's reading.
+	 */
+	function blockke_dev_plan_info( $post, $layout = false ) {
 		$id     = $post->ID;
 		$parsed = blockke_dev_parsed( $post );
 		$i      = blockke_dev_find( $parsed['sections'], '/payment/i' );
 		$steps  = array();
 		$text   = '';
 		$all    = '';
+		$pieces = array(); // v1.8: each paragraph, list item, table row and glance row on its own
 		$ptoks  = $i >= 0 ? $parsed['sections'][ $i ]['tokens'] : array();
 		if ( $i < 0 ) { // "Payment Plan" as an H3 under "Pricing"
 			$sub = blockke_dev_sub_section( $parsed, '/payment (plan|terms|schedule)/i' );
@@ -792,20 +913,26 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				if ( 'ul' === $t['tag'] ) {
 					foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
 						$p       = blockke_dev_split_kv( $it );
-						$steps[] = '' !== $p[0] ? array( $p[0], ucfirst( $p[1] ) ) : array( $it['text'], '' );
-						$all    .= ' ' . $it['text'] . '.';
+						$steps[]  = '' !== $p[0] ? array( $p[0], ucfirst( $p[1] ) ) : array( $it['text'], '' );
+						$all     .= ' ' . $it['text'] . '.';
+						$pieces[] = $it['text'];
 					}
 				} elseif ( 'table' === $t['tag'] ) {
 					$tb = blockke_dev_table( $t['html'] );
-					foreach ( $tb ? $tb['rows'] : array() as $r ) {
+					foreach ( $tb ? $tb['rows'] : array() as $ri => $r ) {
+						if ( $layout && 0 === $ri && ! $tb['head'] && blockke_dev_head_row( $r['cells'] ) ) {
+							continue; // v1.8: a header row written as an ordinary row ("Payment Option | Details") is not step 01
+						}
 						if ( count( $r['cells'] ) >= 2 ) {
-							$steps[] = array( $r['cells'][0], $r['cells'][1] );
-							$all    .= ' ' . $r['cells'][0] . ': ' . $r['cells'][1] . '.';
+							$steps[]  = array( $r['cells'][0], $r['cells'][1] );
+							$all     .= ' ' . $r['cells'][0] . ': ' . $r['cells'][1] . '.';
+							$pieces[] = $r['cells'][0] . ': ' . $r['cells'][1];
 						}
 					}
 				} elseif ( 'p' === $t['tag'] ) {
-					$tx   = blockke_dev_text( $t['inner'] );
-					$all .= ' ' . $tx;
+					$tx       = blockke_dev_text( $t['inner'] );
+					$all     .= ' ' . $tx;
+					$pieces[] = $tx;
 					if ( '' === $text && mb_strlen( $tx ) > 20 ) {
 						$text = $tx;
 					}
@@ -815,7 +942,8 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$glance = blockke_dev_glance( $post );
 		foreach ( $glance as $p ) {
 			if ( preg_match( '/deposit|reserv|balance|instal|payment/i', $p[0] ) ) {
-				$all .= ' ' . $p[0] . ': ' . $p[1] . '.';
+				$all     .= ' ' . $p[0] . ': ' . $p[1] . '.';
+				$pieces[] = $p[0] . ': ' . $p[1];
 			}
 		}
 
@@ -839,21 +967,40 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			$inst_pct   = (float) $m[1];
 			$inst_every = ( 'month' === $w || 'monthly' === $w ) ? 1 : ( preg_match( '/6|six/', $w ) ? 6 : 3 );
 		}
-		$completion = blockke_dev_completion( $post );
-		$until      = trim( (string) get_post_meta( $id, 'bke_dev_plan_until', true ) );
-		if ( '' === $until ) {
-			$until = blockke_dev_completion_ym( $completion );
-		}
+		$completion = blockke_dev_completion( $post, $layout );
+		$own_until  = trim( (string) get_post_meta( $id, 'bke_dev_plan_until', true ) );
+		$until      = '' !== $own_until ? $own_until : blockke_dev_completion_ym( $completion );
 		$override_text = trim( (string) get_post_meta( $id, 'bke_dev_plan_text', true ) );
 		if ( '' !== $override_text ) {
 			$text = $override_text;
+		}
+		$instalments = (bool) preg_match( '/instal+ment/i', $all );
+		$terms       = array();
+		$term_q      = false;
+		$term_upto   = false;
+		$term_past   = false;
+		if ( $layout ) {
+			$read          = blockke_dev_plan_read( $pieces );
+			$instalments   = $read['instalments'];
+			$on_completion = $read['on_completion'];
+			$own_months    = (int) get_post_meta( $id, 'bke_dev_plan_months', true );
+			$left          = blockke_dev_months_until( $until );
+			$terms         = $read['terms'];
+			if ( $left > 0 && $read['tied'] ) { // a plan the text runs to completion ends there: up to completion, as before
+				$terms = array_values( array_diff( $terms, $read['tied'] ) );
+			}
+			$terms         = $own_months >= 3 && $own_months <= 120 ? array( $own_months ) : $terms;
+			$terms         = '' === $own_until ? $terms : array(); // "Instalments until" set: up to that month, as before
+			$term_q        = $read['quarterly'];
+			$term_upto     = $read['upto'] && 1 === count( $terms ) && $terms === $read['terms'] && ! ( $own_months >= 3 && $own_months <= 120 );
+			$term_past     = $terms && $left > 0 && max( $terms ) > $left; // the stated length runs past the completion date
 		}
 		return array(
 			'found'         => $i >= 0 || $dep > 0 || '' !== $override_text,
 			'steps'         => array_slice( $steps, 0, 6 ),
 			'text'          => $text,
 			'own_text'      => '' !== $override_text,
-			'instalments'   => (bool) preg_match( '/instal+ment/i', $all ),
+			'instalments'   => $instalments,
 			'deposit'       => $dep,
 			'reservation'   => $res,
 			'on_completion' => $on_completion,
@@ -864,7 +1011,113 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'months'        => blockke_dev_months_until( $until ),
 			'quarterly'     => (bool) preg_match( '/quarter|bi-?annual|semi-?annual/i', $all ),
 			'flexible'      => (bool) preg_match( '/flexib/i', $all ),
-		);
+			'terms'         => $terms,  // v1.8: the plan's own length in months ("over 24 months"; "24 and 36-month plans"), shortest first
+			'term_q'        => $term_q, // v1.8: and its instalments are quarterly
+		) + ( $layout ? array(
+			'completion_s' => blockke_dev_completion_mid( $completion ), // v1.8: the completion in a sentence ("late 2027")
+			'term_upto'    => $term_upto, // v1.8: the one length is a most ("up to 9 months")
+			'term_past'    => $term_past, // v1.8: a stated length longer than the time to completion
+		) : array() );
+	}
+
+	/** v1.8: a table row that only names its columns ("Payment Option | Details", "Stage | Amount | Due"): short words, no figures. */
+	function blockke_dev_head_row( $cells ) {
+		if ( count( $cells ) < 2 ) {
+			return false;
+		}
+		foreach ( $cells as $c ) {
+			if ( ! preg_match( '/^(?:(?:payment|instal+ment|plan|price|pricing)\s+)?(?:options?|plans?|stages?|milestones?|schedule|steps?|details?|descriptions?|amounts?|percentages?|%|shares?|due|when|timing|terms?|items?|values?|kes|ksh|price|cost|notes?|payment|instal+ments?|what|how much|deposit|period)(?:\s*\((?:kes|ksh|%)\))?$/iu', trim( $c ) ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * v1.8 (the development layout): what the Payment section and the glance payment rows offer, piece by piece (a
+	 * paragraph, list item, table row or glance row) and clause by clause. A clause still "to be confirmed at point of
+	 * enquiry", or a checklist item ("Instalment schedule", "The available instalment period"), offers nothing; the cash
+	 * and mortgage routes ("Cash: 90% upfront and 10% on completion", "or cash with a 5% discount", "a bank loan over 10
+	 * years") set neither the plan's share on completion nor its length. "Rather than" or "instead of" leaves out only what
+	 * follows it ("Pay in instalments rather than a lump sum: ... over 24 months"), and "not applicable" or "N/A" offers
+	 * nothing. Returns instalments (offered or not), on_completion (%), terms (months, shortest first), quarterly, tied (the
+	 * lengths of a plan the text runs to completion: "over 20 months, running through to the Q4 2027 completion date",
+	 * "24 months — phased over the construction period") and upto (every length is a most: "up to 9 months").
+	 */
+	function blockke_dev_plan_read( $pieces ) {
+		$no     = '/\bnot (?:yet )?(?:been )?(?:provided|stated|confirmed|available|published|offered|applicable)\b|\bha(?:ve|s) not been\b|\bto be (?:confirmed|advised|announced|shared)\b|\btb[ca]\b|\b(?:at|on) (?:the )?point of enquiry\b|\bif applicable\b|\bno instal+ments?\b|\bn\/a\b|:\s*(?:none|nil)\b/i';
+		$route  = '(?:cash|mortgage|bank|loan|sacco)';
+		$list   = '\d{1,3}(?:\s*(?:,|or|and|&|–|to)\s*\d{1,3})*'; // "24", "20, 25 or 30", "24 and 36", "12–24"
+		$re     = '/(?<n>\d{1,3})\s+(?:equal\s+)?(?<f>monthly|quarterly)\s+(?:instal|payments?\b)'
+			. '|\b(?:over|across|within|for|in|up to)\s+(?:a\s+(?:period|term)\s+of\s+)?(?:up to\s+)?(?<m>' . $list . ')\s*(?<u>months?|years?)\b'
+			. '|\b(?:term|period|plan|instal\w*)\s*(?::|of|is)\s*(?:over\s+)?(?:up to\s+)?(?<m2>' . $list . ')\s*(?<u2>months?|years?)\b'
+			. '|\b(?<m3>' . $list . ')[\s-]*(?<u3>months?|years?)\s+(?:[\w-]+\s+){0,2}?(?:payment|instal\w*)\s*plans?/iu';
+		// the plan runs to completion: "until completion", "through to the development's Q4 2027 completion date", "over the construction period"
+		$tie    = '/\b(?:until|till|through(?:\s+to)?|up\s+to|by|before|ahead\s+of|running\s+(?:through\s+)?to)\s+(?:the\s+)?(?:(?:development|project|estate|building)[’\']?s?\s+)?(?:(?:q[1-4]|h[12]|[a-z]+),?\s+)?(?:20\d{2}\s+)?(?:completion|handover|hand-over)\b|\b(?:over|during|across|throughout)\s+(?:the\s+)?construction\b|\bconstruction[\s-]+linked\b/iu';
+		$out    = array( 'instalments' => false, 'on_completion' => 0, 'terms' => array(), 'quarterly' => false, 'tied' => array(), 'upto' => false );
+		$q_only = null;
+		$u_only = null;
+		foreach ( $pieces as $pc ) {
+			$pc       = (string) preg_replace( '/\s*\b(?:rather than|instead of)\b[^:;,.!?()—–]*/iu', '', (string) $pc ); // what "rather than" names is not offered
+			$route_pc = (bool) preg_match( '/^\W*' . $route . '\b/i', $pc ); // the piece is the cash or mortgage route
+			$tied_pc  = (bool) preg_match( $tie, $pc );
+			foreach ( (array) preg_split( '/(?<=[.!?;])\s+|\s+[—–]\s+|,?\s+or\s+(?=(?:(?:by|via|with|in|through)\s+)?(?:a\s+)?' . $route . '\b)/iu', $pc ) as $cl ) {
+				$cl = trim( (string) $cl );
+				if ( '' === $cl || preg_match( $no, $cl ) ) {
+					continue;
+				}
+				$item = '/instal+ments?\s+(?:schedules?|structures?|periods?|terms|timelines?|amounts?|dates?|details|requirements|arrangements|milestones)\b/i';
+				if ( preg_match( '/instal+ment/i', $cl ) && ! ( ! preg_match( '/\d/', $cl ) && preg_match( $item, $cl ) && ! preg_match( '/\b(?:offer\w*|can be|pay|paid|payable|spread|structured)\b|instal+ments?\s+\w+\b.*\bavailable\b/i', $cl ) ) ) {
+					$out['instalments'] = true; // offered; not a checklist item ("Instalment schedule", "The available instalment period")
+				}
+				$body = preg_replace( '/^[^:]{1,40}:\s*/u', '', $cl ); // "Payment plan: Cash 90% upfront ..." -> "Cash 90% upfront ..."
+				if ( $route_pc || preg_match( '/^\W*' . $route . '\b/i', $body ) || ( preg_match( '/\b' . $route . '\b/i', $body ) && ! preg_match( '/instal/i', $body ) ) ) {
+					continue; // the cash or mortgage route (a bank loan too): not the instalment plan
+				}
+				$cl = preg_replace( '/\b(?:complet\w*|handover|hand-over|delivery|occupation)\s+(?:is\s+|date\s+)?(?:expected\s+)?(?:in|within)\s+\d{1,3}\s*(?:months?|years?)\b/iu', ' ', $cl ); // "with completion in 24 months" is not the plan's length
+				if ( ! $out['on_completion'] && ( preg_match( '/(\d{1,2})\s*%\s*(?:of the (?:purchase |total )?price\s+)?(?:balance\s+)?(?:(?:is\s+)?(?:payable|due|paid)\s+)?(?:on|at|upon)\s+(?:completion|handover|hand-over)\b/i', $cl, $m )
+					|| preg_match( '/^(?:on|at|upon)?\s*(?:completion|handover)\s*[:–—-]\s*(\d{1,2})\s*%/i', $cl, $m ) ) ) {
+					$out['on_completion'] = (int) $m[1];
+				}
+				if ( ! preg_match( '/pay|plan|instal|balance/i', $cl ) || ( preg_match( '/\b(?:title|transfer|issu\w*|process\w*|handover|valuation|construction|built|complet\w*|delivery|lease|loan)\b/i', $cl ) && ! preg_match( '/balance|instal|pay(?:ment)?\s*plan|plan\s*:|payment period/i', $cl ) ) ) {
+					continue; // not about paying: "handover 24 months from booking", "the title within 6 months"
+				}
+				if ( ! preg_match_all( $re, $cl, $mm, PREG_SET_ORDER ) ) {
+					continue;
+				}
+				foreach ( $mm as $m ) {
+					$found = array();
+					if ( ! empty( $m['n'] ) ) {
+						$found[] = (int) $m['n'] * ( 'quarterly' === strtolower( $m['f'] ) ? 3 : 1 );
+					} else {
+						foreach ( array( array( 'm', 'u' ), array( 'm2', 'u2' ), array( 'm3', 'u3' ) ) as $k ) {
+							if ( ! empty( $m[ $k[0] ] ) && preg_match_all( '/\d{1,3}/', $m[ $k[0] ], $nn ) ) {
+								foreach ( $nn[0] as $x ) {
+									$found[] = (int) $x * ( 0 === stripos( $m[ $k[1] ], 'year' ) ? 12 : 1 );
+								}
+								break;
+							}
+						}
+					}
+					foreach ( $found as $t ) {
+						if ( $t >= 3 && $t <= 120 && $tied_pc && ! in_array( $t, $out['tied'], true ) ) {
+							$out['tied'][] = $t;
+						}
+						if ( $t >= 3 && $t <= 120 && ! in_array( $t, $out['terms'], true ) ) {
+							$out['terms'][] = $t;
+							$q              = (bool) preg_match( '/quarter/i', preg_replace( '/\b(?:three[\s-])?quarters?[\s-]+(?:of\s+an?\s+)?acres?\b/i', ' ', $cl ) );
+							$q_only         = ( null === $q_only || $q_only ) && $q && ! preg_match( '/monthly|\bmonth to month\b/i', $cl );
+							$u_only         = ( null === $u_only || $u_only ) && preg_match( '/\b(?:up to|within)\b/i', $m[0] );
+						}
+					}
+				}
+			}
+		}
+		sort( $out['terms'] );
+		$out['quarterly']   = (bool) $q_only;
+		$out['upto']        = (bool) $u_only;
+		$out['instalments'] = $out['instalments'] || (bool) $out['terms']; // "payment over 24 months" is an instalment plan
+		return $out;
 	}
 
 	/* =====================================================================
@@ -923,12 +1176,13 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			return $h;
 		}
 		$dep    = $plan['deposit'] > 0 ? $plan['deposit'] : (float) $cfg['default_deposit'];
-		$months = (int) $plan['months'];
+		$terms  = ! empty( $plan['terms'] ) ? array_values( $plan['terms'] ) : array(); // v1.8: the plan's own length ("over 24 months"), not the time to completion
+		$months = $terms ? (int) $terms[0] : (int) $plan['months'];
 		$ip     = isset( $plan['inst_pct'] ) ? (float) $plan['inst_pct'] : 0;
 		$ie     = $ip > 0 ? (int) $plan['inst_every'] : 0;
-		$freq   = 3 === $ie ? 3 : 1; // quarterly first only when the plan fixes a share every 3 months
+		$freq   = 3 === $ie || ( $terms && ! empty( $plan['term_q'] ) ) ? 3 : 1; // quarterly first when the plan fixes a share every 3 months, or its instalments are quarterly
 		$h      = '<div class="bkd-calc" id="bkd-calc" data-bkd-calc="instalment" data-cur="' . esc_attr( $cur ) . '" data-deposit="' . esc_attr( $dep ) . '"'
-			. ' data-reservation="' . esc_attr( (float) $plan['reservation'] ) . '" data-until="' . esc_attr( $plan['until'] ) . '" data-months="' . esc_attr( $months ) . '"'
+			. ' data-reservation="' . esc_attr( (float) $plan['reservation'] ) . '" data-until="' . esc_attr( $terms ? '' : $plan['until'] ) . '" data-months="' . esc_attr( $months ) . '"'
 			. ' data-completion="' . esc_attr( $plan['completion'] ) . '" data-oncompletion="' . esc_attr( (int) $plan['on_completion'] ) . '"'
 			. ( $ip > 0 ? ' data-instpct="' . esc_attr( $ip ) . '" data-instevery="' . esc_attr( $ie ) . '"' : '' ) . '>';
 		$h     .= '<div class="bkd-calc-grid"><div class="bkd-calc-fields">';
@@ -937,10 +1191,10 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			. '<input class="bkd-range" type="range" data-c="dep" min="0" max="60" step="5" value="' . esc_attr( round( $dep / 5 ) * 5 ) . '" aria-label="Deposit percentage"></label>';
 		$h     .= '<div class="bkd-cf" role="group" aria-label="Pay the balance"><span class="bkd-cl">Pay the balance</span><div class="bkd-seg">'
 			. '<button type="button" data-c="freq" data-v="1" aria-pressed="' . ( 1 === $freq ? 'true' : 'false' ) . '">Monthly</button><button type="button" data-c="freq" data-v="3" aria-pressed="' . ( 3 === $freq ? 'true' : 'false' ) . '">Quarterly</button></div></div>';
-		if ( $months < 1 ) {
+		if ( $months < 1 || count( $terms ) > 1 ) { // several stated lengths ("24 and 36-month plans"): those, the shortest first
 			$h .= '<label class="bkd-cf"><span class="bkd-cl">Over</span><select class="bkd-ci" data-c="months" aria-label="Number of months">';
-			foreach ( array( 6, 12, 18, 24, 30, 36, 48, 60 ) as $mo ) {
-				$h .= '<option value="' . $mo . '"' . selected( 24, $mo, false ) . '>' . $mo . ' months</option>';
+			foreach ( count( $terms ) > 1 ? $terms : array( 6, 12, 18, 24, 30, 36, 48, 60 ) as $mo ) {
+				$h .= '<option value="' . (int) $mo . '"' . selected( count( $terms ) > 1 ? $terms[0] : 24, $mo, false ) . '>' . (int) $mo . ' months</option>';
 			}
 			$h .= '</select></label>';
 		}
@@ -951,9 +1205,15 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$h .= '<div class="bkd-co-row" data-c="comp-row" hidden><span>On completion</span><strong data-c="comp">—</strong></div>';
 		$h .= '<div class="bkd-co-row bkd-co-total"><span>Total price</span><strong data-c="total">—</strong></div>';
 		$h .= '</div></div>';
-		$note = 'Illustrative only: equal instalments from next month' . ( $months > 0 ? ' until completion' . ( $plan['completion'] ? ' in ' . $plan['completion'] : '' ) : '' ) . '.';
+		$in   = isset( $plan['completion_s'] ) ? $plan['completion_s'] : $plan['completion']; // v1.8 (the development layout): "in late 2027"
+		$note = 'Illustrative only: equal instalments from next month' . ( $months > 0 ? ' until completion' . ( $plan['completion'] ? ' in ' . $in : '' ) : '' ) . '.';
+		if ( $terms ) { // "over 24 months", "over 20, 25 or 30 months"; "up to 9 months" is the most; a length past completion says so
+			$last = array_pop( $terms );
+			$note = 'Illustrative only: equal instalments from next month over ' . ( $terms ? implode( ', ', $terms ) . ' or ' : '' ) . $last . ' months, ' . ( empty( $plan['term_upto'] ) ? 'as the listing states' : 'the longest the listing states' )
+				. ( ! empty( $plan['term_past'] ) && $plan['completion'] ? ' (completion is scheduled for ' . $in . ')' : '' ) . '.';
+		}
 		if ( $ip > 0 ) {
-			$note = 'Illustrative only: ' . blockke_dev_num( $ip ) . '% of the price every ' . ( 1 === $ie ? 'month' : $ie . ' months' ) . ' from next month, and the balance on completion' . ( $plan['completion'] ? ' in ' . $plan['completion'] : '' ) . '.';
+			$note = 'Illustrative only: ' . blockke_dev_num( $ip ) . '% of the price every ' . ( 1 === $ie ? 'month' : $ie . ' months' ) . ' from next month, and the balance on completion' . ( $plan['completion'] ? ' in ' . $in : '' ) . '.';
 		}
 		if ( $plan['deposit'] <= 0 ) {
 			$note .= ' The deposit shown is typical; this listing has not stated one.';
@@ -1410,7 +1670,7 @@ JS;
 		return preg_replace( '/^[\s,.\-–—]+|[\s,.\-–—]+$/u', '', $t );
 	}
 
-	/** studio | loft | penthouse | number of bedrooms | '' */
+	/** studio | loft | penthouse | number of bedrooms | a range ("3-4", v1.8: "3 & 4 Bedroom", "4 and 5-bed") | '' */
 	function blockke_dev_bed_key( $label, $beds = 0 ) {
 		$l = strtolower( $label );
 		if ( false !== strpos( $l, 'studio' ) || false !== strpos( $l, 'bedsitter' ) ) {
@@ -1421,6 +1681,15 @@ JS;
 		}
 		if ( false !== strpos( $l, 'loft' ) ) {
 			return 'loft';
+		}
+		// v1.8: "3 & 4 Bedroom" is 3 to 4, not 3. Counts of 1 to 10 only, and not a unit, block, phase or floor number or a
+		// year before the count ("Unit 12 - 3 bedroom", "2024 - 3 Bedroom"); a label is short, so only its start is read
+		$lr = preg_replace( '/\b(?:units?|blocks?|phases?|floors?|levels?|towers?|types?|no\.?|numbers?|plots?|lots?|houses?|buildings?)\s*#?\s*\d+[a-z]?\b|\b(?:19|20)\d{2}\b/u', ' ', substr( $l, 0, 200 ) );
+		if ( preg_match( '/(?<![\d.])((?:10|[1-9])(?:\s*+(?:,|-|–|to|&|and|or)\s*+(?:10|[1-9])(?![\d.]))++)\s*+-?\s*+(?:bed|br\b)/u', (string) $lr, $m ) && preg_match_all( '/\d+/', $m[1], $nn ) && min( $nn[0] ) !== max( $nn[0] ) ) {
+			return (int) min( $nn[0] ) . '-' . (int) max( $nn[0] );
+		}
+		if ( preg_match( '/\b(?:units?|blocks?|phases?|floors?|levels?|towers?|types?)\s*#?\s*\d+|\b(?:19|20)\d{2}\b/u', $l ) && preg_match( '/(?<![\d.])(10|[1-9])\s*-?\s*(?:bed|br\b)/u', (string) $lr, $m ) ) {
+			return (int) $m[1]; // v1.8: "Unit 12 - 3 bedroom" is a 3-bed, not a 12-bed
 		}
 		if ( preg_match( '/(\d+)\s*-?\s*(?:(?:-|–|to|&|and)\s*\d+\s*-?\s*)?(?:bed|br\b)/u', $l, $m ) ) { // "2 Bed", "1-Bedroom", "2-3 bed"
 			return (int) $m[1];
@@ -1445,7 +1714,62 @@ JS;
 		if ( is_int( $key ) ) {
 			return $key . ' Bed';
 		}
+		if ( preg_match( '/^(\d+)-(\d+)$/', (string) $key, $m ) ) { // v1.8: a range
+			return $m[1] . ' – ' . $m[2] . ' Bed';
+		}
 		return $fallback;
+	}
+
+	/**
+	 * v1.8: the bedroom counts a listing's title names, and whether it names studios: "3 Bedroom Villa for Sale" -> [3];
+	 * "4 & 5 Bedroom Homes", "2–4 Bed Loft Apartments" -> [4, 5], [2, 4]; "Studio & 1 Bedroom Apartments" -> [1] and studio;
+	 * "Cascadia Apartments for Sale" -> none. More than one between them is a range of homes, not one home.
+	 */
+	function blockke_dev_title_beds( $title ) {
+		$t     = strtolower( substr( blockke_dev_text( $title ), 0, 300 ) );
+		$words = array( 'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5, 'six' => 6, 'seven' => 7 );
+		$n     = '(?:10|[1-9]|one|two|three|four|five|six|seven)';
+		$beds  = array();
+		if ( preg_match_all( '/(?<![\d.,])(' . $n . '(?:\s*+(?:,\s*+(?:&|and|or)?|&|and|or|to|–|-|\/)\s*+' . $n . ')*+)[\s-]*+(?:bed(?:room)?s?|br|bd)\b/u', $t, $mm ) ) {
+			foreach ( $mm[1] as $x ) {
+				preg_match_all( '/' . $n . '/u', $x, $nn );
+				foreach ( $nn[0] as $v ) {
+					$beds[] = isset( $words[ $v ] ) ? $words[ $v ] : (int) $v;
+				}
+			}
+		}
+		$beds = array_values( array_unique( $beds ) );
+		sort( $beds );
+		return array(
+			'beds'   => $beds,
+			'studio' => (bool) preg_match( '/\bstudios?\b|\bbedsitters?\b/u', $t ),
+		);
+	}
+
+	/** v1.8: the bedroom counts a key stands for: 3 -> [3], "3-4" -> [3, 4], studio and the rest -> []. */
+	function blockke_dev_key_beds( $key ) {
+		if ( is_int( $key ) ) {
+			return array( $key );
+		}
+		return preg_match( '/^(\d+)-(\d+)$/', (string) $key, $m ) ? array( (int) $m[1], (int) $m[2] ) : array();
+	}
+
+	/**
+	 * v1.8: the words that set one home type apart, from a unit's label or a residences row: no bedroom count, no small
+	 * words and none of $skip (the development's name and area); plurals as singular. "Premium 4 Bedroom Townhouse" ->
+	 * premium, townhouse; "Oak & Ivy Village 1, Loresho" -> village, 1. What every home of a type may have (a DSQ, en-suites)
+	 * does not set it apart: "4 Bedroom Apartment with DSQ" -> apartment.
+	 */
+	function blockke_dev_unit_words( $s, $skip = array() ) {
+		$s   = preg_replace( '/\b(?:\d+(?:\s*+(?:,|-|–|to|&|and|or)\s*+\d+)*+)\s*+-?\s*+(?:bed(?:room)?s?|br)\b/u', ' ', strtolower( blockke_dev_text( $s ) ) );
+		$out = array();
+		foreach ( (array) preg_split( '/[^\p{L}\p{N}]+/u', (string) $s, -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+			$w = preg_match( '/(?:ss|sh|ch|x)es$/u', $w ) ? substr( $w, 0, -2 ) : ( preg_match( '/^\p{L}{3,}[^s]s$/u', $w ) ? substr( $w, 0, -1 ) : $w ); // villas -> villa, boxes -> box, not "class"
+			if ( ! in_array( $w, $skip, true ) && ! preg_match( '/^(?:the|a|an|at|in|on|of|for|and|with|by|sale|rent|let|from|kes|ksh|usd|new|bedroom|bed|home|unit|type|phase|block|dsq|sq|en|suite|ensuite|all|plus)$/u', $w ) ) {
+				$out[ $w ] = true;
+			}
+		}
+		return array_keys( $out );
 	}
 
 	function blockke_dev_subunits( $id ) {
@@ -1482,7 +1806,7 @@ JS;
 				'key'   => blockke_dev_bed_key( $label, (int) get_post_meta( $p->ID, 'property_bedrooms', true ) ),
 				'url'   => get_permalink( $p ),
 				'price' => (float) get_post_meta( $p->ID, 'property_price', true ),
-				'size'  => $size > 0 ? blockke_dev_num( $size * $factor ) . ' m²' : '',
+				'size'  => $size > 0 ? blockke_dev_num( 1 === $factor ? $size : round( $size * $factor ) ) . ' m²' : '', // from sq ft: whole m²
 			);
 		}
 		return $out;
@@ -1504,8 +1828,16 @@ JS;
 		return array( $t, $note );
 	}
 
-	/** Units from the description's unit table (Unit type / Size / Price), linked to the sub-unit listings. */
-	function blockke_dev_units_from_table( $tokens, $subs ) {
+	/**
+	 * Units from the description's unit table (Unit type / Size / Price), linked to the sub-unit listings. v1.8: a row links to
+	 * the unit whose own words are all in it ("Premium" for "Premium 4-Bedroom Townhouse", "Village 1" for "Village 1 —
+	 * Expansive Apartments"); by bedrooms alone only to a unit that names nothing but a home type, when it is the only one
+	 * with those bedrooms and the row names no type the unit is not ("Studio" for "Studio Apartment", "4 Bedroom + DSQ"
+	 * for "4 Bedroom Apartment with DSQ"). $skip: the development's name and area words (blockke_dev_unit_words()).
+	 */
+	function blockke_dev_units_from_table( $tokens, $subs, $skip = array() ) {
+		$home = '/^(?:villa|townhouse|house|apartment|maisonette|duplex|triplex|bungalow|penthouse|flat|mansion|residence|cottage|studio|loft)$/u';
+		$skip = array_diff( $skip, preg_grep( $home, $skip ) ); // "Leroux Villas": a villa is still a home type
 		foreach ( $tokens as $t ) {
 			if ( 'table' !== $t['tag'] ) {
 				continue;
@@ -1550,9 +1882,20 @@ JS;
 						break;
 					}
 				}
-				if ( '' === $url && '' !== $key ) {
+				if ( '' === $url && $subs ) {
+					$rw    = blockke_dev_unit_words( $c[ $ti ] . ' ' . ( 0 !== $ti && 0 !== $si && 0 !== $fi && 0 !== $pi ? $c[0] : '' ), $skip );
+					$rk    = blockke_dev_key_beds( $key );
+					$types = preg_grep( $home, $rw ); // the home types the row names
+					$count = array_count_values( array_map( 'strval', wp_list_pluck( $subs, 'key' ) ) );
 					foreach ( $subs as $s ) {
-						if ( $s['key'] === $key ) {
+						$sk = blockke_dev_key_beds( $s['key'] );
+						if ( $rk && $sk && ! array_intersect( $rk, $sk ) ) {
+							continue; // other bedrooms
+						}
+						$sw  = blockke_dev_unit_words( $s['label'], $skip );
+						$in  = $sw && ! array_diff( $sw, $rw );
+						$any = ! array_diff( $sw, preg_grep( $home, $sw ) ) && '' !== (string) $s['key'] && (string) $s['key'] === (string) $key && 1 === $count[ (string) $s['key'] ] && ! array_diff( $types, $sw );
+						if ( $in || $any ) {
 							$url = $s['url'];
 							break;
 						}
@@ -1628,10 +1971,11 @@ JS;
 
 	function blockke_dev_homes_label( $units ) {
 		$keys = array();
+		$ints = array();
 		foreach ( $units as $u ) {
 			$keys[] = $u['key'];
+			$ints   = array_merge( $ints, blockke_dev_key_beds( $u['key'] ) ); // v1.8: a "3 & 4 Bedroom" row counts both
 		}
-		$ints = array_values( array_filter( $keys, 'is_int' ) );
 		$s    = in_array( 'studio', $keys, true );
 		$out  = '';
 		if ( $ints ) {
@@ -1663,7 +2007,7 @@ JS;
 			return array_slice( $facts, 0, 6 );
 		}
 		$facts = array();
-		$total = blockke_dev_kv_get( $kv, '/total units|number of units|no\.? of units|^units$|^residences$|^homes$/i' );
+		$total = blockke_dev_kv_get( $kv, '/total (?:units|homes|villas|houses|townhouses|residences)|number of (?:units|homes|villas|houses|townhouses|residences)|no\.? of (?:units|homes|villas|houses)|^units$|^residences$|^homes$/i' );
 		if ( $total && preg_match( '/\d/', $total ) && mb_strlen( $total ) <= 24 ) {
 			$facts[] = array( 'Residences', $total );
 		}
@@ -1685,15 +2029,31 @@ JS;
 		}
 		$sizes = blockke_dev_size_range( $units );
 		if ( ! $sizes ) {
-			$sz = blockke_dev_kv_get( $kv, '/built area|floor area|internal area|living area|unit size|^sizes?$/i' );
-			foreach ( '' === $sz ? $kv : array() as $p ) { // any other size, but not the plot's
-				if ( preg_match( '/size/i', $p[0] ) && ! preg_match( '/plot|land/i', $p[0] ) ) {
+			$sz = blockke_dev_kv_get( $kv, '/built(?:[- ]up)? area|plinth|floor area|internal area|living area|unit size|^sizes?$/i' );
+			foreach ( '' === $sz ? $kv : array() as $p ) { // another size or area given in m² or sq ft ("Villa Sizes"), but not a plot, site or court's
+				if ( preg_match( '/size|area/i', $p[0] ) && ! preg_match( '/plot|land|site|court|estate|compound|garden|acre|location|catchment/i', $p[0] ) && preg_match( '/\d\s*(?:sq\.?\s*(?:m|f)|sqm|sqft|m²|m2\b|ft²|square (?:met|f))/i', $p[1] ) ) {
 					$sz = $p[1];
 					break;
 				}
 			}
 			if ( $sz ) {
 				$sizes = blockke_dev_size( $sz );
+			}
+		}
+		$tb = blockke_dev_title_beds( get_post_field( 'post_title', $id ) );
+		if ( ! $sizes && ! $units && '1' !== (string) get_post_meta( $id, 'property_has_subunits', true ) && count( $tb['beds'] ) + (int) $tb['studio'] <= 1 ) {
+			// one home: its size field (the README's "built area"), when it can be a home's: not a site's (630,749 sq ft), not
+			// 290 sq ft for five bedrooms, and not a plot's (5,450 sq ft is an eighth of an acre); never for a title that
+			// offers a range of homes ("2–4 Bed Loft Apartments"), nor with no bedrooms unless the home is a studio
+			$factor = blockke_dev_sqft_factor();
+			$sq     = (float) get_post_meta( $id, 'property_size', true ) * $factor;
+			$bd     = (int) get_post_meta( $id, 'property_bedrooms', true );
+			$plot   = false;
+			foreach ( array( 0.125, 0.25, 1 / 3, 0.5, 1 ) as $ac ) {
+				$plot = $plot || abs( $sq - $ac * 4046.86 ) <= $ac * 4046.86 * 0.01;
+			}
+			if ( ! $plot && ( $bd > 0 || $tb['studio'] ) && $sq >= max( 15, 20 * $bd ) && $sq <= 3000 ) {
+				$sizes = blockke_dev_num( 1 === $factor ? $sq : round( $sq ) ) . ' m²';
 			}
 		}
 		if ( $sizes ) {
@@ -1822,8 +2182,49 @@ JS;
 	/**
 	 * Amenities worth a feature tile: pattern on the lower-case item, kind, short title, icon, rank, one line.
 	 * The first match wins, so specific patterns come before general ones. Anything else goes in the checklist.
+	 * v1.8 ($layout, the development layout only; classic pages keep these): "coffee" alone is not a café and "dining" not
+	 * a residents' lounge, yoga comes before lawns ("Yoga lawn"), pickleball is a sports court, "recycled water" is not a
+	 * jogging track, and the lines make no claim a home may not bear out ("above the city", "steps from home", "no membership").
 	 */
-	function blockke_dev_amenity_lib() {
+	function blockke_dev_amenity_lib( $layout = false ) {
+		$lib = blockke_dev_amenity_lib_v17();
+		if ( ! $layout ) {
+			return $lib;
+		}
+		$out = array();
+		foreach ( $lib as $l ) {
+			if ( 'yoga' === $l[1] ) {
+				continue; // placed before the gardens, below
+			}
+			if ( 'garden' === $l[1] ) {
+				foreach ( $lib as $y ) {
+					if ( 'yoga' === $y[1] ) {
+						$out[] = $y;
+					}
+				}
+			}
+			if ( 'cafe' === $l[1] ) {
+				$l[0] = '/restaurant|caf[eé]|coffee (?:shop|house)|bistro|eatery|food court/u';
+			} elseif ( 'social' === $l[1] ) {
+				$l[0] = '/club ?house|(?<!living )(?<!family )(?<!sitting )(?<!dining )lounge|social|entertainment|function (room|hall)|events?\b|party|multi-?purpose|residents/u';
+			} elseif ( 'sport' === $l[1] ) {
+				$l[0] = '/tennis|squash|basketball|padel|paddle|pickle ?ball|volleyball|badminton|football|sports? (court|ground|field|facilit)/u';
+			} elseif ( 'trail' === $l[1] ) { // "cycling", "cycle track", "bicycle path"; not "recycled water" or "motorcycle parking"
+				$l[0] = '/jog|running|walking (track|trail|path)|\bcycl|bicycl|\bbike (?:lanes?|paths?|tracks?|trails?)|\btrails?\b|\btracks?\b/u';
+			} elseif ( 'sky' === $l[1] ) {
+				$l[5] = 'Sundowners and long evenings in the open air.';
+			} elseif ( 'gym' === $l[1] ) {
+				$l[5] = 'Train before work, without the drive to a gym.';
+			} elseif ( 'work' === $l[1] ) {
+				$l[5] = 'A quiet place to work or study, without the commute.';
+			}
+			$out[] = $l;
+		}
+		return $out;
+	}
+
+	/** The amenity library as in v1.7 (classic pages, and the base of the development layout's). */
+	function blockke_dev_amenity_lib_v17() {
 		return array(
 			array( '/\bbeach|ocean ?front|sea ?front|water ?front/u', 'beach', 'Beach access', 'waves', 100, 'Sand, sea and salt air on your doorstep.' ),
 			array( '/infinity/u', 'pool', 'Infinity pool', 'waves', 99, 'Swim to the edge of the view.' ),
@@ -1851,9 +2252,25 @@ JS;
 		);
 	}
 
-	/** Splits the amenity groups into feature tiles (one per kind, best first, 1-4 or 6) and a checklist. */
-	function blockke_dev_amenity_layout( $groups ) {
-		$lib   = blockke_dev_amenity_lib();
+	/**
+	 * Splits the amenity groups into feature tiles (one per kind, best first, 1-4 or 6) and a checklist.
+	 * v1.8 ($layout, the development layout only; classic pages keep v1.7's): the layout's library (blockke_dev_amenity_lib()),
+	 * a labelled item ("The Clubhouse: a lounge and an on-site restaurant") is the kind its label names, a long item keeps
+	 * its own name as the title when it starts with one, and the text doesn't repeat it ("Rooftop terrace" over "With
+	 * jacuzzi area"), the one long item of a group is its group's kind ("Residents lounge"), and the checklist is "The
+	 * everyday essentials" only when it holds nothing but security, parking, lifts, power, water and the like (not a
+	 * fireplace or a bar).
+	 */
+	function blockke_dev_amenity_layout( $groups, $layout = false ) {
+		$lib   = blockke_dev_amenity_lib( $layout );
+		$find  = function ( $s ) use ( $lib ) {
+			foreach ( $lib as $l ) {
+				if ( preg_match( $l[0], $s ) ) {
+					return $l;
+				}
+			}
+			return null;
+		};
 		$items = array();
 		$seen  = array();
 		foreach ( $groups as $g ) {
@@ -1864,17 +2281,31 @@ JS;
 					continue;
 				}
 				$seen[ $lc ] = true;
+				$head        = ''; // v1.8: the item's own name, when it has one that names its kind
+				$body        = $it;
 				$hit         = null;
-				foreach ( $lib as $l ) {
-					if ( preg_match( $l[0], $lc ) ) {
-						$hit = $l;
-						break;
+				if ( $layout && preg_match( '/^([^:]{3,40}):\s+(\S.*)$/u', $it, $hm ) ) {
+					$hit = $find( strtolower( $hm[1] ) );
+					if ( $hit ) {
+						$head = trim( $hm[1] );
+						$body = trim( $hm[2] );
+					}
+				}
+				if ( ! $hit ) {
+					$hit = $find( $lc );
+				}
+				if ( $layout && ! $hit && 1 === count( $g['items'] ) && mb_strlen( $it ) > 30 && ! empty( $g['title'] ) ) {
+					$hit = $find( strtolower( (string) $g['title'] ) );
+					if ( $hit ) {
+						$head = trim( (string) $g['title'] );
 					}
 				}
 				$items[] = array(
 					'text' => $it,
 					'lib'  => $hit,
 					'i'    => count( $items ),
+					'head' => $head,
+					'body' => $body,
 				);
 			}
 		}
@@ -1911,18 +2342,73 @@ JS;
 			$used[ $c['i'] ]       = true;
 			$shown[ $c['lib'][1] ] = true;
 			$long                  = mb_strlen( $c['text'] ) > 30;
-			$tiles[]               = array(
+			$title                 = $long ? $c['lib'][2] : ucfirst( $c['text'] );
+			$text                  = $long ? preg_replace( '/[.;:,\s]+$/u', '', $c['text'] ) . '.' : $c['lib'][5];
+			if ( $layout && $long ) {
+				$own = '' !== $c['head'] && mb_strlen( $c['head'] ) <= 30 ? $c['head'] : '';
+				$txt = '' !== $own ? $c['body'] : $c['text'];
+				if ( '' === $own ) { // the name it starts with: "Rooftop terrace with jacuzzi area", "Modern Gymnasium equipped for ..."
+					$ph = preg_split( '/\s+(?:with|featuring|including|offering|equipped|for|plus|where|that|which|and|&)\s+|\s*[,;:(]\s*|\s+[–—-]\s+/u', $c['text'], 2 );
+					$ph = is_array( $ph ) ? trim( $ph[0] ) : ''; // invalid UTF-8: no name
+					$pk = mb_strlen( $ph ) >= 3 && mb_strlen( $ph ) <= 30 && $ph !== $c['text'] ? $find( strtolower( $ph ) ) : null;
+					$own = $pk && $pk[1] === $c['lib'][1] ? $ph : '';
+					if ( '' !== $own ) { // and the text does not open with that name again
+						$base = preg_replace( '/[.;:,\s]+$/u', '', $c['text'] );
+						$kind = function ( $s ) use ( $find, $c ) {
+							$k = $find( strtolower( $s ) );
+							return $k && $k[1] === $c['lib'][1];
+						};
+						// a title is a name: no sentence end or time in it, no comma, semicolon or open bracket at its end, and its
+						// brackets closed ("Rooftop pool and gym. Shared", "Large private garden space,", "Gym (open 24 hours")
+						$named = function ( $s ) {
+							return ! preg_match( '/[.!?:]|[,;(]$/u', $s ) && substr_count( $s, '(' ) === substr_count( $s, ')' ) && substr_count( $s, '[' ) === substr_count( $s, ']' );
+						};
+						$nm   = array();
+						$cut  = preg_match( '/^([^.!?]{3,45}?)(\s+(?:with|featuring|including|offering|equipped|for|plus)\s|\s*(?<!\d):(?!\d)\s*|\s+[–—-]\s+|\s+(?:where|that|which)\s)(.+)$/u', $base, $nm );
+						if ( $cut && ! preg_match( '/^\s+(?:where|that|which)\s$/u', $nm[2] ) && $kind( $nm[1] ) ) {
+							// the name up to "with", "for", "equipped" ..., a colon or a dash is the title, and the rest the text:
+							// "Modern Gymnasium" | "Equipped for all your daily fitness needs"; "Open Garden Spaces & Picnic Spots" | "Perfect for ..."
+							$sep  = preg_match( '/^\s*[:–—-]/u', $nm[2] );
+							$rest = $sep ? $nm[3] : trim( $nm[2] ) . ' ' . $nm[3];
+							if ( $named( trim( $nm[1] ) ) && ! ( 'equipped' === trim( $nm[2] ) && preg_match( '/\b(?:fully|well)$/iu', $nm[1] ) )
+								&& ( count( preg_split( '/\s+/u', trim( $rest ) ) ) >= 3 || ! ( $sep || preg_match( '/\s(?:and|&)\s/u', $nm[1] ) ) ) ) {
+								$own = trim( $nm[1] );
+								$txt = $rest;
+							} // else as v1.8 drew it: "and a fully | equipped gym", "Picnic Spots: | Perfect", "and a green park | for events"
+						} elseif ( ! $cut && mb_strlen( $base ) <= 45 && $kind( $base ) ) {
+							if ( $named( $base ) ) {
+								$own = $base; // only names ("Coffee café and residents’ restaurant"): the title, with the kind's line, as a short item
+								$txt = $c['lib'][5];
+							}
+						} elseif ( preg_match( '/^' . preg_quote( $ph, '/' ) . '\s+(?:and|&)\s+(\S.*)$/u', $base, $nm ) ) {
+							// a longer list: its first name, then the rest ("Dedicated Children’s Play Area" | "Vibrant Skate Park for older
+							// kids"), when the rest is one sentence and names another kind ("Scenic jogging and walking trails" is one thing)
+							$nx = preg_split( '/\s+(?:with|featuring|including|offering|equipped|for|plus|where|that|which|and|&)\s+|\s*[,;:(]\s*|\s+[–—-]\s+/u', $nm[1], 2 );
+							$nk = is_array( $nx ) ? $find( strtolower( trim( $nx[0] ) ) ) : null;
+							if ( $nk && $nk[1] !== $c['lib'][1] && ! preg_match( '/[.!?]\s|\b(?:where|that|which)\b/iu', $nm[1] ) ) {
+								$txt = $nm[1];
+							}
+						} // else ("... where", "... that", a comma): as v1.8 drew it
+					}
+				}
+				$title = '' !== $own ? ucfirst( $own ) : $c['lib'][2];
+				$text  = ucfirst( preg_replace( '/[.;:,\s]+$/u', '', $txt ) ) . '.';
+			}
+			$tiles[] = array(
 				'icon'  => $c['lib'][3],
-				'title' => $long ? $c['lib'][2] : ucfirst( $c['text'] ),
-				'text'  => $long ? preg_replace( '/[.;:,\s]+$/u', '', $c['text'] ) . '.' : $c['lib'][5],
+				'title' => $title,
+				'text'  => $text,
 			);
 		}
 		$rest       = array();
 		$essentials = true;
+		// the practical things: security and access, parking, lifts, power, water, connections, roads, upkeep, the kitchen,
+		// laundry, storage, en-suites and staff quarters (not a fireplace, a bar, a terrace or a prayer room)
+		$ess        = '/secur|guard|cctv|camera|\bgated?\b|gate ?house|perimeter|\bwalls?\b|fenc|alarm|access|entry|\blocks?\b|intercom|biometric|fingerprint|facial|power|generator|back-?up|solar|electric|water|borehole|\btanks?\b|sewer|septic|drainage|waste|garbage|parking|garage|car ?ports?|\blifts?\b|elevator|internet|fib(?:re|er)|wi-?fi|broadband|\broads?\b|tarmac|cabro|street ?light|lighting|maintenance|management|caretaker|concierge|reception|laundry|utility|kitchen|pantry|storage|cloakroom|wardrobe|en-?suite|ensuite|\bdsqs?\b|staff quarters?|servants?|ventilation|windows/i';
 		foreach ( $items as $x ) {
 			if ( ! isset( $used[ $x['i'] ] ) && ! ( $x['lib'] && isset( $shown[ $x['lib'][1] ] ) ) ) { // a second pool or gym adds nothing
 				$rest[]     = $x['text'];
-				$essentials = $essentials && ! ( $x['lib'] && $x['lib'][4] >= 50 );
+				$essentials = $essentials && ! ( $x['lib'] && $x['lib'][4] >= 50 ) && ( ! $layout || preg_match( $ess, $x['text'] ) );
 			}
 		}
 		return array(
@@ -2121,6 +2607,63 @@ JS;
 	}
 
 	/** The listing's own "Places nearby" box (Place | travel time per line), if filled in. */
+	/**
+	 * v1.8: a row of the description's Location list or table as a place (array( place, time or distance )), or null when it
+	 * is not one. A time written as the name ("~15 minutes | to the centre of Westlands") is turned round. A bold topic and
+	 * its sentence ("Schools | Brookhouse and Rosslyn are close by", "<b>A quiet setting</b>, known for ...", "The northern
+	 * corridor. ...") and a sentence on its own ("Located in Vipingo, next to ...") are not places.
+	 */
+	function blockke_dev_place_row( $name, $val ) {
+		$name = trim( (string) $name );
+		$val  = trim( (string) $val );
+		$time = '/^(?:~|about|approx(?:\.|imately)?|around|under|less than|within|just|only)?\s*(?:[\d.,]+(?:\s*(?:-|–|to)\s*[\d.,]+)?\s*(?:min(?:ute)?s?|hours?|hrs?|km|kilomet(?:re|er)s?|metres|meters|m)\b|(?:a few\s+)?minutes|moments)[’\']?s?(?:\s+(?:drive|walk|away))?\.?$/iu';
+		if ( preg_match( $time, $name ) && preg_match( '/^(?:to|from)\s+(.+)$/iu', $val, $m ) ) {
+			$val  = $name;
+			$name = ucfirst( $m[1] );
+		}
+		if ( '' === $name || mb_strlen( $name ) > 60 || preg_match( '/[.!?]$/u', $name )
+			|| preg_match( '/^(?:located|set|situated|roughly|approximately|about|under|within|just|moments?|minutes?|close|near|next to|access|easy|convenient|proximity|placement|uninterrupted|an?\s|the (?:development|estate|site|property)\b|it\s|from\s|with\s)/iu', $name ) ) {
+			return null; // a phrase or a sentence, not a place's name
+		}
+		if ( '' === $val ) {
+			return array( $name, '' );
+		}
+		if ( preg_match( '/^[,;:]|^(?:and|plus|known|offering|which|with|including|where|while|making|connecting)\b/iu', $val ) ) {
+			return null; // the bold words open a sentence ("<b>Close to good schools</b>, including ...")
+		}
+		if ( mb_strlen( $val ) <= 60 && preg_match( '/\d\s*(?:min|hours?\b|hrs?\b|km\b|kilomet|metres|meters|m\b|miles?\b)|\b(?:minutes?|hours?|drive|walk(?:ing)?)\b/iu', $val ) ) {
+			return array( $name, $val ); // a travel time or distance
+		}
+		$verb = '/\b(?:is|are|was|were|be|offers?|provides?|sits?|lies|has|have|gives?|makes?|connects?|serves?|remains?|reinforce[sd]?|described|located|situated)\b/iu';
+		if ( preg_match( '/\d\s*(?:min|hours?\b|hrs?\b|km\b|kilomet|metres|meters|miles?\b)|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty|thirty|forty(?:-five)?|sixty|a few)[\s-]+(?:min(?:ute)?s?|hours?)\b/iu', $val ) && ! preg_match( $verb, $val ) ) {
+			return array( $name, $val ); // v1.8: places named with their time, however long ("Schools | Cavina School, Kenton College and Light Academy, about 5 to 10 minutes")
+		}
+		if ( preg_match( $verb, $val )
+			|| preg_match( '/^(?:accessibility|access|connectivity|connections?|convenience|everyday|setting|surroundings|environment|neighbou?rhood|location|lifestyle|leisure|shopping|retail|dining|schools?|education|healthcare|health|medical|golf|recreation|transport|commut\w*|security|infrastructure|amenities|nature|views?|investment|growth|demand)\b/iu', $name ) ) {
+			return null; // a topic and what the text says about it
+		}
+		return array( $name, $val ); // a place and a word on it ("Wilson Airport | convenient for regional flights")
+	}
+
+	/**
+	 * v1.8: a place whose value says where it is, not how far ("Naisula School | within Tilisi itself", "Clubhouse | on site",
+	 * "Karura Forest | adjacent"), keeps that as part of the place and has no value, so it is not read as a travel time:
+	 * "Naisula School, within Tilisi itself". A value with a figure, a time or a distance ("within 5 minutes", "within
+	 * walking distance") is unchanged, and so is a topic's row ("Culture | Directly opposite the National Museum of Kenya",
+	 * "Position | Opposite Wilson Airport"), whose value is about another place.
+	 */
+	function blockke_dev_place_here( $p ) {
+		$v     = rtrim( trim( (string) $p[1] ), ' .' );
+		$name  = rtrim( trim( (string) $p[0] ), ' .,;:' ); // "Naisula School." -> "Naisula School, within ..."
+		$topic = '(?:accessibility|access|connectivity|connections?|convenience|everyday|setting|surroundings|environment|neighbou?rhood|location|lifestyle|leisure|shopping|retail|dining|schools?|education|healthcare|health|medical|golf|recreation|transport|commut\w*|security|infrastructure|amenities|nature|views?|investment|growth|demand|culture|cultural|arts?|heritage|history|position|positioning|situation|business|work|employment|entertainment|nightlife|sports?|worship|faith|landmarks?|attractions?)';
+		if ( '' === $v || '' === $name || preg_match( '/\d|\b(?:min(?:ute)?s?|hours?|hrs?|km|kilomet\w*|metres|meters|miles?|drive|driving|walk\w*)\b/iu', $v )
+			|| ! preg_match( '/^(?:(?:right|directly|just)\s+)?(?:within|inside|on[- ]?site|next door|next to|adjacent|opposite|in the (?:estate|development|compound|community|complex|project))\b/iu', $v )
+			|| preg_match( '/^(?:(?:nearby|local|key)\s+)?' . $topic . '(?:\s*(?:,|and|&|\/)\s*' . $topic . ')*$/iu', $name ) ) {
+			return $p;
+		}
+		return array( $name . ', ' . lcfirst( $v ), '' );
+	}
+
 	function blockke_dev_places_override( $id ) {
 		$places = array();
 		$raw    = trim( (string) get_post_meta( $id, 'bke_dev_places', true ) );
@@ -2144,6 +2687,16 @@ JS;
 		return blockke_dev_places_override( $m );
 	}
 
+	/** v1.8: true when $s names only places in $line ("Lavington" against "Lavington, Nairobi"), ignoring case and apostrophes. */
+	function blockke_dev_same_place( $s, $line ) {
+		$norm = function ( $x ) {
+			return strtolower( trim( str_replace( array( '’', "'", '`' ), '', $x ) ) );
+		};
+		$here = array_map( $norm, explode( ',', $line ) );
+		$got  = array_filter( array_map( $norm, explode( ',', $s ) ) );
+		return $got && ! array_diff( $got, $here );
+	}
+
 	/** "Who it suits" from the description: its list, and the closing note on who it suits less well. */
 	function blockke_dev_suits( $sections ) {
 		$out = array(
@@ -2157,13 +2710,13 @@ JS;
 		foreach ( $sections[ $i ]['tokens'] as $t ) {
 			if ( 'ul' === $t['tag'] && ! $out['items'] ) {
 				foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
-					if ( mb_strlen( $it['text'] ) <= 140 ) {
-						$out['items'][] = rtrim( $it['text'], ' .;' );
-					}
+					// v1.8: a long bullet is kept whole up to 220 characters, else its first sentence or clause; never dropped
+					$tx             = rtrim( $it['text'], ' .;' );
+					$out['items'][] = mb_strlen( $tx ) <= 220 ? $tx : rtrim( blockke_dev_fit_sentences( $tx, 220, 1 ), ' .;' );
 				}
 			} elseif ( 'p' === $t['tag'] && $out['items'] && '' === $out['note'] ) {
 				$tx = blockke_dev_text( $t['inner'] );
-				if ( preg_match( '/less well|not (ideal|suited|for)|may not suit|isn.t for/i', $tx ) ) {
+				if ( preg_match( '/less well|less suit(?:ed|able)|not (ideal|suited|for)|may not (?:suit|be (?:ideal|suitable|right))|isn.t for|not (?:the )?right (?:fit|choice)|not a good fit/i', $tx ) ) { // v1.8: also "It may be less suitable for ..."
 					$out['note'] = blockke_dev_trim_words( blockke_dev_sentences( $tx, 2 ), 320 );
 				}
 			}
@@ -2172,19 +2725,43 @@ JS;
 		return $out;
 	}
 
-	/** The description's investor view: up to three sentences, leaving out links and "see our analysis" asides. */
+	/**
+	 * The description's investor view: up to three sentences, leaving out links and "see our analysis" asides. v1.8: a
+	 * lead-in to a list the view leaves out ("Its investment appeal is supported by:") is left out too, and when the first
+	 * three sentences carry no caveat, the first one or two placed after them ("No particular rental yield ... should be
+	 * assumed") are added, ahead of the third sentence if both do not fit.
+	 */
 	function blockke_dev_investors( $sections ) {
 		$i = blockke_dev_find( $sections, '/investor|investment|rental yield|returns/i', '/faq|question/i' );
 		if ( $i < 0 ) {
 			return '';
 		}
+		// a caveat, never a claim: "not guaranteed", "should not be assumed", "carry construction risk", "depend on", "before purchasing"
+		// (not "Guaranteed 10% rental yield", "the developer assumes all vacancy risk" or "Prices vary by floor")
+		$care = '/\b(?:not|never|no|cannot|can[’\']t|isn[’\']t|aren[’\']t|won[’\']t|don[’\']t|doesn[’\']t|without)\b[^.!?]{0,60}?\bguarantee|\bunguaranteed\b|\bguarantee\w*\s+(?:is|are)\s+not\b|\b(?:not|never|cannot|can[’\']t|don[’\']t|shouldn[’\']t)\b[^.!?]{0,60}?\bassum|\bshould be assumed\b|\brather than assumptions?\b|\b(?:carr(?:y|ies)|involves?|bears?)\s+(?:[\w-]+\s+){0,3}?risks?\b|\bdepend\w*\s+on\b|\bnarrower\b|\bcaution|\bshould (?:review|check|verify|confirm|consider|seek|consult|ask)\b|\bbefore (?:purchas|buying|committing|investing|you (?:buy|commit|invest))|\bindependent (?:advice|advisor|valuation)|\bno (?:particular |specific )?(?:rental )?(?:yield|return)|\bcannot be (?:guaranteed|assured|promised|predicted|relied)\b|\b(?:not|never) (?:be )?(?:relied|promised|assured)\b|\b(?:returns?|yields?|rents?|income|occupancy|appreciation|performance|figures|these|they)\s+(?:can |may |will |could |do |does )?(?:vary|varies)\b|\bspeculative\b/iu';
 		$keep = array();
+		$late = array(); // caveats after the first three sentences
 		foreach ( $sections[ $i ]['tokens'] as $t ) {
 			if ( 'p' !== $t['tag'] ) {
 				continue;
 			}
 			foreach ( preg_split( '/(?<=[.!?])\s+(?=[A-Z0-9“"])/u', blockke_dev_text( $t['inner'] ) ) as $sn ) {
-				if ( count( $keep ) < 3 && '' !== $sn && ! preg_match( '/\b(see|read) our\b|\bask (block|us)\b|\bclick\b/i', $sn ) ) {
+				if ( '' === $sn || preg_match( '/\b(see|read) our\b|\bask (block|us)\b|\bclick\b/i', $sn ) || preg_match( '/:\s*$/u', $sn ) ) {
+					continue;
+				}
+				if ( count( $keep ) < 3 ) {
+					$keep[] = $sn;
+				} elseif ( count( $late ) < 2 && preg_match( $care, $sn ) ) {
+					$late[] = $sn;
+				}
+			}
+		}
+		if ( $late && ! preg_match( $care, implode( ' ', $keep ) ) ) {
+			while ( count( $keep ) > 1 && mb_strlen( implode( ' ', array_merge( $keep, array( $late[0] ) ) ) ) > 640 ) {
+				array_pop( $keep ); // the caveat before a third sentence
+			}
+			foreach ( $late as $sn ) {
+				if ( mb_strlen( implode( ' ', array_merge( $keep, array( $sn ) ) ) ) <= 640 ) {
 					$keep[] = $sn;
 				}
 			}
@@ -2298,6 +2875,112 @@ JS;
 			$faqs[] = array( $q, implode( '', $a ) );
 		}
 		return $faqs;
+	}
+
+	/**
+	 * v1.8: true when the text words this price as a starting price: "from KES 44 million", "Prices start from KES
+	 * 97,450,000", "Starting price: KES 18.3M", "Price from | KES 13,500,000" (table cells apart: blockke_dev_text_apart()),
+	 * "from as low as KES 18.3M", "Starting at 18.3M", "KES 18.3M onwards" or "and above", "KES 168.5M – 194M", USD too.
+	 */
+	function blockke_dev_from_said( $text, $price ) {
+		if ( $price <= 0 ) {
+			return false;
+		}
+		$cur   = '(?:kes|kshs?|usd|us\$|\$)\.?\s*+';
+		$num   = '(\d[\d,]*+(?:\.\d++)?(?:\s*+(?:million|mn|m|bn|k)\b)?)';
+		$lead  = '\b(?:from|starting(?:\s+(?:price|prices|at|from))?|starts?\s+(?:at|from)|begin\w*\s+(?:at|from)|as\s+low\s+as)\s*+:?\s*+(?:(?:approximately|about|around|roughly|just|only|as\s+low\s+as)\s+)?';
+		$re    = '/' . $lead . '(?:' . $cur . ')?' . $num // a starting price ("from KES 44 million", "Starting at 18.3M")
+			. '|' . $cur . $num . '\s*+(?:–|-|to)\s*+(?:' . $cur . ')?\d' // a range ("KES 168.5M – 194M")
+			. '|' . $cur . $num . '\s*+(?:onwards|upwards|and\s+above|or\s+more|\+|\(\s*from\s*\))/iu'; // "KES 18.3M onwards", "Kes 18.3M and above"
+		preg_match_all( $re, (string) $text, $mm, PREG_SET_ORDER );
+		foreach ( (array) $mm as $m ) {
+			$got = '';
+			foreach ( array( 1, 2, 3 ) as $k ) {
+				if ( '' === $got && isset( $m[ $k ] ) && '' !== $m[ $k ] ) {
+					$got = $m[ $k ];
+				}
+			}
+			$v = blockke_dev_parse_money( $got );
+			if ( $v > 0 && abs( $v - $price ) <= 0.01 * $price ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** v1.8: the text of some HTML with its table cells, list items and blocks kept apart ("Price from | KES 13.5M" -> "Price from KES 13.5M", not "Price fromKES 13.5M"). */
+	function blockke_dev_text_apart( $html ) {
+		return blockke_dev_text( preg_replace( '#<(?:/?(?:td|th|tr|p|li|div|h[1-6]|ul|ol|table|thead|tbody|section|blockquote)\b)[^>]*>#i', ' $0', (string) $html ) );
+	}
+
+	/** v1.8: a title part that sells rather than names ("3 Bedroom Villa for Sale, Tilisi Views Limuru", "Modern 4 & 5 Bedroom Villas"). */
+	function blockke_dev_seo_name( $s ) {
+		return (bool) preg_match( '/\bfor\s+(?:sale|rent)\b|\bto\s+let\b/iu', $s )
+			|| (bool) preg_match( '/^(?:(?:modern|luxury|luxurious|new|spacious|premium|exclusive|executive|elegant|stunning|beautiful|ultra[- ]modern|super|contemporary)\s+)*(?:\d+|one|two|three|four|five|six)(?:\s*(?:,|&|and|or|to|–|-)\s*\d+)*[\s-]*(?:bed(?:room)?s?|br)\b/iu', $s );
+	}
+
+	/**
+	 * v1.8: a Project term in the letters of the name it starts ("Elements luxury" under "Elements Luxury Living" -> "Elements
+	 * Luxury", "Greenview VIllas" under "Greenview Villas Kiambu" -> "Greenview Villas"), only when the term's own capitals
+	 * are odd and the name is not in capitals.
+	 */
+	function blockke_dev_recase( $term, $name ) {
+		$n = mb_substr( $name, 0, mb_strlen( $term ) );
+		if ( $n === $term || mb_strtolower( $n ) !== mb_strtolower( $term ) || mb_strtoupper( $n ) === $n || ! preg_match( '/^(?:$|[\s,.:;—–-])/u', mb_substr( $name, mb_strlen( $term ), 1 ) ) ) {
+			return $term;
+		}
+		return preg_match( '/\p{Lu}{2}\p{Ll}|\s(?!(?:and|at|by|de|for|in|of|on|the|with)\b)\p{Ll}{2}/u', $term ) ? $n : $term;
+	}
+
+	/**
+	 * v1.8: a Project term fit to be the H1. A trailing " ." goes; the title's own letters win when it carries the name
+	 * ("17 zuri apartments" -> "17 Zuri Apartments", "Mj1 Business Park" -> "MJ1 Business Park"), or, for a term that is
+	 * visibly off, the title's spelling one letter away ("Kitusuru Grove ." -> "Kitisuru Grove"); $titles: the listing's
+	 * title and, for a unit, its development's. Otherwise a term in lower case or with odd capitals has its words
+	 * capitalised ("redhill villas" -> "Redhill Villas", "Greenview VIllas" -> "Greenview Villas", "J and M palms
+	 * residences" -> "J and M Palms Residences").
+	 */
+	function blockke_dev_term_name( $term, $titles ) {
+		$t = trim( (string) preg_replace( '/[\s.,;:]+$/u', '', (string) $term ) );
+		if ( '' === $t ) {
+			return (string) $term;
+		}
+		// odd letters: a word in lower case ("17 zuri apartments") or "VIllas"; small words and names in capitals are not odd
+		$odd = preg_match( '/(?:^|\s)(?!(?:and|at|by|de|for|in|of|on|the|with|&)\b)\p{Ll}|\p{Lu}{2}\p{Ll}/u', $t ) && mb_strtoupper( $t ) !== $t;
+		foreach ( (array) $titles as $title ) {
+			$title = (string) $title;
+			$at    = '' !== $title ? mb_stripos( $title, $t ) : false;
+			if ( false !== $at && preg_match( '/^(?:$|[^\p{L}\p{N}])/u', mb_substr( $title, $at + mb_strlen( $t ), 1 ) ) && ( 0 === $at || preg_match( '/[^\p{L}\p{N}]/u', mb_substr( $title, $at - 1, 1 ) ) ) ) {
+				$own = mb_substr( $title, $at, mb_strlen( $t ) );
+				// a title in capitals ("AMALIA MEADOW VILLAS") is no guide, nor one that only repeats the term (a unit's title made
+				// from it: "1 Bedroom Apartment for Sale — Kitusuru Grove ."), so the development's title is read too
+				if ( ( mb_strtoupper( $own ) !== $own || mb_strtoupper( $t ) === $t ) && $own !== $t ) {
+					return $own;
+				}
+			}
+		}
+		$n = count( preg_split( '/\s+/u', $t ) );
+		if ( mb_strlen( $t ) >= 8 && ( $odd || trim( (string) $term ) !== $t ) ) { // only a term that is visibly off ("Kitusuru Grove .")
+			foreach ( (array) $titles as $title ) {
+				$w = preg_split( '/[\s,|:—–]+/u', (string) $title, -1, PREG_SPLIT_NO_EMPTY );
+				for ( $i = 0; $i + $n <= count( $w ); $i++ ) {
+					$try = implode( ' ', array_slice( $w, $i, $n ) );
+					if ( 1 === levenshtein( strtolower( $try ), strtolower( $t ) ) && mb_strtoupper( $try ) !== $try && preg_match( '/^\p{Lu}/u', $try ) ) {
+						return $try; // one letter away: the title's spelling
+					}
+				}
+			}
+		}
+		if ( $odd ) {
+			$out = array();
+			foreach ( preg_split( '/(\s+)/u', $t, -1, PREG_SPLIT_DELIM_CAPTURE ) as $i => $w ) {
+				$small = $i > 0 && preg_match( '/^(?:and|at|by|de|for|in|of|on|the|with)$/u', $w );
+				$w     = preg_match( '/^\p{Lu}{2}\p{Ll}+$/u', $w ) ? mb_substr( $w, 0, 1 ) . mb_strtolower( mb_substr( $w, 1 ) ) : $w; // "VIllas" -> "Villas"
+				$out[] = $small ? $w : mb_strtoupper( mb_substr( $w, 0, 1 ) ) . mb_substr( $w, 1 );
+			}
+			return implode( '', $out );
+		}
+		return $t;
 	}
 
 	/** Short display name for a listing: its Project, else the title without the selling words. */
@@ -2911,7 +3594,7 @@ JS;
 		if ( ! empty( $c['land'] ) ) {
 			return blockke_dev_similar_land_block( $d ); // land pages: other land, never homes
 		}
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) ); // 'homes': blocks cached before "See all" was read as homes (blockke_dev_seg_url) are rebuilt
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v18|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) ); // 'homes': blocks cached before "See all" was read as homes (blockke_dev_seg_url) are rebuilt; v18: headings cached before they matched their links
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -2952,6 +3635,17 @@ JS;
 		}
 		$phrase = blockke_dev_key_phrase( 'units' === $res['mode'] ? $c['key'] : '', $rent );
 		$beds   = 'units' === $res['mode'] ? blockke_dev_beds_label( $c ) : '';
+		$lb     = 'units' === $res['mode'] ? blockke_dev_link_beds( $c ) : '';
+		if ( '4' === (string) $c['key'] && ctype_digit( $lb ) && 'min' !== $cfg['beds_mode'] ) {
+			// v1.8: the heading names the bedrooms its link names ("See all 5-bed homes"): "Other 5-bedroom homes" when every card
+			// has them, else "Similar homes" (4+ bedroom cards of 4, 5 and 6 bedrooms)
+			$same = (bool) $res['rows'];
+			foreach ( $res['rows'] as $r ) {
+				$same = $same && ! $r['is_dev'] && (string) max( 4, (int) get_post_meta( $r['id'], 'property_bedrooms', true ) ) === $lb;
+			}
+			$phrase = $lb . '-bedroom ' . ( $rent ? 'rentals' : 'homes' );
+			$mixed  = $mixed || ! $same;
+		}
 		if ( 'units' === $res['mode'] ) {
 			if ( $mixed || in_array( 4, $tiers, true ) ) {
 				$title = 'Similar ' . ( $rent ? 'rentals' : 'homes' ) . ( $area ? ( $around ? ' in and around ' : ' in ' ) . $em( $area ) : '' );
@@ -3014,7 +3708,8 @@ JS;
 			return array();
 		}
 		$rank = function ( $k ) {
-			return 'studio' === $k ? 0 : ( is_int( $k ) ? $k : ( 'loft' === $k ? 50 : ( 'penthouse' === $k ? 60 : 99 ) ) );
+			$b = blockke_dev_key_beds( $k ); // v1.8: a range by its lower count
+			return 'studio' === $k ? 0 : ( $b ? $b[0] : ( 'loft' === $k ? 50 : ( 'penthouse' === $k ? 60 : 99 ) ) );
 		};
 		usort(
 			$subs,
@@ -4621,7 +5316,7 @@ JS;
 			array( '/dispensar|clinic|health (?:centre|center|facility)|hospital/u', 'health', 'Health care', 'medical', 86 ),
 			array( '/\bdams?\b|\briver(?:side|front|s)?\b|\blakes?\b|\bstreams?\b|water features?|\bspring\b|\bnatural springs\b/u', 'dam', '', 'waves', 84 ),
 			array( '/indigenous|green spaces?|open spaces?|\btrees\b|\bparks?\b|greenery/u', 'green', 'Green space', 'leaf', 82 ),
-			array( '/walk|jog|cycl|\btrails?\b/u', 'trail', 'Trails', 'route', 80 ),
+			array( '/walk|jog|\bcycl|bicycl|\btrails?\b/u', 'trail', 'Trails', 'route', 80 ), // not "recycled water"
 			array( '/school|educational|college|universit/u', 'school', 'Schools', 'cap', 76 ),
 			array( '/gated|\bgate(?:house)?s?\b|perimeter (?:wall|fenc)|guards?|cctv/u', 'security', 'Security', 'shield', 74 ),
 		);
@@ -4834,6 +5529,11 @@ JS;
 	 * Land pages' own CSS, printed only on them (#bkd-land-css). The hero facts keep their values on one line when a label
 	 * ("Plots from") wraps on a narrow phone: each fact's value sits at the bottom of its column.
 	 */
+	/** v1.8: development pages for homes only (not land): a long Location value in the hero is set smaller on phones, may wrap, and sits on the row's foot. */
+	function blockke_dev_home_css() {
+		return '#bkd .bkd-hfacts>div{display:flex;flex-direction:column}#bkd .bkd-hfacts dd.bkd-hf-long{margin-top:auto;white-space:normal;text-overflow:clip}@media (max-width:999px){#bkd .bkd-hfacts dd.bkd-hf-long{font-size:19px;line-height:1.15}}';
+	}
+
 	function blockke_dev_land_css() {
 		return '#bkd .bkd-hfacts>div{display:flex;flex-direction:column;justify-content:space-between}#bkd .bkd-nw{white-space:nowrap}';
 	}
@@ -5212,26 +5912,61 @@ JS;
 		$land   = blockke_dev_is_land( $id ); // land mode: plot wording, plots, land facts and plan
 
 		// Names and place
-		$title   = blockke_dev_text( get_the_title( $id ) );
-		$project = blockke_dev_first_term( $id, 'property_project' );
-		$name    = blockke_dev_text( get_post_meta( $id, 'bke_dev_name', true ) );
+		$title     = blockke_dev_text( get_the_title( $id ) );
+		$project   = blockke_dev_first_term( $id, 'property_project' );
+		$pname     = $project ? blockke_dev_text( $project->name ) : '';
+		$own       = blockke_dev_text( get_post_meta( $id, 'bke_dev_name', true ) );
+		$master_id = (int) get_post_meta( $id, 'property_subunits_master', true );
+		if ( $master_id === $id || 'publish' !== get_post_status( $master_id ) || 'estate_property' !== get_post_type( $master_id ) ) {
+			$master_id = 0;
+		}
+		// v1.8 (homes): a unit goes by its development page's own name (bke_dev_name) before the Project term
+		$mname = ! $land && $master_id ? blockke_dev_text( get_post_meta( $master_id, 'bke_dev_name', true ) ) : '';
+		$up    = '' === $own ? $mname : '';
+		$name  = $own;
+		$seg   = ''; // v1.8: the selling phrase the name replaced, still dropped from the start of the hero line
 		if ( '' === $name ) {
 			$parts = preg_split( '/\s+[—–]\s+|\s*\|\s*|:\s+/u', $title );
 			$name  = trim( $parts[0] );
 			if ( $land ) { // "Zuri Springs Juja Plots for Sale" -> "Zuri Springs Juja" (and, as the area follows the project, "Zuri Springs")
 				$name = preg_replace( '/\s+(?:(?:serviced|residential|commercial|industrial|value[- ]added)\s+)*(?:plots?|land)\s+for\s+(?:sale|lease|rent)\b.*$/iu', '', $name );
+			} elseif ( blockke_dev_seo_name( $name ) ) {
+				// v1.8: "3 Bedroom Villa for Sale, Tilisi Views Limuru" sells rather than names: the development's name, else
+				// another part of the title that is a name ("... — Kirawa Village"), else what follows "at" ("... at Leroux Villas")
+				$alt = '' !== $up ? $up : ( '' !== $pname ? blockke_dev_term_name( $pname, array( $title, $master_id ? blockke_dev_text( get_the_title( $master_id ) ) : '' ) ) : '' ); // the term as the title writes it
+				foreach ( array_slice( $parts, 1 ) as $pt ) {
+					$pt = trim( $pt );
+					if ( '' === $alt && '' !== $pt && mb_strlen( $pt ) <= 52 && ! blockke_dev_seo_name( $pt ) && ! preg_match( '/^(?:from|kes|ksh|usd|us\$|price|\d)/iu', $pt ) ) {
+						$alt = $pt;
+					}
+				}
+				if ( '' === $alt && preg_match( '/\bat\s+((?:\p{Lu}|\d)[^,|—–]*)/u', $name, $m ) ) {
+					$alt = trim( $m[1] );
+				}
+				$seg  = '' !== $alt && ( mb_strlen( $name ) <= 52 || ! $project ) ? $name : ''; // only a phrase v1.7 showed as the H1 (a longer one gave way to the Project term)
+				$name = '' !== $alt ? $alt : $name;
 			}
 			if ( mb_strlen( $name ) > 52 && $project ) {
-				$name = blockke_dev_text( $project->name );
+				$name = $pname;
 			}
 		}
-		$short     = $project ? blockke_dev_text( $project->name ) : $name;
+		// v1.8 (homes): the short name (breadcrumb, section bar, forms, photo note) is the listing's bke_dev_name, else its
+		// development's, else the Project term, in the letters of the name above when only the term's capitals are odd
+		$short     = $land ? ( $project ? $pname : $name ) : ( '' !== $own ? $own : ( '' !== $up ? $up : ( $project ? blockke_dev_recase( $pname, $name ) : '' ) ) );
 		$area_t    = blockke_dev_main_area( $id );
 		$city_t    = blockke_dev_first_term( $id, 'property_city' );
 		$area      = $area_t ? blockke_dev_text( $area_t->name ) : '';
 		// "Santorini Residences Westlands" -> "Santorini Residences": the area is already shown above the name.
-		if ( $project && $area && 0 === stripos( $name, $short ) && 0 === strcasecmp( trim( substr( $name, strlen( $short ) ) ), $area ) ) {
-			$name = $short;
+		if ( $project && $area && 0 === stripos( $name, $pname ) && 0 === strcasecmp( trim( substr( $name, strlen( $pname ) ) ), $area ) ) {
+			$name = $land ? $short : blockke_dev_recase( $pname, $name );
+		} elseif ( ! $land && $area && preg_match( '/^(.{3,}?)((?:\s*,\s*[^,]+)+)$/u', $name, $m ) ) {
+			// v1.8: and "Lakehills, Kiambu Road" or "Royal Convent Villas, Lavington, Nairobi" -> the name before the comma
+			if ( blockke_dev_same_place( ltrim( $m[2], ' ,' ), $area . ', ' . ( $city_t ? blockke_dev_text( $city_t->name ) : '' ) ) ) {
+				$name = trim( $m[1] );
+			}
+		}
+		if ( '' === $short ) {
+			$short = $name;
 		}
 		$area_line = implode( ', ', array_unique( array_filter( array( $area, $city_t ? blockke_dev_text( $city_t->name ) : '' ) ) ) );
 		$address   = blockke_dev_text( get_post_meta( $id, 'property_address', true ) );
@@ -5256,7 +5991,7 @@ JS;
 		if ( $land ) {
 			$units = blockke_dev_land_units( $parsed['tokens'], $subs );
 		} else {
-			$units = blockke_dev_units_from_table( $parsed['tokens'], $subs );
+			$units = blockke_dev_units_from_table( $parsed['tokens'], $subs, blockke_dev_unit_words( $short . ' ' . $pname . ' ' . $area . ' ' . ( $city_t ? $city_t->name : '' ) ) );
 			if ( ! $units ) {
 				$units = blockke_dev_units_from_subs( $subs );
 			}
@@ -5269,8 +6004,8 @@ JS;
 		}
 		$meta_price = (float) get_post_meta( $id, 'property_price', true );
 		$price_from = $prices ? min( $prices ) : $meta_price;
-		$completion = $land ? '' : blockke_dev_completion( $post ); // a plot is not completed; a "Title delivery" row is not a date
-		$plan       = $land ? blockke_dev_land_plan( $post ) : blockke_dev_plan_info( $post );
+		$completion = $land ? '' : blockke_dev_completion( $post, true ); // a plot is not completed; a "Title delivery" row is not a date
+		$plan       = $land ? blockke_dev_land_plan( $post ) : blockke_dev_plan_info( $post, true );
 
 		// Images
 		$gal = get_post_meta( $id, 'wpestate_property_gallery', true );
@@ -5326,12 +6061,13 @@ JS;
 		if ( '' === $tagline && $intro_p ) {
 			$tagline = blockke_dev_sentences( $intro_p[0], 1 );
 		}
-		// Drop a leading "{Name} on Lantana Road, Westlands —" or "{Name} is": the name sits right above.
-		foreach ( array_unique( array( $name, $short ) ) as $nm ) {
+		// Drop a leading "{Name} on Lantana Road, Westlands —" or "{Name} is": the name sits right above. (Its own variable:
+		// $rest holds the intro's leftover blocks, which open the full description.)
+		foreach ( array_unique( array_filter( array( $name, $short, $seg ) ) ) as $nm ) {
 			if ( '' !== $nm && 0 === stripos( $tagline, $nm ) ) {
-				$rest = substr( $tagline, strlen( $nm ) );
-				if ( preg_match( '/^[^—–:.]{0,70}?\s[—–]\s|^[^:.]{0,70}?:\s/u', $rest, $m ) || preg_match( '/^,?\s*(?:is|are|offers|brings|features|has)\s+/i', $rest, $m ) ) {
-					$tagline = ucfirst( ltrim( substr( $rest, strlen( $m[0] ) ), ' ,' ) );
+				$after = substr( $tagline, strlen( $nm ) );
+				if ( preg_match( '/^[^—–:.]{0,70}?\s[—–]\s|^[^:.]{0,70}?:\s/u', $after, $m ) || preg_match( '/^,?\s*(?:is|are|offers|brings|features|has)\s+/i', $after, $m ) ) {
+					$tagline = ucfirst( ltrim( substr( $after, strlen( $m[0] ) ), ' ,' ) );
 				}
 				break;
 			}
@@ -5368,11 +6104,40 @@ JS;
 						$loc['intro'] = blockke_dev_fit_sentences( $tx, 520 );
 					} elseif ( $loc['places'] && preg_match( '/approximate|vary|traffic/i', $tx ) ) {
 						$loc['note'] = $tx;
+						if ( mb_strlen( $tx ) > 240 ) { // v1.8: from a long paragraph, only its sentence about travel times
+							foreach ( preg_split( '/(?<=[.!?])\s+(?=[A-Z0-9“"])/u', $tx ) as $x ) {
+								if ( preg_match( '/approximate|vary|traffic/i', $x ) ) {
+									$loc['note'] = $x;
+									break;
+								}
+							}
+						}
+					} elseif ( $loc['places'] && '' === $loc['intro'] && mb_strlen( $tx ) > 40 ) { // v1.8: the places came first, then the text
+						$loc_src      = $tx;
+						$loc['intro'] = blockke_dev_fit_sentences( $tx, 520 );
 					}
-				} elseif ( 'ul' === $t['tag'] && ! $loc['places'] ) {
-					foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
-						$p               = blockke_dev_split_kv( $it );
-						$loc['places'][] = '' !== $p[0] ? array( $p[0], $p[1] ) : array( $it['text'], '' );
+				} elseif ( ( 'ul' === $t['tag'] || 'table' === $t['tag'] ) && ! $loc['places'] ) { // a list, or a Destination | Drive time table
+					$rows = array();
+					if ( 'ul' === $t['tag'] ) {
+						foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+							$p      = blockke_dev_split_kv( $it );
+							$rows[] = '' !== $p[0] ? array( $p[0], $p[1] ) : array( $it['text'], '' );
+						}
+					} else {
+						$tb = blockke_dev_table( $t['html'] );
+						foreach ( $tb ? $tb['rows'] : array() as $ri => $r ) {
+							$c = $r['cells'];
+							if ( count( $c ) < 2 || ( ! $tb['head'] && 0 === $ri && preg_match( '/^(?:destinations?|places?|landmarks?|locations?|amenit(?:y|ies)|nearby|to|from)$/i', $c[0] ) && preg_match( '/^(?:distance|proximity|duration|time|minutes|(?:approx\w*\.?\s+)?(?:drive|travel)(?:\s+time)?|how far)$/i', $c[1] ) ) ) {
+								continue; // a header row written as an ordinary row ("Destination | Drive time")
+							}
+							$rows[] = array( $c[0], $c[1] );
+						}
+					}
+					foreach ( $rows as $r ) {
+						$row = blockke_dev_place_row( $r[0], $r[1] );
+						if ( $row ) {
+							$loc['places'][] = $row;
+						}
 					}
 				}
 			}
@@ -5382,6 +6147,9 @@ JS;
 			$loc['places'] = $own;
 		} elseif ( ! $loc['places'] ) { // a unit page: its development's box before straight-line distances
 			$loc['places'] = blockke_dev_master_places( $id );
+		}
+		if ( ! $land ) { // v1.8: "within Tilisi itself", "on site", "next door" go with the place, not under travel times
+			$loc['places'] = array_map( 'blockke_dev_place_here', $loc['places'] );
 		}
 		$lat = (float) get_post_meta( $id, 'property_latitude', true );
 		$lng = (float) get_post_meta( $id, 'property_longitude', true );
@@ -5394,7 +6162,14 @@ JS;
 			}
 		}
 		if ( ! $loc['note'] && ! $land ) { // land: its own note, below (it names the estate, so it waits for a unit's master name)
-			$loc['note'] = $loc['places'] ? 'Approximate travel times; they vary with traffic.' : 'Ask us for travel times to your office, school or embassy.';
+			$timed = false; // "travel times" only when a place has one, in its value or its name ("Sarit Centre – 5 minutes")
+			$dist  = false;
+			foreach ( $loc['places'] as $p ) {
+				$timed = $timed || preg_match( '/\bmin|\bhours?\b|\bhrs?\b|\bdrive\b|\bwalk/i', $p[0] . ' ' . $p[1] );
+				$dist  = $dist || preg_match( '/\d\s*(?:km|kilomet|metres|meters|m|miles?)\b/i', $p[0] . ' ' . $p[1] );
+			}
+			$loc['note'] = ! $loc['places'] ? 'Ask us for travel times to your office, school or embassy.'
+				: ( $timed ? 'Approximate travel times; they vary with traffic.' : ( $dist ? 'Approximate distances; travel times vary with traffic.' : 'Ask us for travel times to these places, and to your office, school or embassy.' ) );
 		}
 
 		// FAQ, description, everything else
@@ -5416,16 +6191,12 @@ JS;
 		}
 		$desc = preg_replace( array( '#<(/?)h5\b#i', '#<(/?)h4\b#i', '#<(/?)h3\b#i', '#<(/?)h2\b#i' ), array( '<$1h6', '<$1h5', '<$1h4', '<$1h3' ), $desc );
 
-		// Where this home sits: unit, development or single listing, and what it is compared on
-		$master_id = (int) get_post_meta( $id, 'property_subunits_master', true );
-		if ( $master_id === $id || 'publish' !== get_post_status( $master_id ) || 'estate_property' !== get_post_type( $master_id ) ) {
-			$master_id = 0;
-		}
+		// Where this home sits: unit, development or single listing, and what it is compared on ($master_id: above, with the names)
 		$kind = $master_id ? 'unit' : ( '1' === (string) get_post_meta( $id, 'property_has_subunits', true ) ? 'master' : 'single' );
 		$ctx  = array(
 			'kind'        => $kind,
 			'master_id'   => $master_id,
-			'master_name' => $master_id ? blockke_dev_listing_name( $master_id ) : '',
+			'master_name' => $master_id ? ( '' !== $mname ? $mname : blockke_dev_listing_name( $master_id ) ) : '', // v1.8: its own name first (homes)
 			'master_url'  => $master_id ? get_permalink( $master_id ) : '',
 			'project_id'  => $project ? (int) $project->term_id : 0,
 			'dkey'        => blockke_dev_dev_key( $id ),
@@ -5533,8 +6304,15 @@ JS;
 			'tagline'    => $tagline,
 			'price_from' => $price_from,
 			'from_label' => (bool) preg_match( '/^\s*from\b/i', (string) get_post_meta( $id, 'property_label_before', true ) ) || ( $land && blockke_dev_land_from_label( $kv, $units ) ),
+			'from_said'  => ! $land && blockke_dev_from_said( $title . ' ' . blockke_dev_text( $post->post_excerpt ) . ' ' . blockke_dev_text_apart( $post->post_content ), $price_from ), // v1.8: "from KES 44 million", table cells apart
 			'calc_price' => blockke_dev_parse_money( (string) get_post_meta( $id, 'bke_dev_calc_price', true ) ),
 			'completion' => $completion,
+			// v1.8 (homes): a completion row that gives a status, not a date ('Complete', 'To be confirmed at point of enquiry'), and
+			// whether the listing's terms say it is ready; the bedroom counts its title names (blockke_dev_title_beds())
+			'comp_row'   => ! $land && '' === $completion ? blockke_dev_trim_words( blockke_dev_kv_get( $kv, '/completion|occupation|handover|delivery/i' ), 32 ) : '',
+			'ready_t'    => ! $land && ( has_term( 'complete', 'property_status', $id ) || has_term( 'ready-now', 'property_completion', $id ) ),
+			'title_beds' => blockke_dev_title_beds( $title ),
+			'beds_kv'    => $land ? '' : blockke_dev_kv_get( $kv, '/^(?:homes|bedrooms?|beds?)$/i' ), // the text's own bedrooms row
 			'units'      => $units,
 			'subs'       => $subs,
 			'images'     => $ids,
@@ -5550,7 +6328,7 @@ JS;
 			),
 			'desc'       => trim( $desc ),
 			'amenities'  => $amenities,
-			'amen'       => $land ? blockke_dev_land_amenity_layout( $amenities, blockke_dev_land_names( $parsed['tokens'], $short . ' ' . $area ), blockke_dev_land_parts( $units ) ) + array( 'note' => blockke_dev_land_amenity_note( $secs ) ) : blockke_dev_amenity_layout( $amenities ),
+			'amen'       => $land ? blockke_dev_land_amenity_layout( $amenities, blockke_dev_land_names( $parsed['tokens'], $short . ' ' . $area ), blockke_dev_land_parts( $units ) ) + array( 'note' => blockke_dev_land_amenity_note( $secs ) ) : blockke_dev_amenity_layout( $amenities, true ), // v1.8: the layout's amenity matching
 			'amen_intro' => blockke_dev_fit_sentences( $amen_src, 260 ),
 			'plan'       => $plan,
 			'suits'      => blockke_dev_suits( $secs ),
@@ -5755,7 +6533,7 @@ JS;
 		} elseif ( is_singular( 'estate_property' ) && isset( $_GET['lp'] ) && is_scalar( $_GET['lp'] ) && '1' === (string) $_GET['lp'] ) { // phpcs:ignore WordPress.Security.NonceVerification
 			$lid = get_queried_object_id();
 		}
-		if ( $lid && 'estate_property' === get_post_type( $lid ) && 'publish' === get_post_status( $lid ) && blockke_dev_is_for_sale( $lid ) ) {
+		if ( $lid && 'estate_property' === get_post_type( $lid ) && 'publish' === get_post_status( $lid ) && blockke_dev_lp_ok( $lid ) ) {
 			$id = $lid;
 		}
 		return $id;
@@ -5845,13 +6623,19 @@ JS;
 		$L     = $land && is_array( $d['land'] ) ? $d['land'] : array( 'from' => '', 'deposit' => 0, 'term' => 0 );
 		$p_lab = 'From';
 		$p_txt = $d['price_from'] ? blockke_dev_short( $d['price_from'] ) : '';
-		if ( $d['price_from'] && ! $d['units'] && (float) $d['price_from'] === (float) $cx0['price'] ) {
+		// v1.8: one fixed price reads "Price" off-plan too (the Runda townhouse, a unit at KES 53.16M, 1899's KES 116.4M): a villa
+		// or house, not a development page, with no table or a one-row table at the listing's price, one bedroom count in its
+		// title, and no "from" or range on that price in its text (blockke_dev_from_said()). An apartment, studio or office keeps
+		// "From": its price usually starts a range of floors and views
+		$tbeds = isset( $d['title_beds'] ) ? $d['title_beds'] : array( 'beds' => array(), 'studio' => false );
+		$one   = ! $land && ! empty( $cx0['house'] ) && 'master' !== $cx0['kind'] && count( $d['units'] ) <= 1 && empty( $d['from_said'] ) && count( $tbeds['beds'] ) + (int) $tbeds['studio'] <= 1 && ! preg_match( '/\b\d+\s*(?:&|and|to|or|–|-|,)\s*\d+[\s-]*bed/iu', $d['title'] );
+		if ( $d['price_from'] && ( ! $d['units'] || $one ) && ( (float) $d['price_from'] === (float) $cx0['price'] || ( $one && abs( $d['price_from'] - $cx0['price'] ) <= 0.01 * $cx0['price'] ) ) ) { // a row's "KES 116.4M" is the listing's 116,402,520
 			if ( 'upto' === $cx0['flag'] ) {
 				$p_lab = 'Up to';
 			} elseif ( 'unit' === $cx0['flag'] ) {
 				$p_lab = 'Price';
 				$p_txt = blockke_dev_money( $d['price_from'] ) . ' per sq ft';
-			} elseif ( ! $d['offplan'] && ! $d['from_label'] ) { // the listing's own "From" stays (a starting price)
+			} elseif ( ( ! $d['offplan'] || $one ) && ! $d['from_label'] ) { // the listing's own "From" stays (a starting price)
 				$p_lab = 'Price';
 			}
 		}
@@ -5907,8 +6691,12 @@ JS;
 				$hfacts[] = array( 'Location', $d['area'] );
 			}
 		} else {
-			if ( $d['completion'] ) {
-				$hfacts[] = array( 'Completion', $d['completion'] );
+			$row = isset( $d['comp_row'] ) ? (string) $d['comp_row'] : ''; // v1.8: a completion row with a status, not a date
+			if ( $d['completion'] ) { // a short month in the cell ("Dec 2026"); sentences keep the full one
+				$hfacts[] = array( 'Completion', blockke_dev_completion_short( $d['completion'] ) );
+			} elseif ( ! $d['offplan'] && '' !== $row && empty( $d['ready_t'] ) && ! ( preg_match( '/\b(?:complete[ds]?|ready|handed over|finished)\b/i', $row ) && ! preg_match( '/\b(?:not|under|to be|tb[ca]|in progress|ongoing)\b/i', $row ) ) ) {
+				// v1.8: "To be confirmed at point of enquiry" with no complete or ready term says nothing of "Ready": "On request"
+				$hfacts[] = array( 'Completion', preg_match( '/\bto be (?:confirmed|advised|announced|shared)\b|\btb[ca]\b|\bon request\b|\bpoint of enquiry\b|\benquir/i', $row ) ? 'On request' : $row );
 			} elseif ( ! $d['offplan'] ) {
 				$hfacts[] = array( 'Status', 'Ready' );
 			}
@@ -5920,11 +6708,17 @@ JS;
 		}
 		$hf_html = '';
 		foreach ( $hfacts as $f ) {
-			$hf_html .= '<div><dt>' . $e( $f[0] ) . '</dt><dd>' . $e( $f[1] ) . '</dd></div>';
+			// v1.8: a long Location ("Ongata Rongai", "Spring Valley") may take two lines on phones instead of being cut off
+			$hf_html .= '<div><dt>' . $e( $f[0] ) . '</dt><dd' . ( ! $land && 'Location' === $f[0] && mb_strlen( $f[1] ) > 10 ? ' class="bkd-hf-long"' : '' ) . '>' . $e( $f[1] ) . '</dd></div>';
 		}
 		// Landing pages on phones lay the offer and the key figures over the photo, like a cover. The area
 		// label stays above the name, so the offer names the street without repeating the area.
 		$street = $d['address'] === $d['area_line'] ? '' : preg_replace( '/,\s*' . preg_quote( $d['area'], '/' ) . '$/iu', '', $d['address'] );
+		if ( ! $land && '' !== $street && blockke_dev_same_place( $street, $d['area_line'] ) ) {
+			$street = ''; // v1.8: no address, only the area again ("Lavington" from the glance row): the label above already says it
+		} elseif ( ! $land && '' !== $d['area'] ) {
+			$street = preg_replace( '/^' . preg_quote( $d['area'], '/' ) . ',\s*/iu', '', $street ); // v1.8: "Ongata Rongai, off Maasai Lodge Road" -> "off Maasai Lodge Road"
+		}
 		$estate = '';
 		if ( $land ) { // the cover's facts already say "Plots from": the offer gives the estate's size instead ("855-acre estate")
 			foreach ( $d['facts'] as $f ) {
@@ -5934,7 +6728,24 @@ JS;
 				}
 			}
 		}
-		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( $land ? $estate : blockke_dev_homes_label( $d['units'] ), $street ) ) ) ) : '';
+		$homes  = $land ? $estate : blockke_dev_homes_label( $d['units'] );
+		if ( ! $land && '' === $homes ) {
+			// v1.8: with no residences table, the bedrooms the title names ("Studio", "3 Bed"; none for "4 & 5 Bedroom Homes"), else
+			// the text's own Bedrooms row, else a villa's or house's bedrooms; never an apartment development's or an office's field
+			$bk = isset( $d['beds_kv'] ) ? trim( (string) $d['beds_kv'] ) : '';
+			if ( count( $tbeds['beds'] ) + (int) $tbeds['studio'] > 1 ) {
+				$homes = '';
+			} elseif ( $tbeds['studio'] ) {
+				$homes = 'Studio';
+			} elseif ( $tbeds['beds'] ) {
+				$homes = $tbeds['beds'][0] . ' Bed';
+			} elseif ( preg_match( '/^(?:studio|\d+)(?:\s*[–-]\s*\d+)?(?:\s*bed\b.*)?$/iu', $bk ) ) {
+				$homes = preg_match( '/^studio/i', $bk ) ? 'Studio' : ( preg_match( '/bed/i', $bk ) ? $bk : $bk . ' Bed' );
+			} elseif ( ! empty( $cx0['house'] ) && $cx0['beds'] > 0 && 'master' !== $cx0['kind'] ) {
+				$homes = $cx0['beds'] . ' Bed';
+			}
+		}
+		$offer  = $lp ? implode( ' · ', array_map( function ( $s ) { return '<span>' . esc_html( $s ) . '</span>'; }, array_filter( array( $homes, $street ) ) ) ) : '';
 		// v1.6 (view_transitions): the photo comes first, 3:2 like the card it grows from (the card's own file backs it while
 		// the large one loads, set as the page reveals: blockke_bkn_vt_head()); its label moves to the gallery viewer, and
 		// the disclaimer already mentions renders
@@ -6103,6 +6914,8 @@ JS;
 				foreach ( $d['units'] as $u ) {
 					if ( is_int( $u['key'] ) && $u['key'] > 0 ) {
 						$gbeds[ $u['group'] ] = min( 6, $u['key'] );
+					} elseif ( ! is_int( $u['key'] ) && blockke_dev_key_beds( $u['key'] ) ) {
+						continue; // v1.8: a range ("3 – 4 Bed") links to no one bedroom count
 					} elseif ( 'studio' === $u['key'] && '' !== (string) $cfg['studio_cat'] ) {
 						$gbeds[ $u['group'] ] = 'studio';
 					}
@@ -6216,17 +7029,18 @@ JS;
 			}
 		} elseif ( $d['offplan'] ) {
 			// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
-			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
+			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && empty( $plan['terms'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
 			// "Pay in instalments" only when the listing mentions instalments and there is time for them
 			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments' : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : ( $plan['instalments'] && ! $close ? 'Pay in <em>instalments</em>' : 'Ask for the <em>payment plan</em>' ) ) );
-			$text    = $plan['text'] ? $plan['text'] : 'Spread the cost while the building goes up: a deposit, then instalments up to completion. Ask for the developer\'s official schedule.';
+			// v1.8: houses and villas are built, not a building going up
+			$text    = $plan['text'] ? $plan['text'] : 'Spread the cost while ' . ( $cx['house'] ? 'your home is built' : 'the building goes up' ) . ': a deposit, then instalments up to completion. Ask for the developer\'s official schedule.';
 			$steps   = $plan['steps'];
 			$titles  = '';
 			foreach ( $steps as $s ) {
 				$titles .= ' ' . $s[0];
 			}
 			if ( $d['completion'] && $steps && ! preg_match( '/complet|handover|occupation/i', $titles ) ) {
-				$steps[] = array( 'Completion', 'Scheduled for ' . $d['completion'] . '.' );
+				$steps[] = array( 'Completion', 'Scheduled for ' . blockke_dev_completion_mid( $d['completion'] ) . '.' );
 			}
 			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-payment"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Payment plan</p><h2 class="bkd-h2">' . $heading . '</h2>'
 				. '<p class="bkd-body bkd-mt">' . $e( $text ) . '</p>';
@@ -6239,7 +7053,7 @@ JS;
 			}
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="payment-plan">Get the official payment plan</button></div>';
 			if ( $close ) {
-				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Completion is close</p><p class="bkd-body">' . $e( 'Completion is scheduled for ' . $d['completion'] . ', so an instalment plan would be short. Ask for the developer\'s current payment terms, and whether a mortgage can cover the balance.' ) . '</p>'
+				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Completion is close</p><p class="bkd-body">' . $e( 'Completion is scheduled for ' . blockke_dev_completion_mid( $d['completion'] ) . ', so an instalment plan would be short. Ask for the developer\'s current payment terms, and whether a mortgage can cover the balance.' ) . '</p>'
 					. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
 			} else {
 				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['calc_price'] > 0 ? $d['calc_price'] : $d['price_from'], $plan, $cta ) . '</div></div></section>';
@@ -6278,6 +7092,16 @@ JS;
 		if ( isset( $nav['location'] ) ) {
 			$loc = $d['location'];
 			$q   = $d['lat'] && $d['lng'] ? $d['lat'] . ',' . $d['lng'] : $d['address'] . ', ' . $d['area_line'];
+			if ( ! $land && ! ( $d['lat'] && $d['lng'] ) ) { // v1.8: "39 Convent Drive, Lavington, Nairobi", not "..., Lavington, Lavington, Nairobi"
+				$qp = array();
+				foreach ( explode( ',', $q ) as $x ) {
+					$x = trim( $x );
+					if ( '' !== $x && ! in_array( strtolower( $x ), array_map( 'strtolower', $qp ), true ) ) {
+						$qp[] = $x;
+					}
+				}
+				$q = implode( ', ', $qp );
+			}
 			$cut = strrpos( $d['address'], ',' );
 			$end = false === $cut ? '' : trim( substr( $d['address'], $cut + 1 ) );
 			$adr = '' === $end ? $e( $d['address'] ) : $e( substr( $d['address'], 0, $cut + 1 ) ) . ' <em>' . $e( $end ) . '</em>';
@@ -7438,12 +8262,13 @@ JS;
 			}
 			add_action(
 				'wp_head',
-				function () use ( $lp ) {
+				function () use ( $lp, $data ) {
 					$font = blockke_dev_font_head( '#bkd' );
 					if ( '' === $font[0] ) {
 						$font[1] = '#bkd{--display:var(--font);--display-w:300;--display-ls:-.025em}#bkd .bkd-h1{font-size:clamp(38px,4.8vw,64px)!important}#bkd .bkd-h2{font-size:clamp(28px,3.3vw,44px)!important}';
 					}
-					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_dev_calc_css() . ( $lp ? blockke_dev_lp_css() : '' ) . "</style>\n";
+					// v1.8: homes pages add their few rules at the end; the shared stylesheet (also on area, index and search pages) is unchanged
+					echo $font[0] . '<style id="bkd-css">' . blockke_dev_css() . $font[1] . blockke_dev_calc_css() . ( $lp ? blockke_dev_lp_css() : '' ) . ( empty( $data['land'] ) ? blockke_dev_home_css() : '' ) . "</style>\n";
 				},
 				99
 			);
@@ -7996,7 +8821,7 @@ JS;
 			'bke_dev_deposit_pct'      => array( 'Deposit %', 'number', 'Empty: read from the Payment Plan section.' ),
 			'bke_dev_reservation'      => array( 'Reservation fee (KES)', 'number', 'Empty: read from the Payment Plan section.' ),
 			'bke_dev_plan_until'       => array( 'Instalments until (YYYY-MM)', 'text', 'Empty: the completion date.' ),
-			'bke_dev_plan_months'      => array( 'Instalment period (months)', 'number', 'Land: how many months the balance can be paid over, e.g. 36. Empty: read from the Payment Plan section.' ),
+			'bke_dev_plan_months'      => array( 'Instalment period (months)', 'number', 'How many months the balance can be paid over, e.g. 36 (homes: instead of up to completion). Empty: read from the Payment Plan section.' ),
 			'bke_dev_plan_text'        => array( 'Payment plan text', 'textarea', 'Empty: the first paragraph of the Payment Plan section. On a ready home it replaces the Finance text.' ),
 			'bke_dev_calc_price'       => array( 'Calculator price (KES)', 'number', 'The price the calculator starts from, e.g. the mortgage price when the cash price shown is lower. A ready home\'s calculator then reads "Mortgage price". Empty: the "from" price.' ),
 			'bke_dev_places'           => array( 'Places nearby', 'textarea', 'One per line as Place | travel time. Shown under Address and in Location. Empty: the description\'s Location section, else straight-line distances from the map pin.' ),
@@ -8116,7 +8941,7 @@ JS;
 					$cfg  = blockke_dev_config();
 					$mode = (string) get_post_meta( $post->ID, 'bke_dev_layout', true );
 					echo '<p style="margin-top:0">The development layout turns this listing into a landing page with the price list form, residences table, payment plan calculator, map and FAQ, all read from this listing. <a href="' . esc_url( add_query_arg( 'bke_layout', '1', get_permalink( $post ) ) ) . '" target="_blank">Preview it</a>.</p>';
-					if ( ! empty( $cfg['landing_pages'] ) && blockke_dev_is_for_sale( $post->ID ) ) {
+					if ( ! empty( $cfg['landing_pages'] ) && blockke_dev_lp_ok( $post->ID ) ) {
 						$lp_url = add_query_arg( 'lp', '1', get_permalink( $post ) );
 						echo '<p>Ad landing page for Google Ads and other campaigns: <a href="' . esc_url( $lp_url ) . '" target="_blank">' . esc_html( $lp_url ) . '</a>. The same content without the site menu or footer, hidden from search engines. Nothing to set up.</p>';
 					}
@@ -8209,7 +9034,7 @@ JS;
 			$bar->add_node( array( 'id' => 'bkd', 'title' => 'Development layout: ' . ( $live ? 'on' : 'off' ), 'href' => get_edit_post_link( $id ) . '#bkd-meta' ) );
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-on', 'title' => 'Preview the development layout', 'href' => add_query_arg( 'bke_layout', '1', $url ) ) );
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-off', 'title' => 'Preview the classic page', 'href' => add_query_arg( 'bke_layout', '0', $url ) ) );
-			if ( ! empty( blockke_dev_config()['landing_pages'] ) && blockke_dev_is_for_sale( $id ) ) {
+			if ( ! empty( blockke_dev_config()['landing_pages'] ) && blockke_dev_lp_ok( $id ) ) {
 				$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-lp', 'title' => 'Open the ad landing page', 'href' => add_query_arg( 'lp', '1', $url ) ) );
 			}
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-edit', 'title' => 'Layout settings', 'href' => get_edit_post_link( $id ) . '#bkd-meta' ) );

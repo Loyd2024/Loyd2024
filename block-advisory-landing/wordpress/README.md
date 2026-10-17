@@ -35,7 +35,7 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 | Section | Comes from |
 |---|---|
-| Hero: name, area, status, *From* price, completion, photo, two-field enquiry form | Title, Area, Property Status, lowest unit price, completion date, featured image. A ready single home reads *Price*, unless its price label ("before" label) is *From*. |
+| Hero: name, area, status, *From* price, completion, photo, two-field enquiry form | Title, Area, Property Status, lowest unit price, completion date, featured image. A ready single home reads *Price*, unless its price label ("before" label) is *From*. An off-plan villa or house at one fixed price reads *Price* too, unless its text says "from KES …" or gives a range. Off-plan apartments, studios and offices keep *From*. |
 | Key facts strip | The description's *at a Glance* or *Project Snapshot* table or list, plus unit sizes. A single home (a unit page or a one-home listing) also shows its bedrooms, bathrooms, built area and plot (in m², like the sizes). |
 | Overview and *Read the full description* | The description's opening paragraphs and its *Why …* list. A short title-like first line ("3 Bedroom Villa at Tilisi Views, Limuru") is left out, since the page heading already says it. The full description stays on the page, collapsed; on phones its wide tables swipe sideways, with a shadow on the side that has more. |
 | Photos | The listing gallery, with each photo's Media Library caption when it has one |
@@ -49,7 +49,7 @@ A landing-page layout for new developments, drawn between the site's normal head
 
 **Look and feel.** The page uses block.ke's warm off-white with sand-coloured sections. Navy is used for the key facts strip, the hero enquiry card, Amenities and *Why Block*, with brass accents. Headings are set in Instrument Serif, a Google Font, and a few words in each are picked out in brass italics, for example "What comes *with the keys.*". To accent part of the overview headline override, wrap those words in asterisks: `About *the building*`. Setting `display_font` to `''` returns all headings to the site font.
 
-**Amenity tiles.** Tiles are chosen by kind, best first, and appear in full rows of 1, 2, 3, 4 or 6. The kinds are: beach, pool, sky lounge or sky garden, cinema, spa, gym, nature, kids' play, café, golf, gardens, yoga, shops, co-working, sports courts, BBQ, residents' lounge and jogging track. A tile keeps the listing's own name when it is short. A longer item becomes the tile's description under a short title, for example "Sky garden" over "Terrace sky garden with panoramic city views". Security, parking, lifts, power and water go in the checklist, titled "The everyday essentials" when that is all it holds.
+**Amenity tiles.** Tiles are chosen by kind, best first, and appear in full rows of 1, 2, 3, 4 or 6. The kinds are: beach, pool, sky lounge or sky garden, cinema, spa, gym, nature, kids' play, café, golf, gardens, yoga, shops, co-working, sports courts, BBQ, residents' lounge and jogging track. A tile keeps the listing's own name when it is short. A longer item becomes the tile's description, under its own name when it starts with one ("Rooftop terrace" over "Rooftop terrace with jacuzzi area"), else under a short title ("Sky garden" over "Terrace sky garden with panoramic city views"). Security, parking, lifts, power and water go in the checklist, titled "The everyday essentials" when that is all it holds.
 
 **Amenity photos.** Give a listing's photos a caption in the Media Library (*Media → the photo → Caption*), for example "Indoor heated pool", "Sky Lounge" or "Private cinema". Photos whose caption names an amenity then appear as a captioned photo strip at the top of Amenities, before the tiles. On phones it swipes; on desktop it shows one full row of 2, 3 or 4 photos (6 or 8 in two rows). Tapping a photo opens the gallery on it. Other captions, such as "Lantana Road frontage", show on the gallery photos and in the photo viewer. With fewer than two amenity captions, the section looks as before. The caption is WordPress's own field, so the theme may also show it wherever it displays captions.
 
@@ -106,6 +106,39 @@ Show house | Façade about 95% done; landscaping almost done. | 45110, 45111, 45
 - **What is left out.** Photos must be images in this site's Media Library. Files from other sites, private or binned media, unknown IDs and dates still ahead are left out. A bare number in the second cell ("Block D1 | 40") is the description, never a photo. Anything the page cannot read is skipped and never breaks the page.
 - **Check after saving.** Under the field, the edit screen says what the page shows (the latest report's date, parts, photos and PDF) and lists, by line number, every line, photo or PDF it could not read.
 - **Units.** A unit listing with an empty field shows its development's reports.
+
+**Reading the listing more carefully (v1.8).** Development pages now read the listing more carefully. These fixes come from the villa assessments. Classic pages, the classic calculator, area, index and search pages and lead emails are unchanged.
+
+- **Names.** The page heading is the development's name rather than a selling phrase from the title, whenever the listing gives one. "3 Bedroom Villa for Sale, Tilisi Views Limuru" becomes "Tilisi Views". The name comes from the custom field `bke_dev_name`, then, for a unit, its development page's `bke_dev_name`, then the Project term. The Project term is written the way the listing's title (or its development's) writes it, without a stray full stop: "17 zuri apartments" reads "17 Zuri Apartments", and "Kitusuru Grove ." reads "Kitisuru Grove" when the title says "The Kitisuru Grove". A term in lower case that no title spells better gets capitals on its words. Renaming badly cased terms is still the better fix. A trailing area such as ", Kiambu Road" is dropped, since the area label above already shows it. `bke_dev_name` now also names the breadcrumb, the section bar, the forms and the photo note.
+- **Hero and key facts.**
+  - A villa or house at one fixed price reads *Price*, off-plan too. It keeps *From* when its text gives that price as a starting price ("from KES …", "Starting price: KES …", "KES … onwards", "and above") or a range, or when its title offers more than one bedroom count. Off-plan apartments, studios and offices keep *From*: their price usually starts a range of floors and views.
+  - The completion cell shows a short month ("Dec 2026", "Before Dec 2026"), and a long area such as "Ongata Rongai" fits on phones.
+  - Sizes are the smallest and largest area stated, read from "Built-up area" or "Plinth area" and never from a plot, site or court. A terrace, balcony, garden or plot figure in the same value is not the home's size. A single home with no size in its text uses its size field, unless its title offers a range of homes ("2–4 Bed Lofts") or it has no bedrooms and isn't a studio. Square feet become whole square metres.
+  - A completion row counts only when it gives a date: "Completion status | Complete" is a status. A ready home whose only completion row says "To be confirmed at point of enquiry" reads *Completion: On request*, not *Status: Ready*, unless its status terms say it is complete or ready now.
+- **Payment.**
+  - Instalments are offered only when the listing offers them, not when it lists them as still to be confirmed or as not applicable.
+  - The calculator runs over the plan's stated length ("over 24 months", with a choice when several lengths are stated). When the text runs the plan to completion ("over 20 months, running through to the Q4 2027 completion date", "phased over the construction period"), the calculator runs up to completion instead. A stated length that runs past the completion date is used, and the note gives the completion date. "Up to 9 months" is noted as the longest the listing states. **Instalment period** now works for homes as well.
+  - It takes no share on completion from the cash, mortgage or bank-loan route.
+  - A payment table's header row is no longer shown as a step.
+- **Who it suits and investors.** Long bullets are kept. "It may be less suitable for …" is read as the note on who it suits less well. The investor view leaves out lead-ins to lists it does not show. It adds a caveat that comes after its third sentence ("not guaranteed", "should not be assumed", "depends on …"), never a claim such as "Guaranteed 10% rental yield".
+- **Amenities.**
+  - "Coffee" alone is not a café, "dining" is not a residents' lounge, and "recycled water" is not a jogging track. Yoga comes before lawns, and pickleball counts as a sports court.
+  - A long item keeps its own name as the tile title, for example "Rooftop terrace" over "Rooftop terrace with jacuzzi area".
+  - The tile lines make no claims a home may not bear out: no "above the city", "steps from home" or "no membership".
+  - The checklist is titled "The everyday essentials" only when it holds nothing but practical items such as security, parking, lifts, power, water, the kitchen and laundry. A fireplace or a bar makes it "Also included".
+- **Residences.**
+  - A row links to the unit whose own words it carries: "Premium" for the Premium townhouse, "Village 1" for Village 1. Every 4-bed row no longer links to the one 4-bed unit. A "Studio" row links to the only studio unit, and "+ DSQ" or "all en-suite" does not set a type apart.
+  - "3 & 4 Bedroom" reads "3 – 4 Bed".
+- **Location.**
+  - A *Destination | Drive time* table is read.
+  - "~15 minutes | to Westlands" is turned round to "Westlands | ~15 minutes".
+  - Bold topics and sentences are not listed as places, unless they name places with a time ("Schools | Cavina School and Kenton College, about 5 to 10 minutes").
+  - The note says "travel times" only when a place has one, in its value or its name.
+- **Landing pages.**
+  - `?lp=1` also works for a listing with no Buy/Rent term whose title does not say rent.
+  - On the phone cover, the area is not repeated. Without a residences table, the cover shows the bedrooms the title names: "Studio", "3 Bed", and nothing for a range such as "4 & 5 Bedroom Homes". With no count in the title, it shows the text's own Bedrooms row, or a villa's or house's bedrooms.
+  - The map search no longer repeats the area.
+- **Copy.** The *Also consider* heading names the bedrooms that its "See all" link names. Houses are "built", not "while the building goes up". Phrases like "Late 2027" are lower-case mid-sentence ("until completion in late 2027").
 
 ## 4. Ad landing pages (for Google Ads and other campaigns)
 
@@ -362,6 +395,14 @@ The snippet was tested on a local WordPress copy that mimics WPResidence 5.6. It
   Byte for byte on every URL of the zbyte copy (2,909: every listing and landing page, area and segment pages, the new developments page, search and the home page), the pages were compared with the v1.6.1 code once the `<!--bkd-progress-->` and `/*bkd-progress*/` blocks were removed. This was run with no reports anywhere, and again with reports on a development, a land estate (via its landing page) and a 121-day-old report.
 
   Every page was byte for byte the same in both runs. Development pages and landing pages carry the marked style and script blocks; area, segment, index and search pages carry none and are unchanged even before the blocks are removed. In the run with no reports, 746 pages also carried the off-plan panel. There were no PHP notices.
+- v1.8: these checks were run on the live text of the listings named in the villa assessments, and on the render check's listings after their changes were applied.
+  - **Fixes:** 242 checks, 140 in the first pass and 102 in the second. Each fix fails under v1.7 and passes under v1.8; v1.7 fails 153 of them. Examples: Tilisi's heading, Five Star Hills 425 – 491 m², Kirawa's places turned round, Silver Hill over 24 or 36 months, Ostrea quarterly over 20, 25 or 30 months, Enchanting Oaks and Hibo up to completion, Sunnyhill and six other ready homes without an instalment claim, 156 Elara's rows, Oak & Ivy's villages, *Price* on the Runda townhouse and 1899, Elements' investor caveats, Greenview's payment steps and "until completion in late 2027".
+  - **Review round:** an adversarial review and a comparison of every URL found apartments and studios reading *Price*, wrong cover bedrooms, badly cased Project terms in the heading, lost residence links, a dropped Location row, a stray Size, and "Status: Ready" for listings still to be confirmed. These are fixed and re-checked on the same pages.
+  - **Phone view:** a long Location cell fits at 390px, and the landing page form still fits 390×664.
+  - **Byte for byte**, on every URL of the zbyte copy (2,916: every listing and landing page, area and segment pages, the new developments page, search and the home page), v1.8 was compared with v1.7 run before and after it, with and without construction-progress fixtures. Only development layout pages and their landing pages differ. Area, segment, index and search pages, classic listings and the home page are unchanged, and no page logged a PHP notice. The classic pieces (plan reading, calculator, amenity tiles, nearby list, completion) are the same for all 852 listings.
+  - **Land pages** change only by the stray piece of the hero line.
+  - **Earlier suites:** the v1.7 suites (parser 53, 103, 91, 72, 132 and 12; the two-digit year and admin checks; the page matrices) and the land-mode reference suites give the same results as with v1.7.
+  - **Tile and place wording:** two later rounds stopped a tile repeating its own name in its text and kept positions such as "within Tilisi itself" with the place rather than under travel times, with guards that fall back to the earlier drawing for odd items (a full stop, a trailing comma, "fully equipped", a time with a colon). Run over every amenity item and place row of 72 live listings and two local copies (2,530 items, 3,413 rows, and 87,926 generated ones), no title is empty, no text is one word and no word or time is lost; on the render copy and every zbyte URL, the only page change from these rounds is one Location row on two Super Westbury landing pages.
 
 The real theme's header and footer can differ from the test copy, so preview with `?bke_layout=1` before switching a listing on.
 
