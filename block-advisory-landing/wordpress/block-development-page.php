@@ -172,6 +172,21 @@
  * homes' heading names the bedrooms its link names; a payment table's header row is not a step; houses are "built",
  * not "the building goes up"; "until completion in late 2027". Classic pages, the classic calculator, area, index and
  * search pages and lead emails are unchanged; land pages change only by the stray piece of the hero line.
+ * v1.8.1 (2026-10-17): an off-plan page whose listing states a deposit or a reservation fee but no instalments heads its
+ * payment section "20% deposit, then the developer's payment plan" and shows an "Ask for the payment plan" panel with what
+ * the listing states, not an instalment estimate (instalments are stated when the listing offers them, gives the plan's
+ * length in figures or words or a share every month or quarter, says the balance is paid monthly, per month, in stages
+ * or tranches, at construction stages, during construction or until completion, offers a flexible plan, or pays a cash
+ * route's balance over time; or the box sets "Instalment period" or "Instalments until"; with no Payment section, the
+ * rest of the listing counts). The forms offer floor plans only when the listing has them: its own words offer them
+ * ("Floor plans are available on request"), or it links or embeds a brochure or floor-plan PDF, has WPResidence floor
+ * plans with an image, a brochure, an attached PDF that is not a site report, or an image or PDF named as a floor plan; a
+ * unit also uses its development's, and a development its units'. Else "Get the price list", rows read "Price &
+ * availability", and that lead's email says "Price and availability request". The residents' lounge tile needs a
+ * lounge, club, clubhouse, common room or another shared room ("Ample residents' parking" is not one). A tile title
+ * stops at a sentence end ("Swimming pool. Shared with ..." -> "Swimming pool"; not after "Mon.", "Lvl." or "Blk."), and
+ * one that ends in an article, a conjunction or an -ly adverb ("Swimming pool and an", "... and a newly"; not "Block A")
+ * falls back to the earlier drawing. Classic pages, land pages, area, index and search pages are unchanged.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -890,7 +905,8 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 	/**
 	 * The payment plan as the calculators read it. $layout (v1.8, the development layout): instalments, a share on
 	 * completion and the plan's length come from what the listing offers (blockke_dev_plan_read()), and a glance row names
-	 * the completion only with a date; the classic calculator keeps v1.7's reading.
+	 * the completion only with a date; the classic calculator keeps v1.7's reading. v1.8.1: inst_stated, whether the
+	 * listing states instalments at all (an off-plan page without them shows no instalment estimate).
 	 */
 	function blockke_dev_plan_info( $post, $layout = false ) {
 		$id     = $post->ID;
@@ -979,11 +995,31 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$term_q      = false;
 		$term_upto   = false;
 		$term_past   = false;
+		$stated      = false;
+		$routes      = false;
 		if ( $layout ) {
 			$read          = blockke_dev_plan_read( $pieces );
 			$instalments   = $read['instalments'];
 			$on_completion = $read['on_completion'];
 			$own_months    = (int) get_post_meta( $id, 'bke_dev_plan_months', true );
+			$routes        = $read['routes'];
+			// v1.8.1: instalments stated anywhere it says how the balance is paid: the reader's offer, length, stage payment or
+			// cash route over time; the box's Instalment period (any) or payment text; a flexible plan; and, with no Payment
+			// section, the rest of the listing ("How to buy: ... the balance in 12 monthly instalments")
+			$stated        = $read['stated'] || $own_months > 0 || (bool) preg_match( '/flexib/i', $all ) || ( '' !== $override_text && blockke_dev_plan_read( array( $override_text ) )['stated'] );
+			if ( ! $stated && $i < 0 && ( $dep > 0 || $res > 0 ) ) {
+				$rest = array();
+				foreach ( $parsed['tokens'] as $t ) {
+					if ( 'ul' === $t['tag'] ) {
+						foreach ( blockke_dev_list_items( $t['inner'] ) as $it ) {
+							$rest[] = $it['text'];
+						}
+					} elseif ( 'p' === $t['tag'] ) {
+						$rest[] = blockke_dev_text( $t['inner'] );
+					}
+				}
+				$stated = blockke_dev_plan_read( $rest )['stated'];
+			}
 			$left          = blockke_dev_months_until( $until );
 			$terms         = $read['terms'];
 			if ( $left > 0 && $read['tied'] ) { // a plan the text runs to completion ends there: up to completion, as before
@@ -1017,6 +1053,11 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'completion_s' => blockke_dev_completion_mid( $completion ), // v1.8: the completion in a sentence ("late 2027")
 			'term_upto'    => $term_upto, // v1.8: the one length is a most ("up to 9 months")
 			'term_past'    => $term_past, // v1.8: a stated length longer than the time to completion
+			// v1.8.1: the listing states instalments: offered (blockke_dev_plan_read()), a length (the text's, or the box's
+			// "Instalment period"), a share every month or quarter, the box's "Instalments until", or the box's payment text
+			// (and $stated above)
+			'inst_stated'  => $instalments || $terms || $inst_pct > 0 || '' !== $own_until || $stated,
+			'routes'       => $routes, // v1.8.1: the Payment section names a cash or mortgage route
 		) : array() );
 	}
 
@@ -1040,9 +1081,12 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 	 * and mortgage routes ("Cash: 90% upfront and 10% on completion", "or cash with a 5% discount", "a bank loan over 10
 	 * years") set neither the plan's share on completion nor its length. "Rather than" or "instead of" leaves out only what
 	 * follows it ("Pay in instalments rather than a lump sum: ... over 24 months"), and "not applicable" or "N/A" offers
-	 * nothing. Returns instalments (offered or not), on_completion (%), terms (months, shortest first), quarterly, tied (the
-	 * lengths of a plan the text runs to completion: "over 20 months, running through to the Q4 2027 completion date",
-	 * "24 months — phased over the construction period") and upto (every length is a most: "up to 9 months").
+	 * nothing. v1.8.1: a clause that spreads the payments ("Balance: payable monthly, quarterly or bi-annually", "with the
+	 * balance paid during construction") offers instalments without the word, unless it is the cash or mortgage route,
+	 * a service charge, rent or levy, or says "not", "no" or "without". Returns instalments (offered or not),
+	 * on_completion (%), terms (months, shortest first), quarterly, tied (the lengths of a plan the text runs to
+	 * completion: "over 20 months, running through to the Q4 2027 completion date", "24 months — phased over the
+	 * construction period") and upto (every length is a most: "up to 9 months").
 	 */
 	function blockke_dev_plan_read( $pieces ) {
 		$no     = '/\bnot (?:yet )?(?:been )?(?:provided|stated|confirmed|available|published|offered|applicable)\b|\bha(?:ve|s) not been\b|\bto be (?:confirmed|advised|announced|shared)\b|\btb[ca]\b|\b(?:at|on) (?:the )?point of enquiry\b|\bif applicable\b|\bno instal+ments?\b|\bn\/a\b|:\s*(?:none|nil)\b/i';
@@ -1054,7 +1098,27 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			. '|\b(?<m3>' . $list . ')[\s-]*(?<u3>months?|years?)\s+(?:[\w-]+\s+){0,2}?(?:payment|instal\w*)\s*plans?/iu';
 		// the plan runs to completion: "until completion", "through to the development's Q4 2027 completion date", "over the construction period"
 		$tie    = '/\b(?:until|till|through(?:\s+to)?|up\s+to|by|before|ahead\s+of|running\s+(?:through\s+)?to)\s+(?:the\s+)?(?:(?:development|project|estate|building)[’\']?s?\s+)?(?:(?:q[1-4]|h[12]|[a-z]+),?\s+)?(?:20\d{2}\s+)?(?:completion|handover|hand-over)\b|\b(?:over|during|across|throughout)\s+(?:the\s+)?construction\b|\bconstruction[\s-]+linked\b/iu';
-		$out    = array( 'instalments' => false, 'on_completion' => 0, 'terms' => array(), 'quarterly' => false, 'tied' => array(), 'upto' => false );
+		// v1.8.1: payments spread over time, in a clause about paying ("payable monthly, quarterly or bi-annually", "10% every 3
+		// months", "KES 150,000 per month", "the balance paid during construction", "spread until completion", "in 3 equal
+		// tranches", "staged payments", "the payment frequency", "post-dated cheques")
+		$spread = '/\b(?:monthly|quarterly|weekly|fortnightly|bi-?weekly|bi-?annual(?:ly)?|semi-?annual(?:ly)?|every\s+(?:month|quarter|week|(?:\d{1,2}|two|three|four|six)\s+(?:months|weeks))|(?:per|each)\s+(?:month|quarter)|(?<!within\s)(?<!in\s)(?<!after\s)(?<!for\s)a\s+(?:month|quarter)(?!\s+(?:before|after|from|of|later|ahead|prior)\b))\b'
+			. '|\b(?:during|over|across|throughout)\s+(?:the\s+)?(?:construction|build)\b'
+			. '|\b(?:balance|spread\w*|instal\w*|payable|paid|payments?|remainder|rest)\b[^.;]{0,40}?\b(?:until|till|up\s+to|through(?:\s+to)?)\s+(?:the\s+)?(?:completion|handover|hand-over)\b'
+			. '|\bin\s+(?:(?:\d{1,2}|two|three|four|five|six)\s+)?(?:equal\s+)?(?:stages|tranches|payments)\b|\bstaged\s+payments?\b|\bpayment\s+frequenc(?:y|ies)\b|\bpost[\s-]?dated\s+cheques?\b|\bPDCs?\b/iu';
+		// what the clause denies is the plan itself ("not include a staged payment plan", "no monthly payments"), not "no
+		// interest" or "no penalties"; fees, rent, income and a checklist are not the plan ("Maintenance fee: payable monthly",
+		// "Rental income: paid quarterly", "Buyers should confirm the deposit, payment frequency and completion date")
+		$pl_neg = '(?:instal\w*|monthly|quarterly|weekly|spread\w*|staged|stages|tranches|(?:payment\s+)?plans?|periodic\w*|frequenc\w*)';
+		$deny   = '/\b(?:not|no|without|never|cannot|nor)\s+(?:[\w’\'-]+\s+){0,3}?' . $pl_neg . '\b|n[’\']t\s+(?:[\w’\'-]+\s+){0,3}?' . $pl_neg . '\b/iu';
+		$fees   = '/service[\s-]+charges?|\brent(?:al|als|s)?\b|\blev(?:y|ies)\b|\bmaintenance\b|\bmanagement\b|\bHOA\b|\bincome\b|\breturns?\b|\byields?\b|\bdividends?\b|\brates\b|\binsurance\b|\butilit(?:y|ies)\b|\bmembership\b/iu';
+		$check  = '/\b(?:should|must|needs?\s+to|recommend\w*|advis\w*|encourag\w*)\b[^.;]*?\b(?:confirm|check|verify|ask|request|review|clarify|establish|find\s+out|agree|discuss|negotiate)\b/iu';
+		// v1.8.1 (stated, not the plan's shape): a construction-stage share ("Slab level: 30%"), a plan's length in other
+		// words ("an 18-month plan", "over twelve months", "20% deposit + 24 months"), or a cash route's balance over time
+		// ("Cash: 20% deposit, balance payable within 8 months")
+		$stage  = '/\b(?:slab|roof(?:ing)?|foundations?|superstructure|walling|lintel|ring[\s-]beam|topping[\s-]out|plaster(?:ing)?|excavation)\b/iu';
+		$words  = 'one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|eighteen|twenty[\s-]?four|thirty[\s-]?six|forty[\s-]?eight|sixty';
+		$len    = '/\b\d{1,3}[\s-]*(?:months?|years?)[\s-]+(?:[\w-]+\s+){0,2}?plans?\b|\b(?:over|across|within|for|in|up to)\s+(?:a\s+(?:period|term)\s+of\s+)?(?:up to\s+)?(?:' . $words . ')\s+(?:months?|years?)\b|\+\s*\d{1,3}\s*months?\b/iu';
+		$out    = array( 'instalments' => false, 'on_completion' => 0, 'terms' => array(), 'quarterly' => false, 'tied' => array(), 'upto' => false, 'stated' => false, 'routes' => false );
 		$q_only = null;
 		$u_only = null;
 		foreach ( $pieces as $pc ) {
@@ -1071,8 +1135,19 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 					$out['instalments'] = true; // offered; not a checklist item ("Instalment schedule", "The available instalment period")
 				}
 				$body = preg_replace( '/^[^:]{1,40}:\s*/u', '', $cl ); // "Payment plan: Cash 90% upfront ..." -> "Cash 90% upfront ..."
+				$paid = preg_match( '/\b(?:balance|pay\w*|paid|instal\w*|rest|remainder|spread)\b/i', $cl ) && ! preg_match( $deny, $cl ) && ! preg_match( $fees, $cl );
 				if ( $route_pc || preg_match( '/^\W*' . $route . '\b/i', $body ) || ( preg_match( '/\b' . $route . '\b/i', $body ) && ! preg_match( '/instal/i', $body ) ) ) {
+					$out['routes'] = true;
+					if ( $paid && preg_match( '/\bcash\b/i', $route_pc ? $pc : $cl ) && ! preg_match( '/\b(?:mortgage|bank|loan|sacco)\b/i', $cl ) && ( preg_match( $spread, $cl ) || preg_match( $re, $cl ) || preg_match( $len, $cl ) ) ) {
+						$out['stated'] = true; // v1.8.1: the cash route pays the balance over time ("balance payable within 8 months")
+					}
 					continue; // the cash or mortgage route (a bank loan too): not the instalment plan
+				}
+				if ( $paid && preg_match( $spread, $cl ) && ! preg_match( $check, $cl ) ) {
+					$out['instalments'] = true; // v1.8.1: instalments without the word ("Balance: payable monthly, quarterly or bi-annually", "the balance paid during construction"), not a service charge paid monthly
+				}
+				if ( preg_match( '/\d\s*%/', $cl ) && preg_match( $stage, $cl ) && ! preg_match( '/\b(?:progress|complete|completed|done|reached|achieved|built)\b/i', $cl ) ) {
+					$out['stated'] = true; // v1.8.1: a payment at a construction stage ("Slab level: 30%")
 				}
 				$cl = preg_replace( '/\b(?:complet\w*|handover|hand-over|delivery|occupation)\s+(?:is\s+|date\s+)?(?:expected\s+)?(?:in|within)\s+\d{1,3}\s*(?:months?|years?)\b/iu', ' ', $cl ); // "with completion in 24 months" is not the plan's length
 				if ( ! $out['on_completion'] && ( preg_match( '/(\d{1,2})\s*%\s*(?:of the (?:purchase |total )?price\s+)?(?:balance\s+)?(?:(?:is\s+)?(?:payable|due|paid)\s+)?(?:on|at|upon)\s+(?:completion|handover|hand-over)\b/i', $cl, $m )
@@ -1081,6 +1156,9 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 				}
 				if ( ! preg_match( '/pay|plan|instal|balance/i', $cl ) || ( preg_match( '/\b(?:title|transfer|issu\w*|process\w*|handover|valuation|construction|built|complet\w*|delivery|lease|loan)\b/i', $cl ) && ! preg_match( '/balance|instal|pay(?:ment)?\s*plan|plan\s*:|payment period/i', $cl ) ) ) {
 					continue; // not about paying: "handover 24 months from booking", "the title within 6 months"
+				}
+				if ( ! $out['stated'] && ! preg_match( $deny, $cl ) && ! preg_match( $fees, $cl ) && preg_match( $len, preg_replace( '/\b(?:complet\w*|handover|hand-over|delivery|occupation)\b[^.;]{0,30}?\b(?:in|within)\s+(?:' . $words . ')\s+(?:months?|years?)\b/iu', ' ', $cl ) ) ) {
+					$out['stated'] = true; // v1.8.1: a length in other words ("an 18-month plan", "over twelve months", "+ 24 months")
 				}
 				if ( ! preg_match_all( $re, $cl, $mm, PREG_SET_ORDER ) ) {
 					continue;
@@ -1117,6 +1195,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		$out['quarterly']   = (bool) $q_only;
 		$out['upto']        = (bool) $u_only;
 		$out['instalments'] = $out['instalments'] || (bool) $out['terms']; // "payment over 24 months" is an instalment plan
+		$out['stated']      = $out['stated'] || $out['instalments'];
 		return $out;
 	}
 
@@ -2185,6 +2264,10 @@ JS;
 	 * v1.8 ($layout, the development layout only; classic pages keep these): "coffee" alone is not a café and "dining" not
 	 * a residents' lounge, yoga comes before lawns ("Yoga lawn"), pickleball is a sports court, "recycled water" is not a
 	 * jogging track, and the lines make no claim a home may not bear out ("above the city", "steps from home", "no membership").
+	 * v1.8.1: the residents' lounge needs a lounge, club, clubhouse, common room or another shared room (residents' hall,
+	 * bar, games, TV, activity or recreation room, a recreation centre, a community hall); "residents" alone is not one
+	 * ("Ample residents' parking", "Parking: Residents and guests"), nor is a home's own "family or TV room", nor a
+	 * recreation centre or community hall nearby ("Walking distance to the Westlands community centre").
 	 */
 	function blockke_dev_amenity_lib( $layout = false ) {
 		$lib = blockke_dev_amenity_lib_v17();
@@ -2205,8 +2288,17 @@ JS;
 			}
 			if ( 'cafe' === $l[1] ) {
 				$l[0] = '/restaurant|caf[eé]|coffee (?:shop|house)|bistro|eatery|food court/u';
-			} elseif ( 'social' === $l[1] ) {
-				$l[0] = '/club ?house|(?<!living )(?<!family )(?<!sitting )(?<!dining )lounge|social|entertainment|function (room|hall)|events?\b|party|multi-?purpose|residents/u';
+			} elseif ( 'social' === $l[1] ) { // v1.8.1: "residents" only with a shared room ("Residents' club", "Residents' hall", "Residents' games room"), not "Ample residents' parking"; a recreation centre or community hall; not a home's own "family or TV room"
+				// A recreation centre or community hall only when it is the development's own, not a place nearby: no distance
+				// or position word before it in its sentence ("Walking distance to the ...", "Opposite the ...", "Five minutes
+				// from the ..."), no distance after it ("... five minutes away"), and no name before it ("the Westlands
+				// community centre"): it starts the item or follows a list's comma or a word such as "a", "shared" or "residents'".
+				$room = '(?:recreation(?:al)? (?:cent(?:re|er)|hall)|community (?:hall|cent(?:re|er)))\b';
+				$far  = 'walk\w*|distance|minutes?|mins?|hours?|hrs?|km|kms|kilomet(?:re|er)s?|miles?|nearby|away|drive';
+				$near = $far . '|near\w*|close (?:to|by)|closer|opposite|next (?:to|door)|adjacent|across|beside|behind|bordering|neighbou?ring|proximity|around the corner|(?:to|from) the|towards?';
+				$own  = 'a|an|the|our|its|own|one|and|or|with|plus|including|includes|featuring|has|have|offers?|shared|communal|common|private|exclusive|dedicated|modern|new|large|spacious|big|grand|elegant|stylish|beautiful|furnished|equipped|indoor|outdoor|on[- ]?site|in[- ]house|estate|(?:estate|development|project|compound)[\'’]s|residents?[\'’]?|resident[\'’]s|multi[- ]?purpose|purpose[- ]built|central|main';
+				$l[0] = '/club ?house|(?<!living )(?<!family )(?<!sitting )(?<!dining )lounge|social|entertainment|function (room|hall)|events?\b|party|multi-?purpose|\bresident\S*\s+(?:club|hall|bar|games? room|tv room|activity room|recreation (?:room|cent(?:re|er)|hall))\b|\bcommon room\b'
+					. '|^(?=.*?\b' . $room . ')(?!.*?\b(?:' . $near . ')\b[^.;!?]{0,100}?\b' . $room . ')(?!.*?\b' . $room . '[^.;!?]{0,60}?\b(?:' . $far . ')\b)(?:.*?(?:[^\p{L}\p{N}\s\'’]|\b(?:' . $own . ')\s))?\s*' . $room . '/u';
 			} elseif ( 'sport' === $l[1] ) {
 				$l[0] = '/tennis|squash|basketball|padel|paddle|pickle ?ball|volleyball|badminton|football|sports? (court|ground|field|facilit)/u';
 			} elseif ( 'trail' === $l[1] ) { // "cycling", "cycle track", "bicycle path"; not "recycled water" or "motorcycle parking"
@@ -2348,9 +2440,24 @@ JS;
 				$own = '' !== $c['head'] && mb_strlen( $c['head'] ) <= 30 ? $c['head'] : '';
 				$txt = '' !== $own ? $c['body'] : $c['text'];
 				if ( '' === $own ) { // the name it starts with: "Rooftop terrace with jacuzzi area", "Modern Gymnasium equipped for ..."
+					// v1.8.1: a sentence end ends the name too ("Swimming pool. Shared with ..." -> "Swimming pool"): its first
+					// full stop, "!" or "?", unless after a one-letter word or an abbreviation ("e.g.", "St.", "approx.", and the
+					// days, months, "Lvl.", "Flr.", "Blk.", "Ph."); a name that ends in an article, a conjunction or an -ly adverb
+					// is cut short ("Swimming pool and an", "... and a newly"; not "Block A"), so the earlier drawing stands
+					$dangles = function ( $s ) {
+						if ( preg_match( '/\b(?:block|blk|tower|twr|phase|ph|wing|level|lvl|floor|flr|type|unit|court|house|building|bldg|section|zone|gate|plot|villa|apartment|grade|category|class)\s+a$/iu', $s ) ) {
+							return false; // "Block A", "Level A": a label, not the article
+						}
+						return (bool) preg_match( '/(?:\b(?:a|an|the|and|or|nor|but|of)|&)$/iu', $s )
+							|| ( preg_match( '/\b(\p{L}{2,}ly)$/iu', $s, $lm ) && ! preg_match( '/^(?:family|daily|weekly|monthly|yearly|nightly|hourly|early|only|friendly|lovely|lively|holy|ugly|supply|assembly|italy|lily|rally|ally|hilly|chilly|silly|jelly|belly|curly|bully|reply|apply)$/iu', $lm[1] ) );
+					};
 					$ph = preg_split( '/\s+(?:with|featuring|including|offering|equipped|for|plus|where|that|which|and|&)\s+|\s*[,;:(]\s*|\s+[–—-]\s+/u', $c['text'], 2 );
 					$ph = is_array( $ph ) ? trim( $ph[0] ) : ''; // invalid UTF-8: no name
-					$pk = mb_strlen( $ph ) >= 3 && mb_strlen( $ph ) <= 30 && $ph !== $c['text'] ? $find( strtolower( $ph ) ) : null;
+					if ( preg_match( '/^(.*?)[.!?]+\s/u', $ph, $sm ) && preg_match( '/\p{L}\p{L}$/u', $sm[1] ) // the first stop only
+						&& ! preg_match( '/\b(?:st|mt|dr|mr|mrs|ms|no|nos|rd|ave|blvd|hwy|apt|bldg|blk|twr|lvl|flr|fl|ph|pt|rm|ext|dept|jr|sr|co|ltd|inc|etc|vs|approx|incl|excl|est|ref|tel|fig|vol|prof|hon|hrs|mins?|max|sq|ft|km|nr|opp|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)$/iu', $sm[1] ) ) {
+						$ph = trim( $sm[1] );
+					}
+					$pk = mb_strlen( $ph ) >= 3 && mb_strlen( $ph ) <= 30 && $ph !== $c['text'] && ! $dangles( $ph ) ? $find( strtolower( $ph ) ) : null;
 					$own = $pk && $pk[1] === $c['lib'][1] ? $ph : '';
 					if ( '' !== $own ) { // and the text does not open with that name again
 						$base = preg_replace( '/[.;:,\s]+$/u', '', $c['text'] );
@@ -2370,13 +2477,13 @@ JS;
 							// "Modern Gymnasium" | "Equipped for all your daily fitness needs"; "Open Garden Spaces & Picnic Spots" | "Perfect for ..."
 							$sep  = preg_match( '/^\s*[:–—-]/u', $nm[2] );
 							$rest = $sep ? $nm[3] : trim( $nm[2] ) . ' ' . $nm[3];
-							if ( $named( trim( $nm[1] ) ) && ! ( 'equipped' === trim( $nm[2] ) && preg_match( '/\b(?:fully|well)$/iu', $nm[1] ) )
+							if ( $named( trim( $nm[1] ) ) && ! ( 'equipped' === trim( $nm[2] ) && preg_match( '/\b(?:fully|well)$/iu', $nm[1] ) ) && ! $dangles( trim( $nm[1] ) )
 								&& ( count( preg_split( '/\s+/u', trim( $rest ) ) ) >= 3 || ! ( $sep || preg_match( '/\s(?:and|&)\s/u', $nm[1] ) ) ) ) {
 								$own = trim( $nm[1] );
 								$txt = $rest;
-							} // else as v1.8 drew it: "and a fully | equipped gym", "Picnic Spots: | Perfect", "and a green park | for events"
+							} // else as v1.8 drew it: "and a fully | equipped gym", "Picnic Spots: | Perfect", "and a green park | for events", "and an | equipped gym"
 						} elseif ( ! $cut && mb_strlen( $base ) <= 45 && $kind( $base ) ) {
-							if ( $named( $base ) ) {
+							if ( $named( $base ) && ! $dangles( $base ) ) {
 								$own = $base; // only names ("Coffee café and residents’ restaurant"): the title, with the kind's line, as a short item
 								$txt = $c['lib'][5];
 							}
@@ -3901,6 +4008,119 @@ JS;
 			)
 		);
 		return $pdf ? wp_get_attachment_url( $pdf[0]->ID ) : '';
+	}
+
+	/**
+	 * v1.8.1: whether the listing has floor plans to send, so the forms may offer them. Its own: WPResidence's floor plans
+	 * (Floor plans on, with a plan image), the brochure field, a PDF attached to it that is not a site report, an image or
+	 * PDF of the listing (attached to it or in its gallery) whose title or file name names a floor plan, or its own words
+	 * offering them (blockke_dev_plans_said(): "Floor plans are available on request", a linked "Floor plans (PDF)"). A
+	 * unit without any uses its development's own; a development counts its published units' WPResidence floor plans,
+	 * brochure field and words, since WPResidence keeps floor plans on the unit listings its rows show (not their files:
+	 * no query per unit). $up false: the listing's own only; $files false: without its attached or gallery files.
+	 */
+	function blockke_dev_has_plans( $id, $up = true, $files = true ) {
+		static $cache = array();
+		$id  = (int) $id;
+		$key = $id . ( $up ? 'u' : '' ) . ( $files ? 'f' : '' );
+		if ( isset( $cache[ $key ] ) ) {
+			return $cache[ $key ];
+		}
+		$has = '' !== trim( (string) get_post_meta( $id, 'bke_dev_brochure', true ) ) || blockke_dev_plans_said( (string) get_post_field( 'post_content', $id ) );
+		if ( ! $has && '1' === (string) get_post_meta( $id, 'use_floor_plans', true ) ) {
+			foreach ( array( 'plan_image', 'plan_image_attach' ) as $k ) {
+				foreach ( (array) get_post_meta( $id, $k, true ) as $v ) {
+					$has = $has || ( is_scalar( $v ) && '' !== trim( (string) $v ) );
+				}
+			}
+		}
+		if ( ! $has && $files ) { // a PDF attached to the listing is its brochure, unless it is a site report (v1.7)
+			$rep = array();
+			foreach ( blockke_dev_progress( $id ) as $u ) {
+				$rep[] = $u['pdf'] ? (int) $u['pdf']['id'] : 0;
+			}
+			foreach ( get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_parent' => $id, 'post_mime_type' => 'application/pdf', 'posts_per_page' => 20, 'no_found_rows' => true ) ) as $a ) {
+				if ( ! in_array( (int) $a->ID, $rep, true ) && ! preg_match( '/progress|report|update/i', $a->post_title . ' ' . $a->post_name . ' ' . basename( (string) get_post_meta( $a->ID, '_wp_attached_file', true ) ) ) ) {
+					$has = true;
+					break;
+				}
+			}
+		}
+		if ( ! $has && $files ) {
+			$gal = get_post_meta( $id, 'wpestate_property_gallery', true );
+			$gal = array_filter( array_map( 'intval', is_array( $gal ) ? $gal : explode( ',', (string) get_post_meta( $id, 'image_to_attach', true ) ) ) );
+			$att = get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_parent' => $id, 'posts_per_page' => 120, 'no_found_rows' => true ) );
+			if ( $gal ) {
+				$att = array_merge( $att, get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post__in' => array_values( $gal ), 'posts_per_page' => 120, 'no_found_rows' => true ) ) );
+			}
+			foreach ( $att as $a ) {
+				// its title, slug or file name (a caption or alt text describes a photo: "Open floor plan living area"); not
+				// "floor planks" or an open floor plan; "Typical 2 bedroom layout", "Unit Type B - FP" are floor plans
+				$words = $a->post_title . ' ' . $a->post_name . ' ' . basename( (string) get_post_meta( $a->ID, '_wp_attached_file', true ) );
+				if ( preg_match( '/(?<![a-z])(?<!open[\s_-])floor[\s_-]*plans?(?![a-z])|(?<![a-z0-9])fp(?![a-z])|(?<![a-z])(?:type|typical|\d\s*(?:br|bed\w*))(?![a-z]).*(?<![a-z])layouts?(?![a-z])/i', $words ) ) {
+					$has = true;
+					break;
+				}
+			}
+		}
+		if ( ! $has && $up ) {
+			$mid = (int) get_post_meta( $id, 'property_subunits_master', true );
+			if ( $mid && $mid !== $id ) {
+				$has = 'estate_property' === get_post_type( $mid ) && 'publish' === get_post_status( $mid ) && blockke_dev_has_plans( $mid, false );
+			} elseif ( '1' === (string) get_post_meta( $id, 'property_has_subunits', true ) ) { // a development: its units' own floor plans
+				$list = get_post_meta( $id, 'property_subunits_list', true );
+				$sids = array_merge( is_array( $list ) ? $list : array(), preg_split( '/[\s,]+/', trim( (string) get_post_meta( $id, 'property_subunits_list_manual', true ) ) ) );
+				foreach ( array_slice( array_values( array_unique( array_filter( array_map( 'intval', $sids ) ) ) ), 0, 60 ) as $sid ) {
+					if ( $sid !== $id && 'estate_property' === get_post_type( $sid ) && 'publish' === get_post_status( $sid ) && blockke_dev_has_plans( $sid, false, false ) ) {
+						$has = true;
+						break;
+					}
+				}
+			}
+		}
+		$cache[ $key ] = $has;
+		return $has;
+	}
+
+	/**
+	 * v1.8.1: the listing's own words offer floor plans: a sentence that names them with a word of sending, asking for or
+	 * having them ("Floor plans are available on request", "We can share the latest price list, floor plans and available
+	 * units", "Request the brochure and floor plans", "View Floor Plans (PDF)") and does not deny them ("no floor plan was
+	 * included", "floor plans have not been provided"); or a PDF the text links or embeds whose name or link text names the
+	 * brochure or the floor plans. An open floor plan, or a layout described as one ("the compact floor plan leaves ..."),
+	 * is not an offer.
+	 */
+	function blockke_dev_plans_said( $content ) {
+		$c = (string) $content;
+		if ( ! preg_match( '/floor[\s_-]*plan|brochure/i', $c ) ) {
+			return false;
+		}
+		$named = '/brochure|(?<![a-z])floor[\s_-]*plans?(?![a-z])/i';
+		if ( preg_match_all( '#<a\b[^>]*\bhref=["\']([^"\']+)["\'][^>]*>(.*?)</a>#is', $c, $am, PREG_SET_ORDER ) ) {
+			foreach ( $am as $a ) {
+				if ( preg_match( '#\.pdf(?:[?\#].*)?$#i', $a[1] ) && preg_match( $named, basename( (string) wp_parse_url( $a[1], PHP_URL_PATH ) ) . ' ' . wp_strip_all_tags( $a[2] ) ) ) {
+					return true; // a linked brochure or floor-plan PDF ("Brochure-Lotus-1.pdf", "View Floor Plans (PDF)")
+				}
+			}
+		}
+		if ( preg_match_all( '#"(?:url|href|pdf\w*)"\s*:\s*"([^"]+\.pdf)"#i', $c, $um ) ) {
+			foreach ( $um[1] as $u ) {
+				if ( preg_match( $named, basename( (string) wp_parse_url( stripslashes( $u ), PHP_URL_PATH ) ) ) ) {
+					return true; // an embedded one (a file or PDF embedder block)
+				}
+			}
+		}
+		$t = preg_replace( '#<!--.*?-->|<(script|style)\b.*?</\1>#is', ' ', $c );
+		$t = html_entity_decode( wp_strip_all_tags( preg_replace( '#<br\s*/?>|</(?:p|li|h[1-6]|td|th|tr|div|dt|dd|figcaption|blockquote)>#i', "\n", $t ) ), ENT_QUOTES, 'UTF-8' );
+		foreach ( (array) preg_split( '/(?<=[.!?;])\s+|\n+/u', $t ) as $s ) {
+			$s = preg_replace( '/\bopen[\s-]+(?:plan[\s-]+)?floor[\s_-]*plans?\b/iu', ' ', (string) $s ); // a layout, not a document
+			if ( preg_match( '/(?<!\p{L})floor[\s_-]*plans?(?!\p{L})/iu', $s )
+				&& ! preg_match( '/\b(?:no|not|without|never|nor|neither|none|whether)\b|n[’\']t\b|\bunavailable\b|\byet to\b|\bto be (?:confirmed|advised|shared|provided|availed)\b/iu', $s )
+				&& preg_match( '/\b(?:request\w*|shar(?:e|es|ed|ing)|send\w*|sent|get|gets|getting|ask\w*|availab\w*|view\w*|see|download\w*|enquir\w*|inquir\w*|contact\w*|provid\w*|receiv\w*|obtain\w*|review\w*|confirm\w*|brochure|pdf|latest|official|approved|detailed|exact|cop(?:y|ies)|email\w*|whatsapp|message|show(?:s|n|ing)?|attached|types?\s+\p{L}{1,2})\b/iu', $s ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/* =====================================================================
@@ -5896,6 +6116,26 @@ JS;
 		return strtr( $js, $swap );
 	}
 
+	/**
+	 * v1.8.1: the development page script for a listing with no floor plans (blockke_dev_has_plans()): the price list,
+	 * not floor plans, in the pop-up and the thank-you line, applied at the development page's script tag only. The
+	 * payment-plan pop-up has its own subtitle, so it does not repeat its title. Every anchor must occur exactly once, or
+	 * the script is returned unchanged.
+	 */
+	function blockke_dev_noplans_js( $js ) {
+		$swap = array(
+			"'with the price list and floor plans for '+C.name"            => "'with the price list for '+C.name",
+			":'Floor plans and the payment plan, sent to your WhatsApp.')" => ":(source==='payment-plan'?'The developer\\'s payment plan and price list, sent to your WhatsApp.':'With the payment plan, sent to your WhatsApp.'))",
+			"(unit?'Floor plan and price':'Get the price list')"            => "(unit?'Price and availability':'Get the price list')",
+		);
+		foreach ( array_keys( $swap ) as $anchor ) {
+			if ( 1 !== substr_count( $js, $anchor ) ) {
+				return $js;
+			}
+		}
+		return strtr( $js, $swap );
+	}
+
 	function blockke_dev_data( $id ) {
 		static $cache = array();
 		if ( isset( $cache[ $id ] ) ) {
@@ -6340,6 +6580,7 @@ JS;
 			'ctx'        => $ctx,
 			'agent'      => $agent,
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
+			'plans'      => ! $land && blockke_dev_has_plans( $id ), // v1.8.1: the forms offer floor plans only when the listing has them
 			'crumbs'     => $crumbs,
 			'crumb_here' => $here,
 			'progress'   => blockke_dev_progress( $id ), // v1.7: the site reports, newest first (a unit: its development's)
@@ -6639,7 +6880,7 @@ JS;
 				$p_lab = 'Price';
 			}
 		}
-		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . ( $land ? '. Please share the price list, the site plan and the payment plan. ' : '. Please share the price list and floor plans. ' ) . $d['url'] );
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . ( $land ? '. Please share the price list, the site plan and the payment plan. ' : ( $d['plans'] ? '. Please share the price list and floor plans. ' : '. Please share the price list. ' ) ) . $d['url'] );
 		$o     = array();
 		$cx    = $d['ctx'];
 		// Landing pages stay a closed funnel: no search, no similar homes and none of their queries
@@ -6795,7 +7036,7 @@ JS;
 		}
 		$o[]    = '<section class="bkd-hero' . ( $vt ? ' bkd-hero-vt' : '' ) . '" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">' . ( $vt ? $fig . $head : $head . $fig )
 			. '<div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
-		$o[] = '</dl>' . blockke_dev_progress_hero( $d ) . '<div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : 'Get the price list and floor plans' ) . '</div>'
+		$o[] = '</dl>' . blockke_dev_progress_hero( $d ) . '<div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : ( $d['plans'] ? 'Get the price list and floor plans' : 'Get the price list' ) ) . '</div>'
 			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
 			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
 			. ( $d['brochure'] ? '<div class="bkd-quick-alt"><button class="bkd-link" type="button" data-bkd-enquire="brochure">Or download the brochure' . blockke_dev_icon( 'arrow' ) . '</button></div>' : '' )
@@ -6935,7 +7176,7 @@ JS;
 					. ( $has_size ? '<td class="bkd-s">' . $e( $u['size'] ? $u['size'] : '—' ) . '</td>' : '' )
 					. ( $has_pr ? '<td class="bkd-p">' . $e( $u['price'] ? blockke_dev_money( $u['price'] ) : 'On request' ) . ( $u['price'] && ! empty( $u['pnote'] ) ? '<small>' . $e( $u['pnote'] ) . '</small>' : '' ) . '</td>' : '' )
 					. '<td class="bkd-a">' . ( $u['url'] && ! $lp ? '<a class="bkd-link" href="' . esc_url( $u['url'] ) . '">Details</a>' : '' )
-					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">' . ( $land ? 'Price &amp; availability' : 'Floor plan &amp; price' ) . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
+					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">' . ( $land || ! $d['plans'] ? 'Price &amp; availability' : 'Floor plan &amp; price' ) . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
 			}
 			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">' . ( $has_pr ? 'Starting prices. ' : '' ) . 'Ask for the latest price list for current availability.</p>';
 			if ( ! $lp && $cx['area_name'] ) {
@@ -7030,10 +7271,13 @@ JS;
 		} elseif ( $d['offplan'] ) {
 			// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
 			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && empty( $plan['terms'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
+			// v1.8.1: a deposit or reservation fee but no instalments stated ("the balance under the developer's payment plan"):
+			// what the listing states and an ask for the plan, never instalments nobody stated
+			$ask     = ! $close && isset( $plan['inst_stated'] ) && ! $plan['inst_stated'] && ( $plan['deposit'] > 0 || $plan['reservation'] > 0 );
 			// "Pay in instalments" only when the listing mentions instalments and there is time for them
-			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then instalments' : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : ( $plan['instalments'] && ! $close ? 'Pay in <em>instalments</em>' : 'Ask for the <em>payment plan</em>' ) ) );
+			$heading = $plan['reservation'] > 0 ? 'Reserve with <em>' . $e( blockke_dev_money( $plan['reservation'] ) ) . '</em>' : ( $plan['deposit'] > 0 ? '<em>' . $e( blockke_dev_num( $plan['deposit'] ) ) . '% deposit,</em> then ' . ( $ask ? 'the developer’s payment plan' : 'instalments' ) : ( $plan['flexible'] ? 'A flexible <em>payment plan</em>' : ( $plan['instalments'] && ! $close ? 'Pay in <em>instalments</em>' : 'Ask for the <em>payment plan</em>' ) ) );
 			// v1.8: houses and villas are built, not a building going up
-			$text    = $plan['text'] ? $plan['text'] : 'Spread the cost while ' . ( $cx['house'] ? 'your home is built' : 'the building goes up' ) . ': a deposit, then instalments up to completion. Ask for the developer\'s official schedule.';
+			$text    = $plan['text'] ? $plan['text'] : ( $ask ? 'The balance after the ' . ( $plan['deposit'] > 0 ? 'deposit' : 'reservation fee' ) . ' follows the developer\'s payment plan. Ask for the developer\'s official schedule before you commit.' : 'Spread the cost while ' . ( $cx['house'] ? 'your home is built' : 'the building goes up' ) . ': a deposit, then instalments up to completion. Ask for the developer\'s official schedule.' );
 			$steps   = $plan['steps'];
 			$titles  = '';
 			foreach ( $steps as $s ) {
@@ -7054,6 +7298,21 @@ JS;
 			$cta = '<div class="bkd-calc-cta"><button class="bkd-cbtn" type="button" data-bkd-enquire="payment-plan">Get the official payment plan</button></div>';
 			if ( $close ) {
 				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Completion is close</p><p class="bkd-body">' . $e( 'Completion is scheduled for ' . blockke_dev_completion_mid( $d['completion'] ) . ', so an instalment plan would be short. Ask for the developer\'s current payment terms, and whether a mortgage can cover the balance.' ) . '</p>'
+					. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
+			} elseif ( $ask ) { // v1.8.1: what the listing states, the deposit in shillings on the price the calculator would start from, and the ask
+				$price = $d['calc_price'] > 0 ? $d['calc_price'] : $d['price_from'];
+				$what  = array();
+				$sum   = '';
+				if ( $plan['reservation'] > 0 ) {
+					$what[] = 'a reservation fee of ' . blockke_dev_money( $plan['reservation'] );
+				}
+				if ( $plan['deposit'] > 0 ) {
+					$pct    = blockke_dev_num( $plan['deposit'] );
+					$what[] = ( preg_match( '/^(?:8|1[18](?!\d))/', $pct ) ? 'an ' : 'a ' ) . $pct . '% deposit';
+					// our sum, not the listing's words; none when the deposit may be one route's of several (cash or mortgage)
+					$sum = $price > 0 && empty( $plan['routes'] ) ? ' On a ' . blockke_dev_money( $price ) . ' home, the deposit is ' . blockke_dev_money( round( $price * $plan['deposit'] / 100 ) ) . '.' : '';
+				}
+				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Ask for the payment plan</p><p class="bkd-body">' . $e( 'This listing states ' . implode( ' and ', $what ) . ', but no instalment plan.' . $sum . ' Ask us for the developer\'s official schedule before you commit: how the balance is paid and what falls due on completion.' ) . '</p>'
 					. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
 			} else {
 				$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">Estimate your instalments</p>' . blockke_dev_calc_instalment( $d['calc_price'] > 0 ? $d['calc_price'] : $d['price_from'], $plan, $cta ) . '</div></div></section>';
@@ -7171,7 +7430,7 @@ JS;
 
 		// Enquire
 		$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-enquire"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Enquire</p><h2 class="bkd-h2">Speak to an advisor about <em>' . $e( $d['short'] ) . '</em></h2>'
-			. '<p class="bkd-body bkd-mt">' . ( $land ? 'Get the price list, the site plan and the payment plan, or book a site visit.' : 'Get the price list, floor plans and payment plan, or book a viewing.' ) . ' We usually reply within a few hours on working days.</p>';
+			. '<p class="bkd-body bkd-mt">' . ( $land ? 'Get the price list, the site plan and the payment plan, or book a site visit.' : ( $d['plans'] ? 'Get the price list, floor plans and payment plan, or book a viewing.' : 'Get the price list and payment plan, or book a viewing.' ) ) . ' We usually reply within a few hours on working days.</p>';
 		if ( $ag['name'] ) {
 			$o[] = '<div class="bkd-agent">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" loading="lazy" width="64" height="64">' : '<div class="bkd-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</div>' )
 				. '<div><b>' . $e( $ag['name'] ) . '</b><span>' . $e( trim( $ag['role'] . ', ' . $cfg['brand_full'], ', ' ) ) . '</span>'
@@ -7188,7 +7447,7 @@ JS;
 			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar">Get the price list</button></nav>';
 		$o[] = '<div class="bkd-md" id="bkd-md" hidden role="dialog" aria-modal="true" aria-labelledby="bkd-md-t"><div class="bkd-md-box">'
 			. '<button class="bkd-md-x" type="button" data-bkd-close aria-label="Close">' . blockke_dev_icon( 'close' ) . '</button>'
-			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">Get the price list</h2><p class="bkd-md-sub" id="bkd-md-sub">' . ( $land ? 'The site plan and the payment plan, sent to your WhatsApp.' : 'Floor plans and the payment plan, sent to your WhatsApp.' ) . '</p>'
+			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">Get the price list</h2><p class="bkd-md-sub" id="bkd-md-sub">' . ( $land ? 'The site plan and the payment plan, sent to your WhatsApp.' : ( $d['plans'] ? 'Floor plans and the payment plan, sent to your WhatsApp.' : 'With the payment plan, sent to your WhatsApp.' ) ) . '</p>'
 			. '<div id="bkd-md-form">' . blockke_dev_quick_form( 'modal', 'Send it to me', $d ) . '</div></div></div>';
 		if ( $search && ! $land ) { // land pages link to land in the area instead of the homes search sheet
 			$o[] = blockke_dev_search_sheet( $d );
@@ -8332,6 +8591,8 @@ JS;
 					$script = blockke_dev_js();
 					if ( $land ) {
 						$script = blockke_dev_land_js( $script );
+					} elseif ( empty( $data['plans'] ) ) {
+						$script = blockke_dev_noplans_js( $script ); // v1.8.1: no floor plans to offer
 					}
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
 					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $script . "\n" . blockke_dev_calc_js() . "</script>\n";
@@ -8646,6 +8907,8 @@ JS;
 			$forms['floorplan']   = 'Plot price and availability request';
 			$forms['comparables'] = 'Plot price comparables request';
 			$forms['compare']     = 'Compare request (similar plots)';
+		} elseif ( in_array( 'floorplan', array( $intent, $source ), true ) && $lid && ! $at && ! $ix && '' === $tp && ! blockke_dev_has_plans( $lid ) ) {
+			$forms['floorplan'] = 'Price and availability request'; // v1.8.1: the row offered no floor plan (the form keeps intent "floorplan")
 		}
 		if ( $at ) {
 			$forms['hero'] = 'Hero form (send me matches)';
