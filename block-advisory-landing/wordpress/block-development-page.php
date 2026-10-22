@@ -4022,6 +4022,8 @@ JS;
 	 * unit without any uses its development's own; a development counts its published units' WPResidence floor plans,
 	 * brochure field and words, since WPResidence keeps floor plans on the unit listings its rows show (not their files:
 	 * no query per unit). $up false: the listing's own only; $files false: without its attached or gallery files.
+	 * v1.8.2: while config 'floor_plans_default' is on (the default), true for every id without reading the listing;
+	 * callers must still leave land out (blockke_dev_is_land()). The check below runs only when it is off.
 	 */
 	function blockke_dev_has_plans( $id, $up = true, $files = true ) {
 		if ( ! empty( blockke_dev_config()['floor_plans_default'] ) ) {
