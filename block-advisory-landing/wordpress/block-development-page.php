@@ -187,6 +187,9 @@
  * stops at a sentence end ("Swimming pool. Shared with ..." -> "Swimming pool"; not after "Mon.", "Lvl." or "Blk."), and
  * one that ends in an article, a conjunction or an -ly adverb ("Swimming pool and an", "... and a newly"; not "Block A")
  * falls back to the earlier drawing. Classic pages, land pages, area, index and search pages are unchanged.
+ * v1.8.2 (2026-10-22): Block has the floor plans (owner, 22 Oct 2026), so every development page that is not land offers
+ * them again, as in v1.8: "Get the price list and floor plans", rows read "Floor plan & price", and that lead's email
+ * says "Floor plan & price request". Config 'floor_plans_default' false brings back v1.8.1's per-listing check.
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -216,6 +219,7 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'classic_amenities'  => true,  // classic property pages: amenity tiles and a checklist in Features & Amenities
 			'classic_nearby'     => true,  // classic property pages: distances to nearby places under Address
 			'landing_pages'      => true,  // ad landing pages: {listing URL}?lp=1, or a page with a bke_lp_listing field
+			'floor_plans_default' => true, // v1.8.2: every page that is not land offers floor plans; false: only a listing that has them (v1.8.1)
 			'logo'               => '',    // landing page header logo URL; '' uses the theme logo
 			'address'            => 'Upper Hill Gardens, Suite D15, Upper Hill, Nairobi',
 			'brand'              => 'Block',
@@ -4020,6 +4024,9 @@ JS;
 	 * no query per unit). $up false: the listing's own only; $files false: without its attached or gallery files.
 	 */
 	function blockke_dev_has_plans( $id, $up = true, $files = true ) {
+		if ( ! empty( blockke_dev_config()['floor_plans_default'] ) ) {
+			return true; // v1.8.2: Block has the floor plans
+		}
 		static $cache = array();
 		$id  = (int) $id;
 		$key = $id . ( $up ? 'u' : '' ) . ( $files ? 'f' : '' );
@@ -6580,7 +6587,7 @@ JS;
 			'ctx'        => $ctx,
 			'agent'      => $agent,
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
-			'plans'      => ! $land && blockke_dev_has_plans( $id ), // v1.8.1: the forms offer floor plans only when the listing has them
+			'plans'      => ! $land && blockke_dev_has_plans( $id ), // v1.8.1: the forms offer floor plans only when the listing has them (v1.8.2: always, config 'floor_plans_default')
 			'crumbs'     => $crumbs,
 			'crumb_here' => $here,
 			'progress'   => blockke_dev_progress( $id ), // v1.7: the site reports, newest first (a unit: its development's)
