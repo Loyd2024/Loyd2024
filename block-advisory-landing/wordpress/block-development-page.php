@@ -253,7 +253,8 @@
  * listing.
  * - 'redirects' array( 'listings' => 301 or 302 ) with 'redirect_ids' array( taken-down ID => kept ID ) (?bke_redir=1, an
  * editor's dry-run note in the admin bar): the URL of a listing that is not published goes to the published listing kept
- * for it, with its query string and X-Redirect-By: Block; never a chain; GET and HEAD only.
+ * for it, with its query string and X-Redirect-By: Block; never a chain; GET and HEAD only. Draft the copy taken down, do
+ * not trash it: a trashed listing's slug is renamed, so its old URL is no longer found.
  * The enquiries inbox v1.1 (a separate snippet) shows each lead's Type (Sale, Rental, Area, Index, Topic, Consultation).
  */
 
