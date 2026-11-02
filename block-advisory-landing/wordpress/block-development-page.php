@@ -190,6 +190,71 @@
  * v1.8.2 (2026-10-22): Block has the floor plans (owner, 22 Oct 2026), so every development page that is not land offers
  * them again, as in v1.8: "Get the price list and floor plans", rows read "Floor plan & price", and that lead's email
  * says "Floor plan & price request". Config 'floor_plans_default' false brings back v1.8.1's per-listing check.
+ * Live edit (2026-10-22 22:54, labelled "v1.9"), folded in by the v1.8.3 rebase: blockke_dev_beds() reads "1.5 Bedroom" as a 1-bed, not a 5-bed.
+ * v1.8.3 (rentals, built 2026-10-18 on v1.8.1): a home for rent on the development layout reads as a rental (blockke_dev_action() 'rent', not land; land
+ * for lease keeps its own words). The hero reads "For rent", "Rent / month" and the availability the listing states
+ * ("Availability | Available", else "Viewing | By appointment", else "On request"), never "Price", "Status Ready" or "Ready to
+ * move in". A short "Renting" section takes the place of the payment plan or mortgage: the rent a month, the deposit, lease,
+ * service charge, furnishing, availability and viewing the listing states (blockke_dev_rent_info(); a value still to be
+ * confirmed is not stated), what is confirmed at enquiry, and "Arrange a viewing"; no calculator. The forms, pop-up, section
+ * bar, mobile bar, enquiry section and WhatsApp ask about availability and a viewing ("Arrange a viewing", "Check
+ * availability"), never the price list, floor plans or payment plan; the full form and the follow-up questions ask "When would
+ * you like to move in?" (This month, 1–3 months, Later), not "Buying to"; the page script's words are swapped at the script tag
+ * (blockke_dev_rent_js()). Lead emails and Zoho say "RENTAL ENQUIRY", "Rental: {name} - KES 200,000 a month" and "Move-in",
+ * subject "[Block] Rental enquiry: ...", with the page's name (bke_dev_name, else blockke_dev_listing_name()) and the forms
+ * "Hero form (viewing)" and "Viewing request". Why Block, the FAQ heading, the checklist note and the disclaimer are a tenant's
+ * (config rent_why, rent_disclaimer); the investor view shows only when the listing has one, and asks for comparable rents;
+ * similar rentals carry no "Ready now" badge; no completion fact. Pages for sale, land, classic, area, index and search pages,
+ * and every sale lead, are unchanged.
+ * v1.8.3 review fixes (2026-10-18, runda/code/review.md): a rental's lead names the listing as its page does (the page's short
+ * name, not a cut-down title); the rent reads per what its price label says ("a month" for a monthly or empty label, else the
+ * label: "per night"), per sq ft rents keep "per sq ft" in the lead, and a rent over KES 2M with no monthly label is "on
+ * request"; a rent the listing states in US dollars (its glance or rental terms "Rent | USD 5,500 a month") is shown as the
+ * rent, with the price field as its approximate KES figure; a title for both rent and sale with no Buy/Rent term keeps the
+ * sale page (blockke_dev_rent_mode()); the Renting rows read "Availability" only from an availability row, more number words,
+ * no "99-year leasehold" as a lease, and furnishing from any table. Sale pages and sale leads are unchanged.
+ * v1.8.3 switch (R1): all of the rental wording above is behind config 'rent_pages' (default false; an editor's preview:
+ * ?bke_rent=1), through blockke_dev_rent_on( $id ) = the switch and blockke_dev_rent_mode( $id ): the page, its script, its
+ * similar rentals' badge and cache version, its leads and the follow-up questions. With the switch off every page and lead is
+ * as in v1.8.2. A lead from an editor's preview (switch off) carries the preview: the page URL it sends has bke_rent=1, and the
+ * forms print a hidden rp=1 for form posts; either is honoured only for a listing blockke_dev_rent_mode() calls a rental.
+ * v1.9.1 (2026-11-02): the rental pages. This release is the v1.8.3 rental work above ("v1.8.3" in this file's comments
+ * marks it), on top of the live edit labelled "v1.9". Every change sits behind its own switch in the blockke_dev_page
+ * option, and every switch is off by default, so with this snippet active every page and lead is as in v1.8.2 plus that
+ * edit, with one exception: 'lp_rent_guard' (default true) refuses an ad landing page (?lp=1, a bke_lp_listing page, the
+ * editor box's and admin bar's links) to a listing that is a rental: the rows file it as one, its after-price label names
+ * a period, it is tagged For Rent with a price under KES 1M, or it has no Buy/Rent term and a "for rent", "to rent",
+ * "to let" or "for lease" title (blockke_dev_lp_ok(); on 23 Oct data: 37243, 39502 and 44049). The switches, in the order
+ * they are meant to be turned on, each with an editor's preview while it is off:
+ * - 'rent_pages' (?bke_rent=1): a home for rent's development page and its leads read as a rental, as described above; with
+ * the switch on a title with no Buy/Rent term also counts when it says "to rent" or "for lease" (never "Rent-to-Own").
+ * Rents read "a month", "a week", "a day", "a night" or "a year" from one helper (blockke_dev_rent_phrase(): exact
+ * figures in the hero and WhatsApp, "KES 130 per sq ft a month", "Rent on request"); a rent stated in US dollars reads
+ * "USD 5,500 a month" and "The rent is set in US dollars.", KES first only when bke_rent_usd and bke_rent_usd_date are
+ * both set (these replace the earlier "per night" and "price field as its approximate KES figure" above). A rental has no
+ * investor box. Every WhatsApp text on a rent page asks to "arrange a viewing" and carries "Ref W-{id}", and its link
+ * data-blkct="1", so snippet 40769 leaves it alone. A home for rent's classic page gets a rent box after the description
+ * (#bkd-rent; config classic_rent_anchor 'description' or 'features'), a phone bar below 992px in place of the theme's
+ * agent bar, no mortgage calculator and no in-page "Schedule a tour" (with their top-nav links), and "Around this
+ * property" (#bke-nearby) in place of "What's nearby". Its form always posts natively and fires the lead conversions on
+ * the return (?bkd_sent=1#bkd-rent). Rental lead rows carry 'kind' => 'rent', Zoho gets Company "Individual tenant" (and
+ * config zoho_enquiry_field, when set, "Rental"), and an area lead "Looking to: Rent" reads "[Block] Rental enquiry". The
+ * cache versions gain "|rp" at the end ("|rc" for rent_cards), and an editor's preview stores no cache.
+ * - 'rent_cards' (?bke_rcards=1): rentals on cards, area, segment and search pages: rents by the day, night or week kept
+ * out of price ranges, budgets and price sorts, a range rental in a budget only for its smallest size, rent picks need
+ * photos, and a rent card states the rent as its page does ("KES 200K a month", "KES 6,500 a day", "Rent on request").
+ * - 'classic_inplace' 'rent' (?bke_cls=1): on a home for rent's classic page the rent box, amenity tiles and Around this
+ * property are printed in place by the server, the footer copy and move script as each block's fallback.
+ * - 'forms_post' 'rent' (?bke_forms=1): a rental development page's forms also post without script (303 back with
+ * ?bkd_sent=1 or ?bkd_err=code; only a form-encoded post carrying bkd_np=1 gets the 303).
+ * - 'gallery_ssr' 'rent' (?bke_gal=1): a rental development page's photos 6 and up also printed as hidden lazy links.
+ * - 'listing_jsonld' 'rent' (?bke_ld=1): a rent page's head carries script#bke-schema-ld (a RealEstateListing with a
+ * LeaseOut offer as the page states the rent, and the trail), in place of Rank Math's BreadcrumbList and the browser-built
+ * listing.
+ * - 'redirects' array( 'listings' => 301 or 302 ) with 'redirect_ids' array( taken-down ID => kept ID ) (?bke_redir=1, an
+ * editor's dry-run note in the admin bar): the URL of a listing that is not published goes to the published listing kept
+ * for it, with its query string and X-Redirect-By: Block; never a chain; GET and HEAD only.
+ * The enquiries inbox v1.1 (a separate snippet) shows each lead's Type (Sale, Rental, Area, Index, Topic, Consultation).
  */
 
 if ( ! function_exists( 'blockke_dev_config' ) ) {
@@ -206,12 +271,25 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 		);
 	}
 
+	/** v1.8.3: a home for rent's own wording (config rent_why and rent_disclaimer), also the fallback when a saved option leaves them empty. */
+	function blockke_dev_rent_defaults() {
+		return array(
+			'rent_why'        => array(
+				array( 'Advice, not pressure', 'We compare rentals, streets and rents across the area side by side, so you choose with clarity.' ),
+				array( 'Checks before you commit', 'We help you check the tenancy agreement, the deposit and what the rent covers before you pay or sign.' ),
+				array( 'One advisor throughout', 'From the first viewing to signing the lease, the same advisor stays with you.' ),
+			),
+			'rent_disclaimer' => 'Listings are published in good faith from information supplied by owners and landlords, and may change without notice. Please confirm the rent, availability, the deposit and the lease terms before you commit. Block Real Estate does not give financial or legal advice; we recommend reading the full tenancy agreement before you sign or pay a deposit.',
+		);
+	}
+
 	function blockke_dev_config() {
 		static $cfg = null;
 		if ( null !== $cfg ) {
 			return $cfg;
 		}
 		$land     = blockke_dev_land_defaults();
+		$rent     = blockke_dev_rent_defaults();
 		$defaults = array(
 			'enabled'            => true,  // development layout
 			'auto'               => false, // true: every listing with units gets the layout unless switched off
@@ -323,6 +401,19 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 			'land_layout'        => true,  // land mode: a plot estate's own development page reads as land (blockke_dev_is_land()); false: every page as before
 			'land_why'           => $land['land_why'],
 			'land_disclaimer'    => $land['land_disclaimer'],
+			'rent_why'           => $rent['rent_why'], // v1.8.3: Why Block on a home for rent's development page
+			'rent_disclaimer'    => $rent['rent_disclaimer'],
+			'rent_pages'         => false, // v1.8.3: a home for rent's development page and its leads read as a rental (blockke_dev_rent_on(); preview: ?bke_rent=1)
+			'rent_cards'         => false, // v1.8.3: rentals on cards, area, segment and search pages: a rent by the day, night or week kept out of price ranges, budgets and price sorts (still counted and shown), a rental listed for several sizes in a budget only for its smallest, a rent section's area-page picks with photos; rows carry usd, usdd, fu and rs; a rent card states the rent as the rental's page does ("KES 200K a month", "KES 6,500 a day", "KES 130 per sq ft a month", KES first with the USD rent, "Rent on request") and "Furnished", "See all N rentals", a rent search's WhatsApp asks for viewings, a segment let only per sq ft states that rent (preview: ?bke_rcards=1)
+			'zoho_enquiry_field' => '',    // v1.8.3: the web-form name of the owner's optional Zoho Leads field "Enquiry type"; set: rental leads send it as "Rental" ('': not sent)
+			'lp_rent_guard'      => true,  // v1.8.3: no ad landing page for a rental (blockke_dev_lp_ok()); false: the v1.8.2 rule (emergency rollback only)
+			'forms_post'         => false, // v1.8.3: lead forms that also post without script: false, a list of page families ('rent': a rental's development page in rent mode), or true; preview ?bke_forms=1
+			'classic_inplace'    => false, // v1.8.3: our blocks on a classic property page printed in place by the server, the footer move script as each block's fallback: false, a list of page families ('rent': a home for rent's classic page), or true; preview ?bke_cls=1
+			'classic_rent_anchor' => 'description', // v1.8.3: where the classic rental box goes: 'description' (after the description section) or 'features' (before Features & Amenities); the other is the fallback
+			'gallery_ssr'        => false, // v1.8.3: the gallery's photos 6+ also printed as lazy image links (visually hidden; the lightbox opens them as before): false, a list of page families ('rent': a rental's development page in rent mode), or true; preview ?bke_gal=1
+			'listing_jsonld'     => false, // v1.8.3: our structured data in a listing page's head (script#bke-schema-ld: a RealEstateListing with its LeaseOut offer, and the trail the page shows), in place of Rank Math's BreadcrumbList and the browser-built listing: false, a list of page families ('rent': a home for rent's page in rent mode, layout or classic), or true; preview ?bke_ld=1
+			'redirects'          => array(), // v1.8.3: redirects by page family, family => 301 or 302. R1 knows 'listings': the URL of a listing that is not published (a duplicate batch D drafts) goes to the listing kept for it in redirect_ids, with its query string, only while that one is published (never a chain); dry run: an editor's ?bke_redir=1 shows "would 301 to …" in the admin bar instead
+			'redirect_ids'       => array(), // v1.8.3: the listings family's map: the ID of a listing taken down => the ID of the listing kept for it, e.g. array( 44048 => 42590 )
 			'land_neighbours'    => array( // land pages' "Also consider": area slug => array( nearest areas, the next ring ); else 'neighbours'
 				'juja'  => array( array( 'ruiru', 'thika', 'thika-road', 'tatu-city' ), array( 'kiambu-road', 'kamiti-road', 'ruaka' ) ),
 				'ruiru' => array( array( 'juja', 'tatu-city', 'thika-road', 'kamiti-road' ), array( 'thika', 'kiambu-road' ) ),
@@ -635,9 +726,22 @@ if ( ! function_exists( 'blockke_dev_config' ) ) {
 
 	/**
 	 * v1.8: a listing that may have an ad landing page (?lp=1): for sale, or with no Buy/Rent term at all and a title that
-	 * does not say rent (Verde Vista, a Samsara duplicate), never sold.
+	 * does not say rent (Verde Vista, a Samsara duplicate), never sold. v1.8.3 (R1): while config 'lp_rent_guard' is on (the
+	 * default; not tied to 'rent_pages'), never a rental either: a listing the rows file as a rental, a price label that names
+	 * a period, a For Rent price under KES 1M that is not per sq ft, or no Buy/Rent term and a title that says "for rent",
+	 * "to rent", "to let" or "for lease". The bke_lp_listing pages, ?lp=1, the editor box and the admin bar follow it.
 	 */
 	function blockke_dev_lp_ok( $id ) {
+		if ( ! empty( blockke_dev_config()['lp_rent_guard'] ) ) {
+			$terms = get_the_terms( $id, 'property_action_category' );
+			$price = (float) blockke_dev_pm( $id, 'property_price' );
+			if ( 'rent' === blockke_area_action( $id, blockke_area_kind( $id )[0] )
+				|| preg_match( '/\b(month|week|day|night|year|annum)\b|p\.?\s?m\b/i', (string) blockke_dev_pm( $id, 'property_label' ) )
+				|| ( has_term( 'for-rent', 'property_action_category', $id ) && $price > 0 && $price < 1000000 && 'unit' !== blockke_dev_price_flag( $id ) )
+				|| ( ! ( is_array( $terms ) && $terms ) && preg_match( '/\bfor rent\b|\bto rent\b|\bto let\b|\bfor lease\b/i', (string) get_the_title( $id ) ) ) ) {
+				return false;
+			}
+		}
 		if ( blockke_dev_is_for_sale( $id ) ) {
 			return true;
 		}
@@ -1670,16 +1774,24 @@ CSS;
 			if ( ! $x['feat'] && ! $x['near'] && ! $x['own'] ) {
 				return;
 			}
+			$rt = blockke_dev_classic_rent_target(); // v1.8.3 (R1): a classic rental page prints Around this property itself, in place of What's nearby
+			if ( $rt && ! $x['feat'] ) {
+				return;
+			}
 			$html  = '';
 			$icons = array( 'check' );
+			$feat  = ''; // v1.8.3 (R1): each block also kept apart, for a classic rental page's buffer (classic_inplace, blockke_dev_classic_place())
+			$near  = '';
 			if ( $x['feat'] ) {
-				$html .= blockke_dev_classic_features( $x['feat'] );
+				$feat  = blockke_dev_classic_features( $x['feat'] );
+				$html .= $feat;
 				foreach ( $x['feat']['tiles'] as $t ) {
 					$icons[] = $t['icon'];
 				}
 			}
-			if ( $x['near'] || $x['own'] ) {
-				$html .= blockke_dev_classic_nearby( $x['near'], $x['own'] );
+			if ( ! $rt && ( $x['near'] || $x['own'] ) ) {
+				$near  = blockke_dev_classic_nearby( $x['near'], $x['own'] );
+				$html .= $near;
 				foreach ( $x['near'] as $g ) {
 					$icons[] = $g['icon'];
 				}
@@ -1698,10 +1810,655 @@ CSS;
   w.parentNode.removeChild(w);
 })();
 JS;
-			echo blockke_dev_sprite( array_unique( $icons ) ) . '<div id="bkd-cls" hidden>' . $html . "</div>\n" // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
-				. '<script id="bkd-cls-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $move . "</script>\n";
+			$wrap = '<div id="bkd-cls" hidden>' . $html . "</div>\n";
+			$js   = '<script id="bkd-cls-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $move . "</script>\n";
+			if ( $rt ) { // v1.8.3 (R1): what a classic rental page's buffer may print in place
+				$GLOBALS['blockke_dev_cls_out'] = array( 'feat' => $feat, 'near' => $near, 'wrap' => $wrap, 'js' => $js );
+			}
+			echo blockke_dev_sprite( array_unique( $icons ) ) . $wrap . $js; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
 		},
 		25
+	);
+
+	/* =====================================================================
+	   1c) v1.8.3 (R1): classic rental pages: the rent box (#bkd-rent), the phone bar, no mortgage calculator or in-page tour
+	       form, and ('classic_inplace') our blocks printed in place by the server
+	   ===================================================================== */
+
+	/**
+	 * v1.8.3 (R1): 'classic_inplace', our blocks on a classic property page printed in place by the server (a page buffer
+	 * started on template_redirect, blockke_dev_classic_place()) rather than as a hidden copy after the footer that a script
+	 * moves; that route stays each block's fallback. false; a list of page families; true (every family); an editor's preview:
+	 * ?bke_cls=1 / 0. R1 knows one family, 'rent': a home for rent's classic page (blockke_dev_classic_rent_target()).
+	 */
+	function blockke_dev_classic_inplace( $fam ) {
+		if ( isset( $_GET['bke_cls'] ) && is_scalar( $_GET['bke_cls'] ) && current_user_can( 'edit_posts' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return '1' === (string) $_GET['bke_cls']; // phpcs:ignore WordPress.Security.NonceVerification
+		}
+		$cfg = blockke_dev_config();
+		$v   = isset( $cfg['classic_inplace'] ) ? $cfg['classic_inplace'] : false;
+		if ( is_string( $v ) && ! in_array( $v, array( '', '0', '1' ), true ) ) {
+			$v = preg_split( '/[\s,]+/', $v, -1, PREG_SPLIT_NO_EMPTY ); // the list written as text: "rent"
+		}
+		return is_array( $v ) ? in_array( $fam, $v, true ) : ! empty( $v );
+	}
+
+	/**
+	 * v1.8.3 (R1): the classic rental page this request draws, else 0: a single listing read as a rental
+	 * (blockke_dev_rent_on(): 'rent_pages', or an editor's ?bke_rent=1 preview), not land, that the development layout does
+	 * not draw ($GLOBALS['blockke_dev_active'], set on template_include; on template_redirect, which runs before it, ask
+	 * blockke_dev_classic_rent_early()).
+	 */
+	function blockke_dev_classic_rent_target() {
+		static $id = null;
+		if ( null === $id ) {
+			$id  = 0;
+			$pid = ! is_admin() && ! is_feed() && ! is_embed() && is_singular( 'estate_property' ) ? (int) get_queried_object_id() : 0;
+			if ( $pid && blockke_dev_rent_on( $pid ) && ! blockke_dev_is_land( $pid ) ) {
+				$id = $pid;
+			}
+		}
+		return $id && empty( $GLOBALS['blockke_dev_active'] ) ? $id : 0;
+	}
+
+	/** v1.8.3 (R1): blockke_dev_classic_rent_target() before template_include: not a page the layout or an ad landing page will draw (plan-check M3). */
+	function blockke_dev_classic_rent_early() {
+		$id = blockke_dev_classic_rent_target();
+		return $id && ! blockke_dev_lp_target() && ! blockke_dev_should_render() ? $id : 0;
+	}
+
+	/** v1.8.3 (R1): an icon drawn inline, from the sprite's own path (the classic page carries only the sprite its other blocks need). */
+	function blockke_dev_icon_inline( $n ) {
+		static $p = array();
+		if ( ! isset( $p[ $n ] ) ) {
+			$p[ $n ] = preg_match( '#<symbol id="bkd-i-' . preg_quote( $n, '#' ) . '" viewBox="0 0 24 24">(.*?)</symbol>#s', blockke_dev_sprite( array( $n ) ), $m ) ? $m[1] : '';
+		}
+		return '<svg class="bkd-i' . ( 'wa' === $n ? ' bkd-i-f' : '' ) . '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . $p[ $n ] . '</svg>';
+	}
+
+	/**
+	 * v1.8.3 (R1): the rent as the classic box and the phone bar state it: blockke_dev_rent_amount() (the lead line's phrase),
+	 * plus 'pre', "From " when the listing's own label says "from" or its homes are let at different rents.
+	 */
+	function blockke_dev_classic_rent_say( $d ) {
+		$ra = blockke_dev_rent_amount( $d );
+		$up = array();
+		foreach ( (array) $d['units'] as $u ) {
+			if ( ! empty( $u['price'] ) ) {
+				$up[ (string) (float) $u['price'] ] = true;
+			}
+		}
+		$ra['pre'] = '' !== $ra['amt'] && ( ! empty( $d['from_label'] ) || count( $up ) > 1 ) ? 'From ' : '';
+		return $ra;
+	}
+
+	/**
+	 * v1.8.3 (R1): the classic rental page's WhatsApp link (config number, decision 8): "…renting {name} ({rent}). Is it still
+	 * available, and when could I arrange a viewing? Ref W-{id}. {url}", no brackets without a rent; $sent: after the box's
+	 * enquiry. "viewing" and its own Ref, and the links carry data-blkct, so snippet 40769 leaves them alone (plan-check H2).
+	 */
+	function blockke_dev_classic_rent_wa( $d, $ra, $sent = false ) {
+		$cfg  = blockke_dev_config();
+		$name = blockke_dev_rent_name( $d['short'] );
+		$t    = $sent ? 'Hi ' . $cfg['brand'] . ", I've just sent an enquiry about renting " . $name . ' on block.ke. When could I arrange a viewing? Ref W-' . (int) $d['id'] . '. ' . $d['url']
+			: 'Hi ' . $cfg['brand'] . ", I'm interested in renting " . $name . ( '' !== $ra['amt'] ? ' (' . strtolower( $ra['pre'] ) . $ra['amt'] . ' ' . $ra['per'] . ')' : '' ) . '. Is it still available, and when could I arrange a viewing? Ref W-' . (int) $d['id'] . '. ' . $d['url'];
+		return 'https://wa.me/' . blockke_dev_digits( $cfg['whatsapp'] ) . '?text=' . rawurlencode( $t );
+	}
+
+	/**
+	 * v1.8.3 (R1, plan-check H1): the box's attribution as hidden attr[] fields, as the page script's attr() sends it: this
+	 * request's campaign tags and the page as the landing page. bkd-rent-js puts the session's own (the site-wide keeper's
+	 * first touch, and the referrer) in just before the form posts; the referrer is never printed, because a cached page would
+	 * hand one visitor's to the next.
+	 */
+	function blockke_dev_classic_rent_attr() {
+		$o = '';
+		foreach ( array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'gbraid', 'wbraid' ) as $k ) {
+			$v = isset( $_GET[ $k ] ) && is_scalar( $_GET[ $k ] ) ? mb_substr( sanitize_text_field( wp_unslash( (string) $_GET[ $k ] ) ), 0, 120 ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+			if ( '' !== $v ) {
+				$o .= '<input type="hidden" name="attr[' . $k . ']" value="' . esc_attr( $v ) . '">';
+			}
+		}
+		return $o . '<input type="hidden" name="attr[land]" value="' . esc_attr( mb_substr( blockke_dev_np_page(), 0, 250 ) ) . '"><input type="hidden" name="attr[ref]" value="">';
+	}
+
+	/**
+	 * v1.8.3 (R1, plan 7.3): the classic rental page's rent box, #bkd-rent: the rent with its period (blockke_dev_rent_phrase():
+	 * "KES 100,000 a month", "KES 710,000 a month (USD 5,500)", "KES 130 per sq ft a month", "Rent on request"), the terms the
+	 * listing states (blockke_dev_rent_info(); a value stated under two labels once) and what it leaves open, then "Arrange a viewing": name, phone and when to move
+	 * in. The form posts without script to the development-lead route whatever 'forms_post' says (plan-check H1), which answers
+	 * with a 303 to ?bkd_sent=1#bkd-rent (or ?bkd_err=<code>#bkd-rent: the form again, with the handler's note); the thank-you
+	 * then stands in its place. WhatsApp and a call link (config phone) follow. '' when the listing has no rental data.
+	 */
+	function blockke_dev_classic_rent_box( $id ) {
+		$d = blockke_dev_data( $id );
+		if ( ! $d || empty( $d['rent'] ) ) {
+			return '';
+		}
+		$cfg  = blockke_dev_config();
+		$e    = 'esc_html';
+		$ra   = blockke_dev_classic_rent_say( $d );
+		$rs   = isset( $d['rent']['stated'] ) ? (array) $d['rent']['stated'] : array();
+		$name = blockke_dev_rent_name( $d['short'] );
+		$st   = blockke_dev_np_state();
+		$wa   = blockke_dev_classic_rent_wa( $d, $ra );
+		$seen = array();
+		foreach ( $rs as $k => $v ) { // one stated value under two labels ("Lease terms and deposit | Two months…" read as both): said once, the later label left open
+			if ( 'usd' !== $k && isset( $seen[ mb_strtolower( (string) $v[1] ) ] ) ) {
+				unset( $rs[ $k ] );
+			} elseif ( 'usd' !== $k ) {
+				$seen[ mb_strtolower( (string) $v[1] ) ] = true;
+			}
+		}
+		$left = array();
+		foreach ( array( 'deposit' => 'the deposit', 'lease' => 'the lease length', 'service' => 'any service charge' ) as $k => $w ) {
+			if ( ! isset( $rs[ $k ] ) ) {
+				$left[] = $w;
+			}
+		}
+		$left[] = 'what the rent covers';
+		$last   = array_pop( $left );
+		$open   = ucfirst( ( $left ? implode( ', ', $left ) . ' and ' : '' ) . $last ) . ( $left ? ' are' : ' is' ) . ' confirmed when you enquire.';
+		$rows   = '';
+		foreach ( array( 'deposit', 'lease', 'service', 'furnish', 'available', 'viewing' ) as $k ) {
+			if ( isset( $rs[ $k ] ) ) {
+				$rows .= '<li><b>' . $e( $rs[ $k ][0] ) . '</b><span>' . $e( $rs[ $k ][1] ) . '</span></li>';
+			}
+		}
+		$h = '<div class="bkd-rent" id="bkd-rent" data-listing="' . (int) $id . '" data-slug="' . esc_attr( $d['slug'] ) . '" data-name="' . esc_attr( $name ) . '"' . ( 'sent' === $st ? ' data-sent="1"' : '' ) . '>'
+			. '<p class="bkd-rent-k">Renting</p><h3 class="bkd-rent-h">'
+			. ( '' !== $ra['amt'] ? $e( $ra['pre'] ) . '<em>' . $e( $ra['amt'] ) . '</em> ' . $e( $ra['per'] ) . ( '' !== $ra['kes'] ? ' ' . $e( '(' . $ra['usd'] . ')' ) : '' ) : 'Rent <em>on request</em>' ) . '</h3>'
+			. '<p class="bkd-rent-note">' . $e( ( '' !== $ra['note'] ? $ra['note'] . ' ' : '' ) . $open ) . '</p>'
+			. ( '' !== $rows ? '<ul class="bkd-rent-terms">' . $rows . '</ul>' : '' )
+			. '<div class="bkd-rent-view">';
+		if ( 'sent' === $st ) {
+			$h .= '<div class="bkd-rent-ok" role="status"><p class="bkd-rent-vt">' . blockke_dev_icon_inline( 'check' ) . 'Thank you.</p><p class="bkd-rent-vs">' . $e( 'An advisor will be in touch shortly to arrange a viewing of ' . $name . '.' ) . '</p></div>';
+			$wa = blockke_dev_classic_rent_wa( $d, $ra, true );
+		} else {
+			$h .= '<p class="bkd-rent-vt">Arrange a <em>viewing</em></p><p class="bkd-rent-vs">' . $e( "Tell us when you'd like to move in. We'll confirm that " . $name . ' is still available and arrange a time for you to see it.' ) . '</p>'
+				. '<form class="bkd-rent-form" data-bkd-rent-form' . blockke_dev_np_form_attr() . '><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+				. blockke_dev_rent_rp_field( $d ) . blockke_dev_np_fields( $id, 'classic', 'bkd-rent' ) . blockke_dev_classic_rent_attr()
+				. '<div class="bkd-rent-two"><label class="bkd-f"><span>Full name</span><input name="name" type="text" autocomplete="name" required minlength="2" maxlength="80"></label>'
+				. '<label class="bkd-f"><span>Phone / WhatsApp</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX" required maxlength="40"></label></div>'
+				. blockke_dev_chips( 'timeline', 'When would you like to move in?', blockke_dev_timelines( true ), '' )
+				. ( '' !== $st ? blockke_dev_np_alert( $st, $wa ) : '' )
+				. '<button class="bkd-rent-btn" type="submit">Arrange a viewing' . blockke_dev_icon_inline( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>';
+		}
+		return $h . '<div class="bkd-rent-alt"><a class="bkd-rent-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-blkct="1">' . blockke_dev_icon_inline( 'wa' ) . ( 'sent' === $st ? 'Continue on WhatsApp' : 'WhatsApp us' ) . '</a>'
+			. '<a class="bkd-rent-call" href="' . esc_url( 'tel:' . $cfg['phone'] ) . '">' . blockke_dev_icon_inline( 'phone' ) . 'Call ' . $e( $cfg['phone_display'] ) . '</a></div></div></div>';
+	}
+
+	/** v1.8.3 (R1, plan 7.3): the phone bar below 992px, in place of the theme's agent bar: the rent and its period, WhatsApp, and "Arrange a viewing" (#bkd-rent). */
+	function blockke_dev_classic_rent_bar( $d ) {
+		$e  = 'esc_html';
+		$ra = blockke_dev_classic_rent_say( $d );
+		return '<div class="bkd-rbar" role="region" aria-label="Rent and viewing"><p class="bkd-rbar-r">'
+			. ( '' !== $ra['amt'] ? '<b>' . $e( $ra['pre'] . $ra['amt'] ) . '</b><small>' . $e( $ra['per'] . ( '' !== $ra['kes'] ? ' (' . $ra['usd'] . ')' : '' ) ) . '</small>' : '<b>Rent on request</b>' ) . '</p>'
+			. '<a class="bkd-rbar-wa" href="' . esc_url( blockke_dev_classic_rent_wa( $d, $ra ) ) . '" target="_blank" rel="noopener" data-blkct="1" aria-label="WhatsApp us">' . blockke_dev_icon_inline( 'wa' ) . '</a>'
+			. '<a class="bkd-rbar-go" href="#bkd-rent">Arrange a viewing</a></div>' . "\n";
+	}
+
+	function blockke_dev_classic_rent_css() {
+		return <<<'CSS'
+#bkd-rent,.bkd-rbar{--navy:#0D2440;--navy-l:#2B4568;--ink:#22303C;--muted:#5F6D7E;--mist:#F4EEE4;--line:#E6DFD4;--line-2:#D5CBBB;--brass:#B98A44;--brass-d:#80602A;--brass-t:#9E7433;--wa:#1FA855;--font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--display:var(--font);--display-w:600;text-align:left;font:400 15px/1.6 var(--font);color:var(--ink);-webkit-font-smoothing:antialiased}
+body.bkd-rent-cls #accordion_property_payment_calculator,body.bkd-rent-cls #accordion_property_schedule_tour,body.bkd-rent-cls .wpestate_top_property_navigation_link[href="#accordion_property_payment_calculator"],body.bkd-rent-cls .wpestate_top_property_navigation_link[href="#accordion_property_schedule_tour"]{display:none!important}
+#bkd-rent{display:block;clear:both;float:none;width:100%;max-width:100%;margin:28px 0!important;padding:26px 24px!important;background:var(--mist);border:1px solid var(--line);border-top:3px solid var(--brass);container-type:inline-size;scroll-margin-top:96px}
+#bkd-rent :where(*,*::before,*::after),.bkd-rbar :where(*,*::before,*::after){box-sizing:border-box}
+#bkd-rent :is(h3,p,ul,li,form,fieldset,legend,label),.bkd-rbar p{margin:0!important;padding:0!important;border:0;background:none;list-style:none!important;text-transform:none;letter-spacing:0;float:none}
+#bkd-rent li::before,#bkd-rent li::after{content:none!important;display:none!important}
+:is(#bkd-rent,.bkd-rbar) .bkd-i{display:block;width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+:is(#bkd-rent,.bkd-rbar) .bkd-i-f{fill:currentColor;stroke:none}
+#bkd-rent .bkd-rent-k{margin:0 0 6px!important;font-size:11px!important;font-weight:600!important;line-height:1.4!important;letter-spacing:.16em!important;text-transform:uppercase!important;color:var(--brass-d)!important}
+#bkd-rent :is(.bkd-rent-h,.bkd-rent-vt){margin:0 0 10px!important;font-family:var(--display)!important;font-size:30px!important;font-weight:var(--display-w)!important;font-style:normal!important;line-height:1.15!important;letter-spacing:0!important;color:var(--navy)!important}
+#bkd-rent :is(.bkd-rent-h,.bkd-rent-vt) em{font-family:inherit!important;font-style:italic;font-weight:inherit;color:var(--brass-t)!important}
+#bkd-rent .bkd-rent-vt{margin:0 0 6px!important;font-size:24px!important}
+#bkd-rent .bkd-rent-ok .bkd-rent-vt{display:flex;align-items:center;gap:10px}
+#bkd-rent .bkd-rent-vt .bkd-i{width:22px;height:22px;color:var(--wa);stroke-width:2.4}
+#bkd-rent :is(.bkd-rent-note,.bkd-rent-vs){font-size:14px!important;line-height:1.55!important;color:var(--muted)!important}
+#bkd-rent .bkd-rent-terms{display:grid;grid-template-columns:minmax(0,1fr);column-gap:28px;margin-top:14px!important}
+#bkd-rent .bkd-rent-terms li{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:10px 0!important;border-bottom:1px solid var(--line-2)!important;font-size:14.5px!important;line-height:1.45!important;color:var(--ink)!important}
+#bkd-rent .bkd-rent-terms li:first-child{border-top:1px solid var(--line-2)!important}
+#bkd-rent .bkd-rent-terms b{flex:none;font-weight:600!important;color:var(--navy)!important}
+#bkd-rent .bkd-rent-terms span{text-align:right;color:inherit!important;font-size:inherit!important}
+#bkd-rent .bkd-rent-view{margin-top:22px!important;padding:22px 20px!important;background:#fff;border:1px solid var(--line)}
+#bkd-rent .bkd-rent-form{display:grid;gap:14px;margin-top:16px!important}
+#bkd-rent .bkd-rent-two{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+#bkd-rent .bkd-f{display:block;min-width:0}
+#bkd-rent :is(.bkd-f>span,legend){display:block;margin:0 0 6px!important;font-size:12.5px!important;font-weight:600!important;line-height:1.3!important;color:var(--navy)!important}
+#bkd-rent .bkd-f :is(input[type=text],input[type=tel]){display:block;width:100%!important;max-width:100%!important;height:48px!important;margin:0!important;padding:0 14px!important;font:400 16px/1.3 var(--font)!important;color:var(--navy)!important;background:#fff!important;border:1.5px solid var(--line-2)!important;border-radius:0!important;box-shadow:none!important}
+#bkd-rent .bkd-f :is(input[type=text],input[type=tel]):focus{outline:2px solid var(--brass);outline-offset:1px;border-color:var(--brass)!important}
+#bkd-rent .bkd-chips{display:flex;flex-wrap:wrap;gap:8px}
+#bkd-rent .bkd-chip{position:relative;display:inline-flex;margin:0!important}
+#bkd-rent .bkd-chip input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+#bkd-rent .bkd-chip span{display:inline-flex;align-items:center;min-height:42px;padding:0 15px;font-size:14px;font-weight:500;line-height:1.2;color:var(--navy);background:#fff;border:1.5px solid var(--line-2);cursor:pointer}
+#bkd-rent .bkd-chip input:checked+span{color:#fff;background:var(--navy);border-color:var(--navy)}
+#bkd-rent .bkd-chip input:focus-visible+span{outline:2px solid var(--brass);outline-offset:2px}
+#bkd-rent .bkd-hp{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important}
+#bkd-rent .bkd-rent-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:52px;margin:0!important;padding:0 20px!important;font:600 15px/1.2 var(--font)!important;letter-spacing:.02em!important;text-transform:none!important;color:#fff!important;background:var(--navy)!important;border:0!important;border-radius:0!important;box-shadow:none!important;cursor:pointer}
+#bkd-rent .bkd-rent-btn:hover{background:var(--navy-l)!important}
+#bkd-rent .bkd-alert{padding:10px 12px!important;font-size:14px;line-height:1.5;color:#7A1F1A;background:#FBEDEC;border-left:3px solid #B3261E}
+#bkd-rent .bkd-alert a,#bkd-rent .bkd-consent a{color:inherit!important;text-decoration:underline!important}
+#bkd-rent .bkd-consent{font-size:12px!important;line-height:1.5!important;color:var(--muted)!important}
+#bkd-rent .bkd-rent-alt{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px!important}
+#bkd-rent .bkd-rent-alt a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;font-size:14px!important;font-weight:600!important;line-height:1.2;text-decoration:none!important;color:var(--navy)!important;background:#fff;border:1.5px solid var(--line-2)}
+#bkd-rent .bkd-rent-alt a:hover{border-color:var(--navy)}
+#bkd-rent .bkd-rent-wa .bkd-i{color:var(--wa)}
+@container (min-width:520px){#bkd-rent .bkd-rent-two,#bkd-rent .bkd-rent-terms{grid-template-columns:repeat(2,minmax(0,1fr))}#bkd-rent .bkd-rent-terms li:nth-child(2){border-top:1px solid var(--line-2)!important}}
+.bkd-rbar{display:none}
+@media (max-width:991px){
+html body.bkd-rent-cls .mobile_agent_area_wrapper,html body.bkd-rent-cls .blockke-cta-bar{display:none!important}
+html body.bkd-rent-cls{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+.bkd-rbar{position:fixed;left:0;right:0;bottom:0;z-index:990;display:flex;align-items:center;gap:8px;margin:0;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(13,36,64,.12)}
+.bkd-rbar .bkd-rbar-r{flex:1 1 auto;min-width:0;padding:0 4px!important}
+.bkd-rbar .bkd-rbar-r b{display:block;font-size:15px;font-weight:700;line-height:1.25;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bkd-rbar .bkd-rbar-r small{display:block;font-size:12px;font-weight:500;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bkd-rbar a{flex:none;display:inline-flex;align-items:center;justify-content:center;height:44px;margin:0;text-decoration:none!important}
+.bkd-rbar .bkd-rbar-wa{width:44px;border-radius:50%;color:#fff!important;background:#25D366}
+.bkd-rbar .bkd-rbar-wa .bkd-i{width:22px;height:22px}
+.bkd-rbar .bkd-rbar-go{padding:0 15px;font-size:14px;font-weight:600;line-height:1;color:#fff!important;background:var(--navy)}
+}
+CSS;
+	}
+
+	add_action(
+		'template_redirect',
+		function () {
+			$id = blockke_dev_classic_rent_early();
+			if ( ! $id ) {
+				return;
+			}
+			if ( '' !== blockke_dev_np_state() ) {
+				blockke_dev_np_noindex(); // the page the box's no-script post returned to (?bkd_sent=1#bkd-rent) is never cached or indexed
+			}
+			$place = blockke_dev_classic_inplace( 'rent' );
+			if ( $place || ( is_admin_bar_showing() && current_user_can( 'edit_post', $id ) ) ) { // an editor's admin bar also reports what the HTML holds
+				$GLOBALS['blockke_dev_cls_place'] = $place;
+				ob_start( 'blockke_dev_classic_place' );
+			}
+		},
+		1000
+	);
+
+	add_action(
+		'wp_head',
+		function () {
+			if ( ! blockke_dev_classic_rent_target() ) {
+				return;
+			}
+			add_filter(
+				'body_class',
+				function ( $c ) {
+					$c[] = 'bkd-rent-cls';
+					return $c;
+				}
+			);
+			$x    = blockke_dev_classic_extras();
+			$font = blockke_dev_font_head( '#bkd-rent,.bkd-rbar' );
+			echo ( $x['feat'] || $x['near'] || $x['own'] ? '' : $font[0] ) . '<style id="bkd-rent-css">' . blockke_dev_classic_rent_css() . $font[1] . "</style>\n" // phpcs:ignore WordPress.Security.EscapeOutput -- fixed markup.
+				. '<template id="bke-nearby"></template>' . "\n"; // v1.8.3 (R1): the old Places script (script#blockke-nearby-places) returns when #bke-nearby exists, so it neither fetches nor draws a second "Around this property"
+		},
+		99
+	);
+
+	add_action(
+		'wp_footer',
+		function () {
+			$id  = blockke_dev_classic_rent_target();
+			$box = $id ? blockke_dev_classic_rent_box( $id ) : '';
+			if ( '' === $box ) {
+				return;
+			}
+			$a    = 'features' === (string) blockke_dev_config()['classic_rent_anchor'] ? 'features,description' : 'description,features';
+			$move = <<<'JS'
+(function(){
+  var w=document.getElementById('bkd-rent-wrap'),b=document.getElementById('bkd-rent');if(!w||!b){return;}
+  var A=(w.getAttribute('data-a')||'').split(','),done=false,i,a;
+  for(i=0;i<A.length&&!done;i++){
+    if(A[i]==='description'){a=document.getElementById('wpestate_property_description_section');if(a&&a.parentNode){a.parentNode.insertBefore(b,a.nextSibling);done=true;}}
+    else if(A[i]==='features'){a=document.getElementById('accordion_features_details');if(a&&a.parentNode){a.parentNode.insertBefore(b,a);done=true;}}
+  }
+  if(done){w.parentNode.removeChild(w);}else{w.hidden=false;}
+  if(location.hash==='#bkd-rent'){try{b.scrollIntoView();}catch(e){}}
+})();
+JS;
+			$js   = <<<'JS'
+(function(){
+  var b=document.getElementById('bkd-rent');if(!b){return;}
+  var id=b.getAttribute('data-listing')||'',key='bkd_rent_lead_'+id,f=b.querySelector('form[data-bkd-rent-form]');
+  var K=['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','gbraid','wbraid'];
+  function attr(){
+    var a={};try{a=JSON.parse(sessionStorage.getItem('blkbp_attr')||'{}')||{};}catch(e){a={};}
+    try{var q=new URLSearchParams(location.search);K.forEach(function(k){var v=q.get(k);if(v&&!a[k]){a[k]=v.slice(0,120);}});}catch(e){}
+    if(!a.land){a.land=location.href.slice(0,250);a.ref=(document.referrer||'').slice(0,200);}
+    return a;
+  }
+  if(f){f.addEventListener('submit',function(){
+    var a=attr();
+    K.concat(['ref','land']).forEach(function(k){var i=f.querySelector('input[name="attr['+k+']"]');if(!i){i=document.createElement('input');i.type='hidden';i.name='attr['+k+']';f.appendChild(i);}i.value=a[k]?String(a[k]):'';});
+    try{sessionStorage.removeItem(key);}catch(e){}
+  });}
+  if(b.getAttribute('data-sent')!=='1'){return;}
+  var seen=false;try{seen=!!sessionStorage.getItem(key);sessionStorage.setItem(key,'1');}catch(e){}
+  if(seen){return;}
+  function fire(){
+    var p={lead_source:'classic',lead_unit:'',development:b.getAttribute('data-slug')||'',listing_id:id};
+    try{if(typeof window.gtag==='function'){window.gtag('event','generate_lead',p);}else{p.event='generate_lead';(window.dataLayer=window.dataLayer||[]).push(p);}}catch(x){}
+    try{if(typeof window.blockkeLeadConversion==='function'){window.blockkeLeadConversion('lead_form');}}catch(x){}
+    try{if(typeof window.fbq==='function'){window.fbq('track','Lead',{content_name:b.getAttribute('data-name')||''});}}catch(x){}
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fire);}else{fire();}
+})();
+JS;
+			$wrap = '<div id="bkd-rent-wrap" hidden data-a="' . $a . '">' . $box . "</div>\n";
+			$mv   = '<script id="bkd-rent-mv" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $move . "</script>\n";
+			$GLOBALS['blockke_dev_cls_rent'] = array( 'id' => $id, 'box' => $box, 'wrap' => $wrap, 'mv' => $mv, 'a' => $a ); // for the page buffer (blockke_dev_classic_place())
+			echo $wrap . $mv . blockke_dev_classic_rent_bar( blockke_dev_data( $id ) ) // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+				. '<script id="bkd-rent-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $js . "</script>\n";
+		},
+		26
+	);
+
+	/**
+	 * v1.8.3 (R1, owner 23 Oct): "Around this property" on a classic rental page, its own block (#bkd-near) straight
+	 * after #accordion_property_address, in place of What's nearby (the Address accordion stays as the theme prints it). The
+	 * first source that has something, as the classic block: the listing's own "Places nearby" box with its travel times,
+	 * else its development's, else straight-line distances from the listing's own pin, up to 3 places a group, in a renter's
+	 * order (schools, hospitals, shopping, business districts, parks, the airport). On a neighbourhood pin
+	 * (blockke_dev_area_pins()) the distances are whole km and the note says they are measured from the area's centre. ''
+	 * when there is nothing to show (no box, and a pin at 0/0, the theme's default centre or over 60 km from the CBD): no
+	 * section, no empty heading. The description's own Location list is not repeated: the description is shown above.
+	 */
+	function blockke_dev_classic_around( $id ) {
+		$cfg = blockke_dev_config();
+		if ( empty( $cfg['classic_nearby'] ) ) {
+			return '';
+		}
+		$o   = '<div class="bkd-cls" id="bkd-near"><h3 class="bkd-cls-h">Around this <em>property</em></h3>';
+		$own = blockke_dev_places_override( $id );
+		if ( ! $own ) {
+			$own = blockke_dev_master_places( $id );
+		}
+		if ( $own ) {
+			$o .= '<ul class="bkd-nr-own">';
+			foreach ( $own as $p ) {
+				$o .= '<li><span>' . esc_html( $p[0] ) . '</span>' . ( '' !== $p[1] ? '<b>' . esc_html( $p[1] ) . '</b>' : '' ) . '</li>';
+			}
+			return $o . '</ul><p class="bkd-nr-note">Approximate travel times; they vary with traffic.</p></div>';
+		}
+		$lat    = get_post_meta( $id, 'property_latitude', true );
+		$lng    = get_post_meta( $id, 'property_longitude', true );
+		$groups = blockke_dev_nearby( $lat, $lng, 3 );
+		if ( ! $groups ) {
+			return '';
+		}
+		$order = array_flip( array( 'Education', 'Hospitals', 'Shopping', 'Business districts', 'Parks', 'Airports' ) );
+		usort(
+			$groups,
+			function ( $a, $b ) use ( $order ) {
+				return ( isset( $order[ $a['label'] ] ) ? $order[ $a['label'] ] : 99 ) - ( isset( $order[ $b['label'] ] ) ? $order[ $b['label'] ] : 99 );
+			}
+		);
+		$pins = blockke_dev_area_pins();
+		$area = isset( $pins[ blockke_dev_pin_key( $lat, $lng ) ] ); // a neighbourhood's point, not the building's
+		$o   .= '<div class="bkd-nr">';
+		foreach ( $groups as $g ) {
+			$o .= '<div class="bkd-nr-c"><p class="bkd-nr-k">' . blockke_dev_icon_inline( $g['icon'] ) . esc_html( $g['label'] ) . '</p><ul>';
+			foreach ( $g['places'] as $p ) {
+				$o .= '<li><span>' . esc_html( $p[0] ) . '</span><b>' . ( $area ? 'about ' . number_format( max( 1, round( $p[1] ) ) ) . ' km' : blockke_dev_km_label( $p[1] ) ) . '</b></li>';
+			}
+			$o .= '</ul></div>';
+		}
+		if ( $area ) {
+			$t    = blockke_dev_main_area( $id );
+			$name = $t ? blockke_dev_text( $t->name ) : '';
+			$note = 'Measured from the centre of ' . ( '' !== $name ? $name : 'the neighbourhood' ) . ', not from the building itself, so distances may differ by a kilometre or two.';
+		} else {
+			$note = 'Straight-line distances from the map pin. Road distances and travel times will be longer.';
+		}
+		return $o . '</div><p class="bkd-nr-note">' . esc_html( $note ) . '</p></div>';
+	}
+
+	add_action(
+		'wp_footer',
+		function () {
+			$id    = blockke_dev_classic_rent_target();
+			$block = $id ? blockke_dev_classic_around( $id ) : '';
+			if ( '' === $block ) {
+				return;
+			}
+			$move = <<<'JS'
+(function(){
+  var w=document.getElementById('bkd-near-wrap'),n=document.getElementById('bkd-near'),a=document.getElementById('accordion_property_address');if(!w||!n){return;}
+  if(a&&a.parentNode){a.parentNode.insertBefore(n,a.nextSibling);w.parentNode.removeChild(w);}else{w.hidden=false;}
+})();
+JS;
+			$wrap = '<div id="bkd-near-wrap" hidden>' . $block . "</div>\n";
+			$mv   = '<script id="bkd-near-mv" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . $move . "</script>\n";
+			$GLOBALS['blockke_dev_cls_near'] = array( 'id' => $id, 'block' => $block, 'wrap' => $wrap, 'mv' => $mv ); // for the page buffer (blockke_dev_classic_place())
+			echo $wrap . $mv; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped while building.
+		},
+		27
+	);
+
+	/**
+	 * v1.8.3 (R1, classic_inplace): where the elements with these ids are in a page, the first of each as getElementById finds
+	 * it: per id, array( 'start' => its open tag, 'oe' => the end of that tag, 'cs' => its close tag, 'end' => after it,
+	 * 'body' => the same for its first element with the class accordion-body or panel-body, as the move script's querySelector
+	 * finds it ). Div and section elements only; comments and the text of scripts, styles, textareas and titles are skipped.
+	 * An element never closed has no 'end'.
+	 */
+	function blockke_dev_html_ids( $html, $ids ) {
+		$want  = array_flip( $ids );
+		$found = array();
+		$stack = array();
+		$p     = 0;
+		$n     = strlen( $html );
+		while ( $p < $n && preg_match( '#<!--|<(script|style|textarea|title)\b[^>]*>|<(/?)(div|section)\b([^>]*)>#i', $html, $m, PREG_OFFSET_CAPTURE, $p ) ) {
+			$s = $m[0][1];
+			$t = $m[0][0];
+			if ( '<!--' === $t ) {
+				$q = strpos( $html, '-->', $s + 4 );
+				$p = false === $q ? $n : $q + 3;
+				continue;
+			}
+			if ( isset( $m[1] ) && $m[1][1] >= 0 && '' !== $m[1][0] ) {
+				$q = stripos( $html, '</' . $m[1][0], $s + strlen( $t ) );
+				$p = false === $q ? $n : $q + 2;
+				continue;
+			}
+			$tag = strtolower( $m[3][0] );
+			$p   = $s + strlen( $t );
+			if ( '/' === $m[2][0] ) {
+				for ( $i = count( $stack ) - 1; $i >= 0 && $stack[ $i ]['tag'] !== $tag; $i-- ) {
+					continue;
+				}
+				if ( $i < 0 ) {
+					continue; // a stray close tag
+				}
+				$el    = $stack[ $i ];
+				$stack = array_slice( $stack, 0, $i );
+				if ( '' !== $el['id'] ) {
+					$found[ $el['id'] ] += array( 'cs' => $s, 'end' => $p );
+				}
+				foreach ( $el['of'] as $o ) {
+					$found[ $o ]['body'] += array( 'cs' => $s, 'end' => $p );
+				}
+				continue;
+			}
+			$at = $m[4][0];
+			$el = array( 'tag' => $tag, 'id' => '', 'of' => array() );
+			$ei = preg_match( '#\sid\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))#i', ' ' . $at, $im ) ? $im[ count( $im ) - 1 ] : '';
+			if ( '' !== $ei && isset( $want[ $ei ] ) && ! isset( $found[ $ei ] ) ) {
+				$found[ $ei ] = array( 'start' => $s, 'oe' => $p );
+				$el['id']     = $ei;
+			}
+			if ( preg_match( '#\sclass\s*=\s*(?:"([^"]*)"|\'([^\']*)\')#i', ' ' . $at, $cm ) && preg_match( '/(?:^|\s)(?:accordion-body|panel-body)(?:\s|$)/', $cm[ count( $cm ) - 1 ] ) ) {
+				foreach ( $stack as $anc ) {
+					if ( '' !== $anc['id'] && ! isset( $found[ $anc['id'] ]['body'] ) ) {
+						$found[ $anc['id'] ]['body'] = array( 'start' => $s, 'oe' => $p );
+						$el['of'][]                  = $anc['id'];
+					}
+				}
+			}
+			$stack[] = $el;
+		}
+		return $found;
+	}
+
+	/** v1.8.3 (R1, classic_inplace): the page buffer of a classic rental page (template_redirect); the page as it ends, placed by blockke_dev_classic_place_html(), or unchanged on anything unexpected. */
+	function blockke_dev_classic_place( $html, $phase = PHP_OUTPUT_HANDLER_FINAL ) {
+		static $held = '';
+		if ( $phase & PHP_OUTPUT_HANDLER_CLEAN ) {
+			$held = '';
+			return '';
+		}
+		$held .= (string) $html;
+		if ( ! ( $phase & PHP_OUTPUT_HANDLER_FINAL ) ) {
+			return ''; // a flush before the end: the page is placed whole, once
+		}
+		$all  = $held;
+		$held = '';
+		try {
+			$out = blockke_dev_classic_place_html( $all );
+		} catch ( Throwable $e ) {
+			$out = $all;
+		}
+		return is_string( $out ) ? $out : $all;
+	}
+
+	/**
+	 * v1.8.3 (R1, classic_inplace, plan 7.3): with 'classic_inplace' covering 'rent', the rent box goes straight after
+	 * #wpestate_property_description_section (outside its .panel-body, so the description clamp leaves it alone; config
+	 * 'classic_rent_anchor', 'features': before #accordion_features_details, the other being the fallback), the amenity tiles
+	 * at the top of Features' body and What's nearby at the end of Address's body (on a rental: Around this property
+	 * straight after #accordion_property_address): each exactly as the footer route prints it.
+	 * That block's hidden footer copy goes, and the move script with it once nothing is left to move; a block whose anchor is
+	 * not in the HTML keeps the footer route. An editor's admin bar is told what was placed, what fell back, and which theme
+	 * sections the rent CSS hides.
+	 */
+	function blockke_dev_classic_place_html( $html ) {
+		$id = blockke_dev_classic_rent_target();
+		$r  = isset( $GLOBALS['blockke_dev_cls_rent'] ) ? $GLOBALS['blockke_dev_cls_rent'] : null; // the box's footer route
+		if ( ! $id || ! $r || (int) $r['id'] !== $id ) {
+			return $html;
+		}
+		$x     = isset( $GLOBALS['blockke_dev_cls_out'] ) ? $GLOBALS['blockke_dev_cls_out'] : null; // the amenity tiles' and nearby places' footer route
+		$place = ! empty( $GLOBALS['blockke_dev_cls_place'] );
+		$el    = blockke_dev_html_ids( $html, array( 'wpestate_property_description_section', 'accordion_features_details', 'accordion_property_address' ) );
+		$ok    = function ( $k, $body = false ) use ( $el ) {
+			return isset( $el[ $k ]['end'] ) && ( ! $body || isset( $el[ $k ]['body']['end'] ) );
+		};
+		$ed    = array(); // edits: array( offset, length, text )
+		$rep   = array();
+		$rpos  = strpos( $html, $r['wrap'] . $r['mv'] );
+		$route = $place ? 'by the move script, after the footer: ' : 'by the move script, after the footer (classic_inplace off)';
+		$rep['box'] = $route;
+		if ( $place && false !== $rpos ) {
+			foreach ( explode( ',', $r['a'] ) as $a ) {
+				if ( 'description' === $a && $ok( 'wpestate_property_description_section' ) ) {
+					$ed[]       = array( $el['wpestate_property_description_section']['end'], 0, $r['box'] );
+					$rep['box'] = 'in place, after the description (#wpestate_property_description_section)';
+					break;
+				}
+				if ( 'features' === $a && $ok( 'accordion_features_details' ) ) {
+					$ed[]       = array( $el['accordion_features_details']['start'], 0, $r['box'] );
+					$rep['box'] = 'in place, before Features (#accordion_features_details)' . ( 0 === strpos( $r['a'], 'features' ) ? '' : ', the fallback anchor' );
+					break;
+				}
+			}
+			if ( 0 === strpos( $rep['box'], 'in place' ) ) {
+				$ed[] = array( $rpos, strlen( $r['wrap'] . $r['mv'] ), '' );
+			} else {
+				$rep['box'] .= 'no #wpestate_property_description_section or #accordion_features_details in the HTML';
+			}
+		} elseif ( $place ) {
+			$rep['box'] .= 'its footer copy was not found as printed';
+		}
+		$rep['feat'] = 'none on this listing';
+		$rep['near'] = 'none on this listing';
+		$cls_js      = (bool) $x; // the shared move script (bkd-cls-js) stays on the page
+		if ( $x ) {
+			$xpos = strpos( $html, $x['wrap'] . $x['js'] );
+			$left = array();
+			foreach ( array( 'feat' => 'accordion_features_details', 'near' => 'accordion_property_address' ) as $k => $anc ) {
+				if ( '' === $x[ $k ] ) {
+					continue;
+				}
+				if ( ! $place || false === $xpos || ! $ok( $anc, true ) ) {
+					$left[ $k ] = $x[ $k ];
+					$rep[ $k ]  = $place ? $route . ( false === $xpos ? 'its footer copy was not found as printed' : 'no #' . $anc . ' body in the HTML' ) : $route;
+					continue;
+				}
+				$b = $el[ $anc ]['body'];
+				if ( 'feat' === $k ) { // at the top of the body, which gains the class bkd-feat-on, as the move script does
+					$tag  = substr( $html, $b['start'], $b['oe'] - $b['start'] );
+					$tag2 = preg_replace_callback(
+						'#(\sclass\s*=\s*)(["\'])(.*?)\2#is',
+						function ( $c ) { // classList.add(): the class tokens once each, in order, joined by one space
+							return $c[1] . $c[2] . implode( ' ', array_unique( array_merge( preg_split( '/\s+/', $c[3], -1, PREG_SPLIT_NO_EMPTY ), array( 'bkd-feat-on' ) ) ) ) . $c[2];
+						},
+						$tag,
+						1
+					);
+					$ed[] = array( $b['start'], strlen( $tag ), ( is_string( $tag2 ) ? $tag2 : $tag ) . $x['feat'] );
+				} else { // at the end of the body
+					$ed[] = array( $b['cs'], 0, $x['near'] );
+				}
+				$rep[ $k ] = 'in place, in #' . $anc;
+			}
+			if ( $place && false !== $xpos && count( $left ) < count( array_filter( array( $x['feat'], $x['near'] ), 'strlen' ) ) ) {
+				$ed[] = $left ? array( $xpos, strlen( $x['wrap'] ), '<div id="bkd-cls" hidden>' . implode( '', $left ) . "</div>\n" ) : array( $xpos, strlen( $x['wrap'] . $x['js'] ), '' );
+				$cls_js = (bool) $left;
+			}
+		}
+		$nr = isset( $GLOBALS['blockke_dev_cls_near'] ) ? $GLOBALS['blockke_dev_cls_near'] : null; // v1.8.3 (R1): Around this property's footer route
+		if ( $nr && (int) $nr['id'] === $id ) {
+			$npos = strpos( $html, $nr['wrap'] . $nr['mv'] );
+			if ( $place && false !== $npos && ! $cls_js && $ok( 'accordion_property_address' ) ) {
+				$ed[]        = array( $el['accordion_property_address']['end'], 0, $nr['block'] );
+				$ed[]        = array( $npos, strlen( $nr['wrap'] . $nr['mv'] ), '' );
+				$rep['near'] = 'in place, after Address (#accordion_property_address)';
+			} else {
+				$rep['near'] = $place ? $route . ( false === $npos ? 'its footer copy was not found as printed' : ( $cls_js ? 'the amenity tiles still move by script, which would take it into Address' : 'no #accordion_property_address in the HTML' ) ) : $route;
+			}
+		}
+		$has = function ( $re ) use ( $html ) {
+			return (bool) preg_match( $re, $html );
+		};
+		$sec = array();
+		foreach ( array( 'accordion_property_payment_calculator' => 'calculator', 'accordion_property_schedule_tour' => 'tour section' ) as $sid => $w ) {
+			$sec[] = $w . ' ' . ( $has( '#\sid=(["\'])' . $sid . '\1#' ) ? 'found' : 'not in the HTML' ) . ', its top-nav link ' . ( $has( '#<a\s[^>]*\bhref=(["\'])\#' . $sid . '\1#' ) ? 'found' : 'not in the HTML' );
+		}
+		$rep['hide'] = 'hidden: ' . implode( '; ', $sec ) . ' (kept: the sidebar card and the photo lightbox form)';
+		$rep['bar']  = 'ours below 992px; the theme agent bar (.mobile_agent_area_wrapper) ' . ( $has( '#class=(["\'])(?:[^"\']*\s)?mobile_agent_area_wrapper[\s"\']#' ) ? 'found, hidden there' : 'not in the HTML' );
+		usort(
+			$ed,
+			function ( $p, $q ) {
+				return $q[0] - $p[0];
+			}
+		);
+		foreach ( $ed as $one ) {
+			$html = substr_replace( $html, $one[2], $one[0], $one[1] );
+		}
+		foreach ( $rep as $k => $v ) {
+			$html = str_replace( '<span data-bkd-r="' . $k . '">not checked</span>', '<span data-bkd-r="' . $k . '">' . esc_html( $v ) . '</span>', $html );
+		}
+		return $html;
+	}
+
+	add_action(
+		'admin_bar_menu',
+		function ( $bar ) {
+			$id = blockke_dev_classic_rent_target();
+			if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+				return;
+			}
+			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-rent', 'title' => 'Rental page: rent box and phone bar, ' . ( blockke_dev_classic_inplace( 'rent' ) ? 'placed by the server (classic_inplace)' : 'placed by script (classic_inplace off)' ) ) );
+			foreach ( array( 'box' => 'Rent box', 'feat' => 'Amenity tiles', 'near' => 'Around this property', 'hide' => 'Theme sections', 'bar' => 'Phone bar' ) as $k => $t ) {
+				$bar->add_node( array( 'parent' => 'bkd-rent', 'id' => 'bkd-rent-' . $k, 'title' => esc_html( $t ) . ': <span data-bkd-r="' . $k . '">not checked</span>' ) );
+			}
+		},
+		91
 	);
 
 	/* =====================================================================
@@ -1774,7 +2531,7 @@ JS;
 		if ( preg_match( '/\b(?:units?|blocks?|phases?|floors?|levels?|towers?|types?)\s*#?\s*\d+|\b(?:19|20)\d{2}\b/u', $l ) && preg_match( '/(?<![\d.])(10|[1-9])\s*-?\s*(?:bed|br\b)/u', (string) $lr, $m ) ) {
 			return (int) $m[1]; // v1.8: "Unit 12 - 3 bedroom" is a 3-bed, not a 12-bed
 		}
-		if ( preg_match( '/(\d+)\s*-?\s*(?:(?:-|–|to|&|and)\s*\d+\s*-?\s*)?(?:bed|br\b)/u', $l, $m ) ) { // "2 Bed", "1-Bedroom", "2-3 bed"
+		if ( preg_match( '/(?<![\d.])(\d+)(?:\.\d+)?\s*-?\s*(?:(?:-|–|to|&|and)\s*\d+\s*-?\s*)?(?:bed|br\b)/u', $l, $m ) ) { // "2 Bed", "1-Bedroom", "2-3 bed"; v1.9: "1.5 Bedroom" is a 1-bed, not a 5-bed
 			return (int) $m[1];
 		}
 		$words = array( 'one' => 1, 'two' => 2, 'three' => 3, 'four' => 4, 'five' => 5, 'six' => 6 );
@@ -2669,9 +3426,10 @@ JS;
 	/**
 	 * The nearest places of each kind around a map pin, grouped for display:
 	 * array( array( 'label', 'icon', 'places' => array( array( name, km, name for one place ), ... ) ), ... ).
-	 * Empty when the pin is missing or outside Nairobi, which the landmark list covers.
+	 * Empty when the pin is missing or outside Nairobi, which the landmark list covers. v1.8.3 (R1): $per, the places
+	 * shown per group (0: each kind's own count, as before; 3 in a classic rental's Around this property).
 	 */
-	function blockke_dev_nearby( $lat, $lng ) {
+	function blockke_dev_nearby( $lat, $lng, $per = 0 ) {
 		$lat = (float) $lat;
 		$lng = (float) $lng;
 		if ( ( ! $lat && ! $lng ) || abs( $lat ) > 90 || abs( $lng ) > 180 || blockke_dev_km( $lat, $lng, -1.28840, 36.82280 ) > 60 ) {
@@ -2687,7 +3445,7 @@ JS;
 		$kinds  = blockke_dev_place_kinds();
 		$groups = array();
 		foreach ( $kinds as $k ) {
-			$groups[ $k[0] ] = array( 'label' => $k[0], 'icon' => $k[2], 'max' => $k[4], 'places' => array() );
+			$groups[ $k[0] ] = array( 'label' => $k[0], 'icon' => $k[2], 'max' => $per > 0 ? (int) $per : $k[4], 'places' => array() );
 		}
 		foreach ( blockke_dev_landmarks() as $l ) {
 			if ( ! isset( $kinds[ $l[1] ] ) ) {
@@ -2715,6 +3473,71 @@ JS;
 			$out[] = $g;
 		}
 		return $out;
+	}
+
+	/** v1.8.3 (R1): a map pin as one point, to 6 decimals ("-1.267500,36.812022"); '' for a missing pin (0/0) or one off the map. */
+	function blockke_dev_pin_key( $lat, $lng ) {
+		$lat = (float) $lat;
+		$lng = (float) $lng;
+		if ( ( ! $lat && ! $lng ) || abs( $lat ) > 90 || abs( $lng ) > 180 ) {
+			return '';
+		}
+		return number_format( $lat, 6, '.', '' ) . ',' . number_format( $lng, 6, '.', '' );
+	}
+
+	/**
+	 * v1.8.3 (R1): the map points that stand for a neighbourhood rather than a building: the points
+	 * (blockke_dev_pin_key()) used by 3 or more published listings from 2 or more developments (blockke_dev_dev_key(), so the
+	 * units of one development on their building's pin are one). array( point => listings on it ). Built once and kept 12
+	 * hours (transient bkd_area_pins under bkd_sim_ver, which a listing's save bumps), so a listing whose building pin staff
+	 * set leaves the set at the next rebuild. An editor's rental preview stores nothing.
+	 */
+	function blockke_dev_area_pins() {
+		static $set = null;
+		if ( null !== $set ) {
+			return $set;
+		}
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|ap1';
+		$hit = get_transient( 'bkd_area_pins' );
+		if ( is_array( $hit ) && isset( $hit['ver'], $hit['pins'] ) && $hit['ver'] === $ver && is_array( $hit['pins'] ) ) {
+			$set = $hit['pins'];
+			return $set;
+		}
+		global $wpdb;
+		$rows = $wpdb->get_results( "SELECT p.ID AS id, la.meta_value AS lat, lo.meta_value AS lng FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} la ON la.post_id = p.ID AND la.meta_key = 'property_latitude' INNER JOIN {$wpdb->postmeta} lo ON lo.post_id = p.ID AND lo.meta_key = 'property_longitude' WHERE p.post_type = 'estate_property' AND p.post_status = 'publish'", ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$by   = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $r ) {
+			$k = blockke_dev_pin_key( $r['lat'], $r['lng'] );
+			if ( '' !== $k ) {
+				$by[ $k ][ (int) $r['id'] ] = true;
+			}
+		}
+		$set  = array();
+		$want = array();
+		foreach ( $by as $k => $ids ) {
+			if ( count( $ids ) >= 3 ) {
+				$want = array_merge( $want, array_keys( $ids ) );
+			}
+		}
+		if ( $want && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $want, true, true ); // posts, terms and meta for blockke_dev_dev_key(), in a few queries
+		}
+		foreach ( $by as $k => $ids ) {
+			if ( count( $ids ) < 3 ) {
+				continue;
+			}
+			$devs = array();
+			foreach ( array_keys( $ids ) as $pid ) {
+				$devs[ blockke_dev_dev_key( $pid ) ] = true;
+			}
+			if ( count( $devs ) >= 2 ) {
+				$set[ $k ] = count( $ids );
+			}
+		}
+		if ( ! blockke_dev_rent_preview() ) {
+			set_transient( 'bkd_area_pins', array( 'ver' => $ver, 'pins' => $set ), 12 * HOUR_IN_SECONDS );
+		}
+		return $set;
 	}
 
 	/** The listing's own "Places nearby" box (Place | travel time per line), if filled in. */
@@ -3108,7 +3931,7 @@ JS;
 		// "2 Bedroom Apartment for Sale in Westlands — Golden Mansion, Muthithi Road": the building is after the dash
 		if ( count( $parts ) > 1 && preg_match( '/^(?:\d|studio|one|two|three|four|five|penthouse|loft|duplex)\b.*\b(?:bed|bedroom|studio|loft|penthouse|duplex|apartment)s?\b/iu', $parts[0] ) ) {
 			$b = trim( preg_replace( '/,.*$/u', '', $parts[1] ), ' ,.-' );
-			if ( '' !== $b && ! preg_match( '/^(?:from|kes|ksh|\d)/iu', $b ) ) {
+			if ( '' !== $b && ! preg_match( '/^(?:from|kes|ksh|usd|us\$|\$|\d)/iu', $b ) ) { // fix: not "USD 5" from "| USD 5,500 per Month"
 				return $b;
 			}
 		}
@@ -3235,24 +4058,115 @@ JS;
 		return $beds > 0 ? (string) min( 4, $beds ) : '';
 	}
 
-	/** 'upto' when the price is a ceiling ("Up to"), 'unit' when it is per square foot or metre (offices); else ''. */
-	function blockke_dev_price_flag( $id ) {
+	/**
+	 * 'upto' when the price is a ceiling ("Up to"), 'unit' when it is per square foot or metre (offices); else ''. v1.8.3 (R1):
+	 * $period (a rental's row, blockke_bkn_row()) while 'rent_cards' is on (or previewed: ?bke_rcards=1): 'period' when the
+	 * price is a day's, a night's or a week's ("per day"), so cards, area and search pages keep it out of price ranges,
+	 * budgets and price sorts as they do 'unit' (it is still counted and shown). Every other caller reads the flag as before.
+	 */
+	function blockke_dev_price_flag( $id, $period = false ) {
 		$l = strtolower( (string) blockke_dev_pm( $id, 'property_label' ) . ' ' . (string) blockke_dev_pm( $id, 'property_label_before' ) );
 		if ( preg_match( '/sq\.?\s*f|sqft|sq\.?\s*m\b|sqm|m²|per\s+(?:sq|square)/u', $l ) ) {
 			return 'unit';
 		}
+		if ( $period && preg_match( '/\b(day|night|week)\b|daily|nightly|weekly/i', $l ) && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) {
+			return 'period';
+		}
 		return false !== strpos( $l, 'up to' ) ? 'upto' : '';
 	}
 
-	/** 'rent' or 'sale': the Buy/Rent term, else the title ("for rent", "to let"). */
-	function blockke_dev_action( $id ) {
+	/**
+	 * 'rent' or 'sale': the Buy/Rent term, else the title ("for rent", "to let"). v1.8.3 (R1): while 'rent_pages' is on (or
+	 * previewed: ?bke_rent=1), the title test also reads "to rent" and "for lease", never "Rent-to-Own"; the cache versions
+	 * carry blockke_dev_rent_ver(), so the rows, similar homes and area pages built from it agree. $wide: that title test
+	 * whatever the switch, for one listing only: the lead of an editor's ?bke_rent=1 preview (blockke_dev_rent_rp()).
+	 */
+	function blockke_dev_action( $id, $wide = false ) {
 		if ( has_term( 'for-rent', 'property_action_category', $id ) && ! has_term( 'for-sale', 'property_action_category', $id ) ) {
 			return 'rent';
 		}
 		if ( has_term( 'for-sale', 'property_action_category', $id ) ) {
 			return 'sale';
 		}
+		if ( $wide || blockke_bkn_on( 'rent_pages', 'bke_rent' ) ) {
+			$t = (string) get_the_title( $id );
+			return preg_match( '/\bfor rent\b|\bto let\b|\bto rent\b|\bfor lease\b/i', $t ) && ! preg_match( '/rent[- ]to[- ]own/i', $t ) ? 'rent' : 'sale';
+		}
 		return preg_match( '/\bfor rent\b|\bto let\b/i', (string) get_the_title( $id ) ) ? 'rent' : 'sale';
+	}
+
+	/**
+	 * v1.8.3 fix: whether a home's own page and its leads read as a rental. blockke_dev_action() 'rent', except a listing
+	 * with no Buy/Rent term whose title offers both ("Office Space for Rent & Sale"), which keeps the sale page, as a
+	 * listing tagged both does. blockke_dev_action() keeps the v1.8.2 title test while 'rent_pages' is off; with it on (or
+	 * $wide) a title with no Buy/Rent term also counts when it says "to rent" or "for lease" (search links, similar homes and
+	 * area pages follow it).
+	 * $wide: blockke_dev_action()'s widened title test, for an editor's preview lead (blockke_dev_rent_rp()).
+	 */
+	function blockke_dev_rent_mode( $id, $wide = false ) {
+		if ( 'rent' !== blockke_dev_action( $id, $wide ) ) {
+			return false;
+		}
+		if ( has_term( 'for-rent', 'property_action_category', $id ) ) {
+			return true;
+		}
+		return ! preg_match( '/\b(?:rent|let)\s*(?:&|and|or|\/)\s*(?:for\s+)?sale\b|\bsale\s*(?:&|and|or|\/)\s*(?:for\s+|to\s+)?(?:rent|let)\b/i', blockke_dev_text( get_the_title( $id ) ) );
+	}
+
+	/**
+	 * v1.8.3 (R1): whether a home's own page, its script, its similar rentals' badge and its leads read as a rental: config
+	 * 'rent_pages' (an editor's preview: ?bke_rent=1 / 0) and blockke_dev_rent_mode(). While a lead sent from an editor's
+	 * preview is handled (blockke_dev_rent_rp()), that one listing reads as a rental too, as it did on the preview (with the
+	 * preview's widened title test, so a rental by its title alone, "to Rent" or "for Lease" with no Buy/Rent term, too).
+	 */
+	function blockke_dev_rent_on( $id ) {
+		$rp = isset( $GLOBALS['blockke_dev_rent_rp'] ) && (int) $GLOBALS['blockke_dev_rent_rp'] === (int) $id;
+		return ( $rp || blockke_bkn_on( 'rent_pages', 'bke_rent' ) ) && blockke_dev_rent_mode( $id, $rp );
+	}
+
+	/**
+	 * v1.8.3 (R1): whether a lead (or its follow-up answers) came from an editor's ?bke_rent=1 preview while 'rent_pages' is
+	 * off: a form post's hidden rp=1 (blockke_dev_rent_rp_field()), or bke_rent=1 in the page URL the page script sends. The
+	 * REST request carries neither the preview parameter nor the editor, so the lead would otherwise read as a sale. Honoured
+	 * only for a listing blockke_dev_rent_mode() calls a rental: a forged rp on a sale listing does nothing. The listing is
+	 * tested as the preview page tested it, with the widened title test ("to Rent", "for Lease"; never "Rent-to-Own"), so the
+	 * lead of a rental by its title alone (no Buy/Rent term) reads as a rental too.
+	 */
+	function blockke_dev_rent_rp( $lid, $rp, $page ) {
+		if ( ! $lid || blockke_bkn_on( 'rent_pages' ) ) {
+			return false;
+		}
+		$q  = array();
+		$qs = (string) wp_parse_url( (string) $page, PHP_URL_QUERY );
+		if ( '' !== $qs ) {
+			parse_str( $qs, $q );
+		}
+		$want = '1' === (string) $rp || ( isset( $q['bke_rent'] ) && is_scalar( $q['bke_rent'] ) && '1' === (string) $q['bke_rent'] );
+		return $want && blockke_dev_rent_mode( (int) $lid, true );
+	}
+
+	/** v1.8.3 (R1): the forms' hidden rp=1 on a rental drawn by an editor's ?bke_rent=1 preview while 'rent_pages' is off; else ''. */
+	function blockke_dev_rent_rp_field( $d ) {
+		return ! empty( $d['rent'] ) && ! blockke_bkn_on( 'rent_pages' ) ? '<input type="hidden" name="rp" value="1">' : '';
+	}
+
+	/**
+	 * v1.8.3 (R1): the cache-version suffix of the rental switches as this request reads them (an editor's preview included):
+	 * '' with 'rent_pages' and 'rent_cards' both off, else '|rp', '|rc' or '|rp|rc'. Appended at the END of every cache
+	 * version (the rows, similar homes, the search lists, the v1.5 area pages), so the parts before it still match (the rows'
+	 * format, part [1] "v163") and the old copy is served while one request rebuilds after a switch.
+	 */
+	function blockke_dev_rent_ver() {
+		return ( blockke_bkn_on( 'rent_pages', 'bke_rent' ) ? '|rp' : '' ) . ( blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ? '|rc' : '' );
+	}
+
+	/**
+	 * v1.8.3 (R1): whether this request is an editor's preview that changes a rental switch from its config value
+	 * (?bke_rent / ?bke_rcards). Such a request stores nothing: the rows, developments, index, similar homes, search lists and
+	 * v1.5 area caches are built in memory and not saved, so a preview never replaces or churns what visitors are served.
+	 */
+	function blockke_dev_rent_preview() {
+		return blockke_bkn_on( 'rent_pages', 'bke_rent' ) !== blockke_bkn_on( 'rent_pages' ) || blockke_bkn_on( 'rent_cards', 'bke_rcards' ) !== blockke_bkn_on( 'rent_cards' );
 	}
 
 	/** "Off-plan · Sep 2027", "Ready now" or '' for the card badge. */
@@ -3678,6 +4592,10 @@ JS;
 	}
 
 	function blockke_dev_sim_price( $r, $rent ) {
+		if ( $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) { // v1.8.3 (R1): as a rent card states it: "KES 200K a month" (never "/ month"), "KES 6,500 a day", "Rent on request"
+			$t = blockke_bkn_rent_text( $r['id'], $r['price'], $r['flag'] );
+			return '' !== $t ? $t : 'Rent on request';
+		}
 		if ( $r['price'] <= 0 ) {
 			return 'Price on request';
 		}
@@ -3706,6 +4624,9 @@ JS;
 			return blockke_dev_similar_land_block( $d ); // land pages: other land, never homes
 		}
 		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v18|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) ); // 'homes': blocks cached before "See all" was read as homes (blockke_dev_seg_url) are rebuilt; v18: headings cached before they matched their links
+		$rent_on = blockke_dev_rent_on( (int) $d['id'] ); // v1.8.3 (R1): rent_pages on (or previewed) for this rental's page
+		$ver    .= $rent_on ? '|v183r' : ''; // v1.8.3: a rental's cached block had the sale badge
+		$ver    .= blockke_dev_rent_ver(); // v1.8.3 (R1): the rental switches, at the end ('' with both off)
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -3779,6 +4700,7 @@ JS;
 		$all_url  = blockke_dev_search_url( array( 'area' => 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ? '' : $area, 'action' => $c['action'], 'beds' => 'units' === $res['mode'] ? blockke_dev_link_beds( $c ) : '' ) );
 		$all_seg  = blockke_dev_seg_url( $all_url );
 		$all_text = 'See all ' . ( $beds ? $beds . ' ' : '' ) . ( $rent ? 'rentals' : ( $beds ? 'homes' : 'homes for sale' ) ) . ( $area && ! ( 'devs' === $res['mode'] && in_array( 9, $tiers, true ) ) ? ' in ' . $area : '' );
+		$rc       = $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ); // v1.8.3 (R1): rental cards (blockke_dev_sim_price(), "Furnished", no sale badge)
 		$cards    = array();
 		foreach ( $res['rows'] as $i => $r ) {
 			$cards[] = array(
@@ -3787,8 +4709,8 @@ JS;
 				'img'   => (int) get_post_thumbnail_id( $r['id'] ),
 				'name'  => blockke_dev_listing_name( $r['id'] ),
 				'price' => blockke_dev_sim_price( $r, $rent ),
-				'meta'  => blockke_dev_sim_meta( $r, $c['area_id'] && in_array( $c['area_id'], $r['areas'], true ) ? $area : '' ),
-				'badge' => blockke_dev_stage( $r['id'] ),
+				'meta'  => implode( ' · ', array_filter( array( blockke_dev_sim_meta( $r, $c['area_id'] && in_array( $c['area_id'], $r['areas'], true ) ? $area : '' ), $rc && blockke_bkn_rent_row( (int) $r['id'], $r['price'], $r['flag'] )['fu'] ? 'Furnished' : '' ) ) ), // v1.8.3 (R1, rent_cards): "Furnished"
+				'badge' => $rent && ( $rent_on || $rc ) ? '' : blockke_dev_stage( $r['id'] ), // v1.8.3: "Ready now" is a sale stage, as on area pages' rental cards
 				'tier'  => (int) $r['tier'],
 				'same'  => $c['area_id'] && in_array( $c['area_id'], $r['areas'], true ) ? 1 : 0,
 			);
@@ -3804,7 +4726,9 @@ JS;
 			'beds'     => (string) $c['key'],
 			'area'     => $area,
 		);
-		set_transient( $tk, array( 'ver' => $ver, 'block' => $block ), max( 300, (int) $cfg['sim_ttl'] ) );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( $tk, array( 'ver' => $ver, 'block' => $block ), max( 300, (int) $cfg['sim_ttl'] ) );
+		}
 		return $block;
 	}
 
@@ -3850,7 +4774,7 @@ JS;
 	/** Areas for the search sheet (the busiest first) and completion years, cached until a listing changes. */
 	function blockke_dev_search_lists() {
 		$cfg = blockke_dev_config();
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|' . (int) $cfg['search_min_area_count'];
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|' . (int) $cfg['search_min_area_count'] . blockke_dev_rent_ver(); // v1.8.3 (R1): rental switches at the end
 		$hit = get_transient( 'bkd_search_lists' );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
 			return $hit['lists'];
@@ -3874,7 +4798,9 @@ JS;
 			}
 		);
 		$lists = array( 'areas' => $areas, 'years' => $years );
-		set_transient( 'bkd_search_lists', array( 'ver' => $ver, 'lists' => $lists ), 12 * HOUR_IN_SECONDS );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( 'bkd_search_lists', array( 'ver' => $ver, 'lists' => $lists ), 12 * HOUR_IN_SECONDS );
+		}
 		return $lists;
 	}
 
@@ -5946,7 +6872,7 @@ JS;
 		$cfg = blockke_dev_config();
 		$c   = $d['ctx'];
 		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v144|' . md5( wp_json_encode( array( $cfg['similar_count'], $cfg['similar_min'], $cfg['price_band'], $cfg['dev_price_band'], $cfg['neighbours'], $cfg['similar_units'], $cfg['beds_mode'], $cfg['search_url'], $cfg['studio_cat'], ! empty( $cfg['card_v16'] ) ? array( $cfg['area_pages'], 'homes' ) : 0 ) ) )
-			. '|land1|' . md5( wp_json_encode( $cfg['land_neighbours'] ) );
+			. '|land1|' . md5( wp_json_encode( $cfg['land_neighbours'] ) ) . blockke_dev_rent_ver(); // v1.8.3 (R1): rental switches at the end
 		$tk  = 'bkd_sim_' . (int) $d['id'];
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -6074,7 +7000,9 @@ JS;
 			'beds'     => '',
 			'area'     => $area,
 		);
-		set_transient( $tk, array( 'ver' => $ver, 'block' => $block ), max( 300, (int) $cfg['sim_ttl'] ) );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( $tk, array( 'ver' => $ver, 'block' => $block ), max( 300, (int) $cfg['sim_ttl'] ) );
+		}
 		return $block;
 	}
 
@@ -6143,6 +7071,216 @@ JS;
 			}
 		}
 		return strtr( $js, $swap );
+	}
+
+	/**
+	 * v1.8.3: the development page script for a home for rent (blockke_dev_data()'s 'rent'): a viewing and availability,
+	 * not the price list, floor plans or payment plan, in the pop-up and the thank-you line; rentals to compare, and
+	 * comparable rents, not resale prices. Applied at the development page's script tag only, in place of
+	 * blockke_dev_noplans_js(). Every anchor must occur exactly once, or the script is returned unchanged. R1 (review item 8):
+	 * the brochure's thank-you keeps its own words ("with the brochure for {name}"), not the viewing line. R1 (plan-check H2):
+	 * the WhatsApp links the script builds (the thank-you's "Continue on WhatsApp", the form error's "Send it on WhatsApp
+	 * instead") carry data-blkct="1", ask for a viewing and end "Ref W-{id}", as the page's own, so snippet 40769 leaves them alone.
+	 */
+	function blockke_dev_rent_js( $js ) {
+		$pairs = <<<'JS'
+'with the price list and floor plans for '+C.name
+'to arrange a viewing of '+C.name
+(source==='comparables'?'Recent rents and resale prices near '+C.name+', sent to your WhatsApp.':'Floor plans and the payment plan, sent to your WhatsApp.')
+(source==='comparables'?'Recent rents for homes like this near '+C.name+', sent to your WhatsApp.':'Availability and viewing times, sent to your WhatsApp.')
+(unit?'Floor plan and price':'Get the price list')
+(unit?'Availability and viewing':'Arrange a viewing')
+comparables:'Get rental and resale comparables'
+comparables:'Get comparable rents'
+comparables:'with recent rents and resale prices near '+C.name
+comparables:'with recent rents for homes like this near '+C.name
+compare:'to compare '+C.name+' with similar homes'
+compare:'to compare '+C.name+' with similar rentals'
+'We\'ll compare '+C.name+' with similar homes on price, payment plan and completion.'
+'We\'ll compare '+C.name+' with similar rentals on rent, size and location.'
+'Find me a home like this'
+'Find me a rental like this'
+var tail={alternatives:'with 3 similar homes and their prices',
+var tail={brochure:'with the brochure for '+C.name,alternatives:'with 3 similar homes and their prices',
+", I've just sent an enquiry about "+(C.leadName||C.name)+' on block.ke.'
+", I've just sent an enquiry about renting "+(C.leadName||C.name)+' on block.ke. When could I arrange a viewing?'
+'Name: '+p.name,C.url].filter(Boolean)
+'Name: '+p.name,C.url,'Ref W-'+C.id].filter(Boolean)
+ok.querySelector('[data-wa-ok]').href=waUrl(leadText(p));
+var wk=ok.querySelector('[data-wa-ok]');wk.setAttribute('data-blkct','1');wk.href=waUrl(leadText(p));
+'<a target="_blank" rel="noopener" href="'+esc(waUrl(leadText(p)))+'">Send it on WhatsApp instead</a>.'
+'<a target="_blank" rel="noopener" data-blkct="1" href="'+esc(waUrl(leadText(p)))+'">Send it on WhatsApp instead</a>.'
+JS;
+		$lines = explode( "\n", str_replace( "\r", '', $pairs ) );
+		$swap  = array();
+		for ( $i = 0; $i + 1 < count( $lines ); $i += 2 ) {
+			$swap[ $lines[ $i ] ] = $lines[ $i + 1 ];
+		}
+		if ( 13 !== count( $swap ) ) { // R1 (plan-check L2): one more pair, the brochure's thank-you; four for the script's WhatsApp links (H2)
+			return $js;
+		}
+		foreach ( array_keys( $swap ) as $anchor ) {
+			if ( 1 !== substr_count( $js, $anchor ) ) {
+				return $js;
+			}
+		}
+		return strtr( $js, $swap );
+	}
+
+	/**
+	 * v1.8.3: what a home for rent states about renting it, for its Renting section and hero: the deposit, the lease, a
+	 * service charge, furnishing, availability and viewing, each from the listing's own rows ("Furnishing status |
+	 * Unfurnished", "Availability | Available", "Viewing | By appointment"), its glance or snapshot table first, then every
+	 * rental, lease or tenancy terms section, or a rental's "Payment Plan" ("Deposit: two months' rent"). A value still to be confirmed ("confirmed at point of
+	 * enquiry", "to be confirmed", "on request", "varies") is not stated, nor a deposit or lease without a figure, nor a
+	 * service charge without an amount or "included". The rent itself is the listing's price. Keyed rows: label, value.
+	 */
+	function blockke_dev_rent_info( $kv, $secs ) {
+		$rows = $kv;
+		foreach ( $secs as $sec ) { // "Rental Terms", "Lease Terms", "Tenancy terms", "Rent and terms", a rental's "Payment Plan" or "Pricing"
+			if ( preg_match( '/\b(?:rental|rent|lease|leasing|tenancy|letting)\s+(?:and\s+\w+\s+)?terms?\b|\bterms of (?:the )?(?:lease|tenancy|rent)\b|^rent(?:al)?(?:\s+details)?$|payment plan|^pricing\b/i', $sec['title'] ) && ! preg_match( '/faq|question/i', $sec['title'] ) ) {
+				$rows = array_merge( $rows, blockke_dev_kv( $sec['tokens'] ) );
+			}
+		}
+		$open = '/\bconfirm|\bto be (?:advised|agreed|announced|shared|discussed|determined|provided)\b|\btb[acd]\b|\bon request\b|\bupon request\b|\bpoint of enquiry\b|\benquir|\bvar(?:y|ies|iable)\b|\bnegotiab|\bif applicable\b|\bdepend|\bask\b|\bn\/a\b|^-+$/i';
+		$fig  = '/\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|eighteen|twenty[- ]four|thirty[- ]six)\b|\ba (?:month|year)\b/i'; // fix: "Five months", "Nine months"
+		$want = array(
+			'deposit'   => array( 'Deposit', '/deposit/i', $fig ),
+			'lease'     => array( 'Lease', '/^lease$|lease (?:term|length|period|duration)|minimum (?:lease|term|stay|let|tenancy)|tenancy (?:term|length|period)/i', $fig, '/leasehold|freehold|\b99[- ]?years?\b|\b999\b/i' ), // fix: a title's "99-year leasehold" is not a tenancy
+			'service'   => array( 'Service charge', '/service charge|estate (?:fees?|charges?|levy)/i', '/\d|\binclu/i' ),
+			'furnish'   => array( 'Furnishing', '/furnish/i', '/furnish/i' ),
+			'available' => array( 'Availability', '/^(?:availab(?:le|ility)(?:\s+(?:from|date|status))?|move[- ]in(?:\s+date)?|vacant(?:\s+from)?|occupation(?:\s+date)?|possession(?:\s+date)?)$/i', '' ), // fix: not "Availability of parking", "Available units" or "Move-in ready"
+			'viewing'   => array( 'Viewing', '/^viewings?$|^viewing (?:arrangements?|times?)$/i', '' ),
+		);
+		$out  = array();
+		$all  = array( 'furnish' => array() ); // fix: furnishing from any table or "Label: value" list (43482's "Unit Types" table)
+		foreach ( $secs as $sec ) {
+			if ( ! preg_match( '/faq|question/i', $sec['title'] ) ) {
+				$all['furnish'] = array_merge( $all['furnish'], blockke_dev_kv( $sec['tokens'] ) );
+			}
+		}
+		foreach ( $want as $k => $w ) {
+			foreach ( isset( $all[ $k ] ) ? array_merge( $rows, $all[ $k ] ) : $rows as $p ) {
+				$v = trim( (string) $p[1], " \t.;" );
+				if ( ! isset( $out[ $k ] ) && preg_match( $w[1], $p[0] ) && '' !== $v && mb_strlen( $v ) <= 60 && ! preg_match( $open, $v ) && ( '' === $w[2] || preg_match( $w[2], $v ) ) && ( empty( $w[3] ) || ! preg_match( $w[3], $v ) ) ) {
+					$out[ $k ] = array( $w[0], ucfirst( $v ) );
+				}
+			}
+		}
+		// fix: a rent the listing states in US dollars first ("Rent | USD 5,500 a month", "Monthly rent | US$ 5,500"): the
+		// first rent row decides; a KES rent with a USD figure after it ("KES 650k / $5,000") stays a KES rent
+		foreach ( $rows as $p ) {
+			if ( preg_match( '/^(?:monthly\s+|asking\s+)?rent(?:al)?(?:\s+(?:a|per)\s+month|\s*\/\s*month|\s*\(\s*monthly\s*\))?$|^monthly rent(?:al)?$/i', trim( $p[0] ) ) ) {
+				$v = trim( (string) $p[1] );
+				if ( ! preg_match( $open, $v ) && preg_match( '/^(?:usd|us\$|\$)\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b)?/i', $v, $m ) ) {
+					$usd = (float) str_replace( ',', '', $m[1] ) * ( empty( $m[2] ) ? 1 : 1000 );
+					if ( $usd > 0 ) {
+						$out['usd'] = array( 'Rent', $usd );
+					}
+				}
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.8.3 (R1): the one phrase for a rental's rent, wherever it is printed (the layout and its leads; the classic box, the
+	 * cards and the structured data use it too). From the price ($price: the page's price, per sq ft when $flag is 'unit'),
+	 * the listing's after-price label and its rent in US dollars: the meta bke_rent_usd (a number) first, else $usd, the USD
+	 * rent the listing's own rows state (blockke_dev_rent_info()). Returns:
+	 *   'amt'        the rent as it leads: "KES 200,000", "KES 130 per sq ft", "USD 5,500"; '' when on request;
+	 *   'short'      a short figure for tight places such as cards: "KES 200K", "KES 130 per sq ft", "USD 5,500" (a rental's
+	 *                own page states 'amt', exact, in its hero cell, WhatsApp text and Renting section);
+	 *   'per'        "a month", "a week", "a day", "a night" or "a year" from the label ("per day" reads "a day"); "a month"
+	 *                with no label or a label that only says per sq ft; any other label as written, lower case;
+	 *   'kes'        a USD rent's KES figure when it is shown KES first ("KES 710,000"), else '';
+	 *   'usd'        a USD rent ("USD 5,500", "USD 1.30 per sq ft"), else '';
+	 *   'date'       the date of that KES figure ("20 October 2026"), and 'rate' its KES to the dollar ("129.2"), with 'kes' only;
+	 *   'on_request' true with no price, a label "on application", "on request" or "POA", or over KES 2M with no label;
+	 *   'line'       the whole rent: "KES 200,000 a month", "KES 130 per sq ft a month", "KES 710,000 a month (USD 5,500)",
+	 *                "USD 5,500 a month"; '' when on request;
+	 *   'note'       a USD rent's sentence: "The rent is set in US dollars." or, KES first, "The rent is set in US dollars; KES
+	 *                figures are approximate, at about KES 129.2 to the US dollar on 20 October 2026."; else ''.
+	 *   'num', 'cur' the rent as a number and the currency the lease is set in, as the page states it (the structured data):
+	 *                200000 and 'KES'; 130 and 'KES' per sq ft; 5500 and 'USD' for a rent set in US dollars, KES first or not;
+	 *                0 and '' when on request.
+	 * KES first only when bke_rent_usd and bke_rent_usd_date (YYYY-MM-DD) are both set and the price agrees at KES 80-200 to
+	 * the dollar; otherwise a USD rent is stated in US dollars alone, with no KES figure.
+	 */
+	function blockke_dev_rent_phrase( $id, $price, $flag, $usd = null ) {
+		$price = (float) $price;
+		$unit  = 'unit' === $flag ? ' per sq ft' : '';
+		$cur   = blockke_dev_config()['currency'];
+		$l     = trim( preg_replace( '/\s+/u', ' ', blockke_dev_text( (string) blockke_dev_pm( $id, 'property_label' ) ) ) );
+		$out   = array( 'amt' => '', 'short' => '', 'per' => 'a month', 'kes' => '', 'usd' => '', 'date' => '', 'rate' => '', 'on_request' => false, 'line' => '', 'note' => '', 'num' => 0, 'cur' => '' );
+		$ask   = (bool) preg_match( '/\bon\s+(?:application|request)\b|\bp\.?o\.?a\b/i', $l ); // "Rent on application", "Price on request", "POA"
+		$named = '';
+		foreach ( array( 'a month' => '/month|\bp\.?\s?m\b/i', 'a week' => '/\bweek(?:s|ly)?\b/i', 'a day' => '/\b(?:days?|daily)\b/i', 'a night' => '/\bnight(?:s|ly)?\b/i', 'a year' => '/\b(?:years?|yearly|annum|annual(?:ly)?)\b|\bp\.\s?a\b/i' ) as $w => $re ) {
+			if ( preg_match( $re, $l ) ) {
+				$named = $w;
+				break;
+			}
+		}
+		if ( '' !== $named ) {
+			$out['per'] = $named;
+		} elseif ( '' !== $l && '' === $unit && ! $ask ) {
+			$out['per'] = mb_strtolower( $l ); // a label that names no period: as written
+		}
+		$m  = array();
+		$mu = get_post_meta( (int) $id, 'bke_rent_usd', true );
+		$mu = is_scalar( $mu ) && preg_match( '/^\s*(?:usd|us\$|\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*$/i', (string) $mu, $m ) ? (float) str_replace( ',', '', $m[1] ) : 0.0;
+		$u  = $mu > 0 ? $mu : ( is_numeric( $usd ) ? (float) $usd : 0.0 );
+		if ( $ask || ( $u <= 0 && ( $price <= 0 || ( '' === $l && $price > 2000000 ) ) ) ) {
+			$out['on_request'] = true;
+			return $out;
+		}
+		if ( $u > 0 ) {
+			$out['usd'] = 'USD ' . number_format( $u, floor( $u ) === $u ? 0 : 2 ) . $unit;
+			$out['num'] = floor( $u ) === $u ? $u : round( $u, 2 );
+			$out['cur'] = 'USD';
+			$dt         = $mu > 0 ? get_post_meta( (int) $id, 'bke_rent_usd_date', true ) : '';
+			if ( is_scalar( $dt ) && preg_match( '/^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$/', (string) $dt, $m ) && checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) && $price > 0 && $price / $u >= 80 && $price / $u <= 200 ) {
+				$kes          = '' === $unit && $price >= 10000 ? round( $price, -3 ) : $price;
+				$out['kes']   = blockke_dev_money( $kes );
+				$out['amt']   = $out['kes'] . $unit;
+				$out['short'] = '' === $unit ? blockke_dev_short( $kes ) : $out['amt'];
+				$out['date']  = gmdate( 'j F Y', gmmktime( 0, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1] ) );
+				$out['rate']  = rtrim( rtrim( number_format( $price / $u, 1, '.', '' ), '0' ), '.' );
+				$out['line']  = $out['amt'] . ' ' . $out['per'] . ' (' . $out['usd'] . ')';
+				$out['note']  = 'The rent is set in US dollars; ' . $cur . ' figures are approximate, at about ' . $cur . ' ' . $out['rate'] . ' to the US dollar on ' . $out['date'] . '.';
+				return $out;
+			}
+			$out['amt']   = $out['usd'];
+			$out['short'] = $out['usd'];
+			$out['line']  = $out['amt'] . ' ' . $out['per'];
+			$out['note']  = 'The rent is set in US dollars.';
+			return $out;
+		}
+		$out['amt']   = blockke_dev_money( $price ) . $unit;
+		$out['num']   = round( $price );
+		$out['cur']   = $cur;
+		$out['short'] = '' === $unit ? blockke_dev_short( $price ) : $out['amt'];
+		$out['line']  = $out['amt'] . ' ' . $out['per'];
+		return $out;
+	}
+
+	/** v1.8.3 (R1): the rent of a rental's page (blockke_dev_data()) as blockke_dev_rent_phrase() states it, with the USD rent its rows state. */
+	function blockke_dev_rent_amount( $d ) {
+		$R = isset( $d['rent']['stated'] ) ? (array) $d['rent']['stated'] : array();
+		return blockke_dev_rent_phrase( $d['id'], $d['price_from'], $d['ctx']['flag'], isset( $R['usd'] ) ? $R['usd'][1] : null );
+	}
+
+	/**
+	 * v1.8.3 (R1, review item 8): a rental's page name for the sentences that already say it is to rent (the WhatsApp text,
+	 * "See it in person", the lead's "Rental:" line, the script's thank-you): without "to Let", "for Rent", "to Rent" or "for
+	 * Lease" ("Furnished 2 Bedroom Apartment to Let in Brookside" reads "Furnished 2 Bedroom Apartment in Brookside"), never
+	 * "Rent-to-Own"; the name as it is when nothing else would be left.
+	 */
+	function blockke_dev_rent_name( $short ) {
+		$n = preg_replace( '/(?:^|\s+)(?:to\s+let|for\s+rent|to\s+rent|for\s+lease)\b(?![- ]to[- ]own)/iu', '', (string) $short );
+		$n = preg_replace( '/^[\s,;:|–—-]+|[\s,;:|–—-]+$/u', '', preg_replace( '/\s+/u', ' ', $n ) );
+		return '' !== $n ? $n : (string) $short;
 	}
 
 	function blockke_dev_data( $id ) {
@@ -6233,6 +7371,10 @@ JS;
 		$chip    = implode( ' · ', array_filter( array( $status, $action ? ucfirst( strtolower( blockke_dev_text( $action->name ) ) ) : '' ) ) );
 		if ( $land ) { // plots are not moved into: no status word
 			$chip = 'rent' === blockke_dev_action( $id ) ? 'Land for lease' : 'Plots for sale';
+		}
+		$rent = ! $land && blockke_dev_rent_on( $id ); // v1.8.3: a home for rent reads as a rental, never as a sale (fix: not a title for both rent and sale); R1: only with rent_pages on
+		if ( $rent ) { // not "Ready to move in", a sale status from the Complete and Ready-now terms every rental carries
+			$chip = 'For rent';
 		}
 
 		// Units and price
@@ -6569,7 +7711,7 @@ JS;
 			'hero_label' => $hero_label,
 			'gallery_note' => $gallery_note,
 			'video'      => blockke_dev_video( $id ),
-			'facts'      => $land ? blockke_dev_land_facts( $id, $kv, $units, $plan ) : blockke_dev_facts( $id, $kv, $units, $completion ),
+			'facts'      => $land ? blockke_dev_land_facts( $id, $kv, $units, $plan ) : blockke_dev_facts( $id, $kv, $units, $rent ? '' : $completion ), // v1.8.3: no completion fact for a rental
 			'overview'   => array(
 				'heading'    => blockke_dev_text( get_post_meta( $id, 'bke_dev_overview_heading', true ) ),
 				'paras'      => $intro_p,
@@ -6589,7 +7731,8 @@ JS;
 			'ctx'        => $ctx,
 			'agent'      => $agent,
 			'brochure'   => '' !== blockke_dev_brochure( $id ),
-			'plans'      => ! $land && blockke_dev_has_plans( $id ), // v1.8.1: the forms offer floor plans only when the listing has them (v1.8.2: always, config 'floor_plans_default')
+			'plans'      => ! $land && ! $rent && blockke_dev_has_plans( $id ), // v1.8.1: only when the listing has them (v1.8.2: always, config 'floor_plans_default'); rentals: a viewing
+			'rent'       => $rent ? array( 'stated' => blockke_dev_rent_info( $kv, $secs ) ) : false, // v1.8.3: a home for rent: what its listing states about renting it
 			'crumbs'     => $crumbs,
 			'crumb_here' => $here,
 			'progress'   => blockke_dev_progress( $id ), // v1.7: the site reports, newest first (a unit: its development's)
@@ -6681,12 +7824,13 @@ JS;
 		return $h . '</div></fieldset>';
 	}
 
-	function blockke_dev_timelines() {
-		return array( 'Within 3 months', '3–12 months', 'Just exploring' );
+	/** When the visitor would like to buy; v1.8.3 ($rent): to move in, for a home for rent. */
+	function blockke_dev_timelines( $rent = false ) {
+		return $rent ? array( 'This month', '1–3 months', 'Later' ) : array( 'Within 3 months', '3–12 months', 'Just exploring' );
 	}
 
-	function blockke_dev_timeline( $s ) {
-		return in_array( $s, blockke_dev_timelines(), true ) ? $s : '';
+	function blockke_dev_timeline( $s, $rent = false ) {
+		return in_array( $s, blockke_dev_timelines( $rent ), true ) ? $s : '';
 	}
 
 	/** "Buying to": homes are lived in or let; land is built on or held. Each option at most 20 characters (the lead keeps 20). */
@@ -6710,6 +7854,7 @@ JS;
 	 */
 	function blockke_dev_more( $d, $key ) {
 		$land   = ! empty( $d['land'] );
+		$rent   = ! empty( $d['rent'] ); // v1.8.3: a home for rent: when to move in, and no "Buying to"
 		$groups = blockke_dev_unit_groups( $d['units'] );
 		$unitq  = count( $groups ) > 1 ? '<div data-more-unit>' . blockke_dev_chips( 'unit-' . $key, 'Which home?', $groups, '' ) . '</div>' : '';
 		if ( $land ) { // the plot type, else the plot size; both sent as "unit"
@@ -6725,8 +7870,9 @@ JS;
 		}
 		return '<div class="bkd-more" data-more role="group" aria-label="Optional questions" hidden><p class="bkd-more-t">Help us send the right details <small>(optional)</small></p>'
 			. $unitq
-			. blockke_dev_chips( 'timeline-' . $key, 'When would you like to buy?', blockke_dev_timelines(), '' )
-			. blockke_dev_chips( 'purpose-' . $key, 'Buying to', blockke_dev_purposes( $land ), '' )
+			. ( $rent ? blockke_dev_chips( 'timeline-' . $key, 'When would you like to move in?', blockke_dev_timelines( true ), '' )
+				: blockke_dev_chips( 'timeline-' . $key, 'When would you like to buy?', blockke_dev_timelines(), '' )
+				. blockke_dev_chips( 'purpose-' . $key, 'Buying to', blockke_dev_purposes( $land ), '' ) )
 			. '<button class="bkd-btn bkd-btn-line bkd-btn-sm" type="button" data-more-send>Send these answers</button>'
 			. '<p class="bkd-more-done" role="status" hidden></p></div>';
 	}
@@ -6808,7 +7954,7 @@ JS;
 		return '<header class="bkd-lph"><div class="bkd-wrap bkd-lph-in">'
 			. '<img class="bkd-lph-logo" src="' . esc_url( blockke_dev_logo() ) . '" alt="' . esc_attr( $cfg['brand_full'] ) . '" width="193" height="28">'
 			. '<div class="bkd-lph-r"><a class="bkd-lph-a" href="tel:' . esc_attr( $ag['phone'] ) . '" aria-label="Call ' . esc_attr( $ag['phone_display'] ) . '">' . blockke_dev_icon( 'phone' ) . '<span>' . esc_html( $ag['phone_display'] ) . '</span></a>'
-			. '<a class="bkd-lph-a" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
+			. '<a class="bkd-lph-a" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa' . ( ! empty( $d['rent'] ) ? ' data-blkct="1"' : '' ) . ' aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
 			. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm bkd-lph-cta" type="button" data-bkd-enquire="lp-header">Get the price list</button></div></div></header>';
 	}
 
@@ -6834,28 +7980,573 @@ JS;
 		echo "\n</body></html>\n";
 	}
 
+	/**
+	 * v1.8.3 (R1): 'forms_post', lead forms that also post without script: false; a list of page families; true (every
+	 * family); an editor's preview: ?bke_forms=1 / 0. R1 knows one family, 'rent': a home for rent's development page in
+	 * rent mode (blockke_dev_np_on()). The classic rental box posts without script whatever this says (plan-check H1), so it
+	 * does not ask; it prints blockke_dev_np_fields() itself.
+	 */
+	function blockke_dev_forms_post( $fam ) {
+		if ( isset( $_GET['bke_forms'] ) && is_scalar( $_GET['bke_forms'] ) && current_user_can( 'edit_posts' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return '1' === (string) $_GET['bke_forms']; // phpcs:ignore WordPress.Security.NonceVerification
+		}
+		$cfg = blockke_dev_config();
+		$v   = isset( $cfg['forms_post'] ) ? $cfg['forms_post'] : false;
+		if ( is_string( $v ) && ! in_array( $v, array( '', '0', '1' ), true ) ) {
+			$v = preg_split( '/[\s,]+/', $v, -1, PREG_SPLIT_NO_EMPTY ); // the list written as text: "rent" or "rent, new"
+		}
+		return is_array( $v ) ? in_array( $fam, $v, true ) : ! empty( $v );
+	}
+
+	/** v1.8.3 (R1, forms_post): whether this development page's lead forms also post without script ('rent': a rental in rent mode). */
+	function blockke_dev_np_on( $d ) {
+		return ! empty( $d['rent'] ) && blockke_dev_forms_post( 'rent' );
+	}
+
+	/** v1.8.3 (R1): the attributes that make a lead form post without script, to the development-lead route. */
+	function blockke_dev_np_form_attr() {
+		return ' method="post" action="' . esc_url( rest_url( 'block/v1/development-lead' ) ) . '"';
+	}
+
+	/**
+	 * v1.8.3 (R1): a no-script lead form's hidden context: the marker bkd_np=1 (only a post that carries it is answered with a
+	 * 303, blockke_dev_lead_route(); plan-check M8), the listing, this page's URL with its query (so an editor's bke_rent=1
+	 * survives, as on the script path), the form's source and, for a form outside #bkd-enquire, the section the 303 returns
+	 * to ($back 'bkd-rent': the classic rental box). The page script ignores them: it sends its own fields.
+	 */
+	function blockke_dev_np_fields( $lid, $source, $back = '' ) {
+		return '<input type="hidden" name="bkd_np" value="1"><input type="hidden" name="listing" value="' . (int) $lid . '">'
+			. '<input type="hidden" name="page" value="' . esc_attr( blockke_dev_np_page() ) . '"><input type="hidden" name="source" value="' . esc_attr( $source ) . '">'
+			. ( '' !== $back ? '<input type="hidden" name="bkd_back" value="' . esc_attr( $back ) . '">' : '' );
+	}
+
+	/** v1.8.3 (R1): this request's URL on the site's own host, query included, at most 300 characters (as the script sends location.href), without a returned bkd_sent / bkd_err. */
+	function blockke_dev_np_page() {
+		$h   = wp_parse_url( home_url( '/' ) );
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( (string) $_SERVER['REQUEST_URI'] ) : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		if ( preg_match( '/[?&]bkd_(?:sent|err)=/', $uri ) ) {
+			$uri = remove_query_arg( array( 'bkd_sent', 'bkd_err' ), $uri );
+		}
+		$uri = '' !== $uri && '/' === $uri[0] ? $uri : '/' . $uri;
+		return mb_substr( ( isset( $h['scheme'] ) ? $h['scheme'] : 'https' ) . '://' . ( isset( $h['host'] ) ? $h['host'] : '' ) . ( isset( $h['port'] ) ? ':' . $h['port'] : '' ) . $uri, 0, 300 );
+	}
+
+	/** v1.8.3 (R1): what a no-script post came back with (this request's query): 'sent', an error code (blockke_dev_np_errors()), or ''. */
+	function blockke_dev_np_state() {
+		if ( isset( $_GET['bkd_sent'] ) && '1' === $_GET['bkd_sent'] ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return 'sent';
+		}
+		if ( isset( $_GET['bkd_err'] ) && is_scalar( $_GET['bkd_err'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$c = sanitize_key( (string) $_GET['bkd_err'] ); // phpcs:ignore WordPress.Security.NonceVerification
+			return isset( blockke_dev_np_errors()[ $c ] ) ? $c : 'fail';
+		}
+		return '';
+	}
+
+	/** v1.8.3 (R1): a no-script post's error codes (?bkd_err=) and what the form then says: the lead handler's own messages. */
+	function blockke_dev_np_errors() {
+		return array(
+			'rate'  => 'Too many requests from this connection. Please WhatsApp us directly.',
+			'name'  => 'Please add your name.',
+			'phone' => 'Please add a phone or WhatsApp number we can reach you on.',
+			'gone'  => 'This listing is no longer available.',
+			'fail'  => "Sorry, that didn't go through.",
+		);
+	}
+
+	/**
+	 * v1.8.3 (R1, forms_post): the thank-you a no-script post returns to (?bkd_sent=1#bkd-enquire), drawn by the server in
+	 * place of the full form, in the rental script's words; its WhatsApp link asks for a viewing and carries the Ref and
+	 * data-blkct="1", so snippet 40769 leaves it alone (plan-check H2). Rental pages only (R1's one family).
+	 */
+	function blockke_dev_np_thanks( $d ) {
+		$cfg  = blockke_dev_config();
+		$name = blockke_dev_rent_name( $d['short'] );
+		$wa   = 'https://wa.me/' . $d['agent']['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I've just sent an enquiry about renting " . $name . " on block.ke. When could I arrange a viewing? Ref W-" . (int) $d['id'] . '. ' . $d['url'] ); // as the page's own links: esc_url() drops line breaks
+		return '<div class="bkd-ok" role="status"><div class="bkd-ok-tick">' . blockke_dev_icon( 'check' ) . '</div><h3>Thank you.</h3>'
+			. '<div class="bkd-ok-msg">' . esc_html( 'An advisor will be in touch shortly to arrange a viewing of ' . $name . '.' ) . '</div>'
+			. '<div class="bkd-ok-actions"><a class="bkd-btn bkd-btn-line" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa data-blkct="1">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'Continue on WhatsApp</a></div></div>';
+	}
+
+	/** v1.8.3 (R1, forms_post): the full form's note when a no-script post did not go through (?bkd_err=<code>), as the script's own, with the page's WhatsApp link ($wa). */
+	function blockke_dev_np_alert( $code, $wa ) {
+		$m = blockke_dev_np_errors();
+		return '<div class="bkd-alert" role="alert">' . esc_html( isset( $m[ $code ] ) ? $m[ $code ] : $m['fail'] ) . ' <a target="_blank" rel="noopener" data-blkct="1" href="' . esc_url( $wa ) . '">Send it on WhatsApp instead</a>.</div>';
+	}
+
+	/** v1.8.3 (R1, forms_post): the pop-up triggers as links to the page's own form (#bkd-enquire), so they lead somewhere without script; with script they still open the pop-up (its click handler calls preventDefault()). */
+	function blockke_dev_np_triggers( $h ) {
+		$r = preg_replace( '#<button class="([^"]*)" type="button" (data-bkd-enquire="[^"]*"[^>]*)>(.*?)</button>#s', '<a class="$1" href="#bkd-enquire" $2>$3</a>', $h );
+		return null === $r ? $h : $r;
+	}
+
+	/** v1.8.3 (R1): the page a no-script post returned to (?bkd_sent / ?bkd_err) is never cached or indexed. */
+	function blockke_dev_np_noindex() {
+		nocache_headers();
+		add_filter(
+			'wp_robots',
+			function ( $r ) {
+				unset( $r['index'] );
+				$r['noindex'] = true;
+				$r['follow']  = true;
+				return $r;
+			},
+			99
+		);
+		add_filter(
+			'rank_math/frontend/robots',
+			function ( $r ) {
+				$r['index']  = 'noindex';
+				$r['follow'] = 'follow';
+				return $r;
+			},
+			99
+		);
+	}
+
 	function blockke_dev_quick_form( $source, $cta, $d ) {
-		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+		$np = blockke_dev_np_on( $d ); // R1 (forms_post): it also posts without script
+		return '<form class="bkd-form" data-bkd-lead="' . esc_attr( $source ) . '"' . ( $np ? blockke_dev_np_form_attr() : '' ) . ' novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">' . blockke_dev_rent_rp_field( $d ) // v1.8.3 (R1): rp=1 on a rental's preview only
+			. ( $np ? blockke_dev_np_fields( $d['id'], $source ) : '' )
 			. '<div class="bkd-qgrid">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>'
 			. '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">' . esc_html( $cta ) . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok( blockke_dev_more( $d, $source ) );
 	}
 
-	function blockke_dev_full_form( $d ) {
+	function blockke_dev_full_form( $d, $alert = '' ) { // R1 (forms_post): $alert, the note after a no-script post that did not go through
 		$land   = ! empty( $d['land'] );
+		$rent   = ! empty( $d['rent'] ); // v1.8.3: a home for rent: when to move in, no "Buying to"
 		$groups = $land ? blockke_dev_land_choices( $d['units'] ) : blockke_dev_unit_groups( $d['units'] ); // land: the plot kinds, servicing included
-		$h      = '<form class="bkd-form" data-bkd-lead="contact" novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">';
+		$np     = blockke_dev_np_on( $d ); // R1 (forms_post): it also posts without script
+		$h      = '<form class="bkd-form" data-bkd-lead="contact"' . ( $np ? blockke_dev_np_form_attr() : '' ) . ' novalidate><input class="bkd-hp" type="text" name="bkd_hp" tabindex="-1" autocomplete="off" aria-hidden="true">' . blockke_dev_rent_rp_field( $d ) // v1.8.3 (R1): rp=1 on a rental's preview only
+			. ( $np ? blockke_dev_np_fields( $d['id'], 'contact' ) : '' );
 		$h .= '<div class="bkd-two">' . blockke_dev_field( 'name', 'Full name', 'text', 'name' ) . blockke_dev_field( 'phone', 'Phone / WhatsApp', 'tel', 'tel', '07XX XXX XXX' ) . '</div>';
 		$h .= blockke_dev_field( 'email', 'Email', 'email', 'email', '', true );
 		if ( count( $groups ) > 1 ) {
 			$h .= blockke_dev_chips( 'unit', 'Interested in', array_merge( $groups, array( 'Not sure yet' ) ), 'Not sure yet' );
 		}
-		$h .= blockke_dev_chips( 'purpose', 'Buying to', blockke_dev_purposes( $land ), $land ? '' : 'Live in' ); // land: no default, buyers build, hold or run a business
-		$h .= blockke_dev_chips( 'timeline', 'When would you like to buy?', blockke_dev_timelines(), '' );
+		if ( $rent ) {
+			$h .= blockke_dev_chips( 'timeline', 'When would you like to move in?', blockke_dev_timelines( true ), '' );
+		} else {
+			$h .= blockke_dev_chips( 'purpose', 'Buying to', blockke_dev_purposes( $land ), $land ? '' : 'Live in' ); // land: no default, buyers build, hold or run a business
+			$h .= blockke_dev_chips( 'timeline', 'When would you like to buy?', blockke_dev_timelines(), '' );
+		}
 		$h .= blockke_dev_chips( 'contact', 'Best way to reach you', array( 'WhatsApp', 'Phone call', 'Email' ), 'WhatsApp' );
-		$h .= '<label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="' . ( $land ? 'Anything we should know: plot size, intended use, budget, questions.' : 'Anything we should know: budget, timing, questions.' ) . '"></textarea></label>';
-		$h .= '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send my enquiry' . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok();
+		$h .= '<label class="bkd-f"><span>Message <small>(optional)</small></span><textarea name="message" placeholder="' . ( $land ? 'Anything we should know: plot size, intended use, budget, questions.' : ( $rent ? 'Anything we should know: move-in date, household, questions.' : 'Anything we should know: budget, timing, questions.' ) ) . '"></textarea></label>';
+		$h .= $alert . '<button class="bkd-btn bkd-btn-navy bkd-btn-block" type="submit">Send my enquiry' . blockke_dev_icon( 'arrow' ) . '</button>' . blockke_dev_consent( $d ) . '</form>' . blockke_dev_ok();
 		return $h;
 	}
+
+	/**
+	 * v1.8.3 (R1): 'gallery_ssr', the gallery's photos 6+ also in the HTML: false; a list of page families; true (every family);
+	 * an editor's preview: ?bke_gal=1 / 0. R1 knows one family, 'rent': a home for rent's development page in rent mode
+	 * (blockke_dev_gallery_more_on()). Off, photos 6+ are in the lightbox's script data only, as before.
+	 */
+	function blockke_dev_gallery_ssr( $fam ) {
+		if ( isset( $_GET['bke_gal'] ) && is_scalar( $_GET['bke_gal'] ) && current_user_can( 'edit_posts' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return '1' === (string) $_GET['bke_gal']; // phpcs:ignore WordPress.Security.NonceVerification
+		}
+		$cfg = blockke_dev_config();
+		$v   = isset( $cfg['gallery_ssr'] ) ? $cfg['gallery_ssr'] : false;
+		if ( is_string( $v ) && ! in_array( $v, array( '', '0', '1' ), true ) ) {
+			$v = preg_split( '/[\s,]+/', $v, -1, PREG_SPLIT_NO_EMPTY ); // the list written as text: "rent" or "rent, new"
+		}
+		return is_array( $v ) ? in_array( $fam, $v, true ) : ! empty( $v );
+	}
+
+	/** v1.8.3 (R1, gallery_ssr): whether this development page prints its photos 6+ in the gallery ('rent': a rental in rent mode). */
+	function blockke_dev_gallery_more_on( $d ) {
+		return ! empty( $d['rent'] ) && blockke_dev_gallery_ssr( 'rent' );
+	}
+
+	/**
+	 * v1.8.3 (R1, gallery_ssr): photos 6+ as links to their large file, for search engines and anything else that reads the HTML,
+	 * printed after the gallery's 5 buttons. Each link has the lightbox's own index (data-bkd-open, as the buttons) and its
+	 * file (the 1536 size, else the original, as C.gallery). Visually hidden (.bkd-sr) and out of the tab order; a click opens
+	 * the lightbox and stays on the page (onclick returns false; Elementor's image lightbox is told to leave it alone). The
+	 * image is lazy and drawn 1px wide (sizes), so a browser that fetches a hidden lazy image at all takes the smallest file.
+	 * A photo with no file is left out (the buttons show a placeholder, which is not a photo to link to).
+	 */
+	function blockke_dev_gallery_more( $d ) {
+		$h = '';
+		foreach ( array_slice( $d['images'], 5, null, true ) as $i => $aid ) {
+			$full = wp_get_attachment_image_url( $aid, '1536x1536' );
+			if ( ! $full ) {
+				$full = wp_get_attachment_url( $aid );
+			}
+			$img = $full ? wp_get_attachment_image( $aid, 'large', false, array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => '1px', 'alt' => blockke_dev_alt( $aid, $d['short'] . ' photo ' . ( $i + 1 ) ) ) ) : '';
+			if ( '' === $img ) {
+				continue;
+			}
+			$h .= '<a class="bkd-gal-more bkd-sr" href="' . esc_url( $full ) . '" data-bkd-open="' . (int) $i . '" tabindex="-1" data-elementor-open-lightbox="no" onclick="return false">' . $img . '</a>';
+		}
+		return $h;
+	}
+
+	/**
+	 * v1.8.3 (R1): 'listing_jsonld', our structured data in a listing page's head: false; a list of page families; true (every
+	 * family); an editor's preview: ?bke_ld=1 / 0. R1 knows one family, 'rent': a home for rent's page in rent mode, drawn by
+	 * the development layout or by the classic theme page (blockke_dev_ld_target()). Off, a listing page carries what it
+	 * carries today: Rank Math's BreadcrumbList and the listing the header injection builds in the browser
+	 * (script#bke-listing-schema).
+	 */
+	function blockke_dev_listing_jsonld( $fam ) {
+		if ( isset( $_GET['bke_ld'] ) && is_scalar( $_GET['bke_ld'] ) && current_user_can( 'edit_posts' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return '1' === (string) $_GET['bke_ld']; // phpcs:ignore WordPress.Security.NonceVerification
+		}
+		$cfg = blockke_dev_config();
+		$v   = isset( $cfg['listing_jsonld'] ) ? $cfg['listing_jsonld'] : false;
+		if ( is_string( $v ) && ! in_array( $v, array( '', '0', '1' ), true ) ) {
+			$v = preg_split( '/[\s,]+/', $v, -1, PREG_SPLIT_NO_EMPTY ); // the list written as text: "rent"
+		}
+		return is_array( $v ) ? in_array( $fam, $v, true ) : ! empty( $v );
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld): the listing this request's head describes, else 0: a single listing read as a rental
+	 * (blockke_dev_rent_on(): 'rent_pages', or an editor's ?bke_rent=1 preview), not land and not drawn as an ad landing page,
+	 * with 'listing_jsonld' covering 'rent'.
+	 */
+	function blockke_dev_ld_target() {
+		static $id = null;
+		if ( null === $id ) {
+			$id  = 0;
+			$pid = ! is_admin() && ! is_feed() && ! is_embed() && is_singular( 'estate_property' ) ? (int) get_queried_object_id() : 0;
+			if ( $pid && blockke_dev_listing_jsonld( 'rent' ) && blockke_dev_rent_on( $pid ) && ! blockke_dev_is_land( $pid ) && ! blockke_dev_lp_target() ) {
+				$id = $pid;
+			}
+		}
+		return $id;
+	}
+
+	/** v1.8.3 (R1, listing_jsonld): whether $html prints a RealEstateListing of its own (a JSON-LD block in the listing's text). */
+	function blockke_dev_ld_own( $html ) {
+		if ( false === stripos( (string) $html, 'ld+json' ) || ! preg_match_all( '#<script\b[^>]*application/ld\+json[^>]*>(.*?)</script>#is', (string) $html, $m ) ) {
+			return false;
+		}
+		foreach ( $m[1] as $j ) {
+			if ( preg_match( '/"@type"\s*:\s*(?:\[[^\]]*)?"RealEstateListing"/', $j ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld): the word the development layout's hero puts before a rental's rent ("Rent from / month"),
+	 * decided as blockke_dev_render() decides it: 'From', 'Up to' or ''. $ra: blockke_dev_rent_amount( $d ).
+	 */
+	function blockke_dev_ld_lead( $d, $ra ) {
+		$cx  = $d['ctx'];
+		$tb  = isset( $d['title_beds'] ) ? $d['title_beds'] : array( 'beds' => array(), 'studio' => false );
+		$one = ! empty( $cx['house'] ) && 'master' !== $cx['kind'] && count( $d['units'] ) <= 1 && empty( $d['from_said'] ) && count( $tb['beds'] ) + (int) $tb['studio'] <= 1 && ! preg_match( '/\b\d+\s*(?:&|and|to|or|–|-|,)\s*\d+[\s-]*bed/iu', $d['title'] );
+		$lab = 'From';
+		if ( $d['price_from'] && ( ! $d['units'] || $one ) && ( (float) $d['price_from'] === (float) $cx['price'] || ( $one && abs( $d['price_from'] - $cx['price'] ) <= 0.01 * $cx['price'] ) ) ) {
+			if ( 'upto' === $cx['flag'] ) {
+				$lab = 'Up to';
+			} elseif ( 'unit' === $cx['flag'] || ( ( ! $d['offplan'] || $one ) && ! $d['from_label'] ) ) {
+				$lab = '';
+			}
+		}
+		return ! $d['price_from'] && '' !== $ra['amt'] ? '' : $lab; // a USD rent with no price field: one rent
+	}
+
+	/** v1.8.3 (R1, listing_jsonld): a figure for the JSON: a whole number as an integer (100000, not 100000.0). */
+	function blockke_dev_ld_n( $n ) {
+		return floor( (float) $n ) === (float) $n && abs( (float) $n ) < 1e15 ? (int) $n : (float) $n;
+	}
+
+	/** v1.8.3 (R1, listing_jsonld): a size as the page states it ("120 m²", "84 – 126 m²", "2,756 sq ft") as a QuantitativeValue, else null. */
+	function blockke_dev_ld_qty( $s ) {
+		$s = str_replace( ',', '', (string) $s );
+		if ( ! preg_match_all( '/\d+(?:\.\d+)?/', $s, $m ) ) {
+			return null;
+		}
+		$u = preg_match( '/m²|m2\b|sq\.?\s*m\b|sqm\b|square met/i', $s ) ? 'MTK' : ( preg_match( '/ft²|ft2\b|sq\.?\s*f|sqft\b|square f/i', $s ) ? 'FTK' : '' );
+		$v = array_map( 'floatval', $m[0] );
+		if ( '' === $u || min( $v ) <= 0 ) {
+			return null;
+		}
+		$q = array( '@type' => 'QuantitativeValue' );
+		if ( min( $v ) === max( $v ) ) {
+			$q['value'] = blockke_dev_ld_n( $v[0] );
+		} else {
+			$q['minValue'] = blockke_dev_ld_n( min( $v ) );
+			$q['maxValue'] = blockke_dev_ld_n( max( $v ) );
+		}
+		$q['unitCode'] = $u;
+		return $q;
+	}
+
+	/** v1.8.3 (R1, listing_jsonld): an "Available from" row's date ("1 November 2026", "November 2026", "2026-11-01") as Y-m-d, else ''. */
+	function blockke_dev_ld_day( $s ) {
+		$s = trim( preg_replace( '/(\d)(?:st|nd|rd|th)\b/i', '$1', preg_replace( '/^(?:available\s+)?(?:from|on)\s+/i', '', trim( (string) $s ) ) ) );
+		foreach ( array( 'Y-m-d', 'j F Y', 'j M Y', 'F j, Y', 'M j, Y', 'F j Y', 'F Y', 'M Y' ) as $f ) {
+			$x = DateTime::createFromFormat( '!' . $f, $s );
+			if ( $x && 0 === strcasecmp( $x->format( $f ), $s ) ) {
+				return $x->format( 'Y-m-d' );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld; spec 7.6): what is let. Apartment, House or SingleFamilyResidence (the listing's category, or
+	 * its title's words when the category says none or more than one), with its bedrooms, floor size (the page's Size fact)
+	 * and address to area level; a commercial listing is a Place, its size field an additionalProperty. No map pin (many
+	 * rentals sit on a neighbourhood point, blockke_dev_area_pins()).
+	 */
+	function blockke_dev_ld_about( $d ) {
+		$id = (int) $d['id'];
+		$tl = mb_strtolower( $d['title'] );
+		if ( has_term( array( 'commercial', 'offices', 'warehouses' ), 'property_category', $id ) || ( ! has_term( '', 'property_category', $id ) && preg_match( '/\b(?:offices?|warehouses?|godowns?|shops?|commercial|retail)\b/u', $tl ) ) ) {
+			$type = 'Place';
+		} else {
+			$k = array();
+			foreach ( array( 'Apartment' => array( 'apartments', 'studio-apartments', 'studio' ), 'House' => array( 'houses-residential' ), 'SingleFamilyResidence' => array( 'villas-residential' ) ) as $t => $slugs ) {
+				if ( has_term( $slugs, 'property_category', $id ) ) {
+					$k[] = $t;
+				}
+			}
+			if ( 1 !== count( $k ) ) { // none, or more than one: the title says which
+				$k = array();
+				if ( preg_match( '/\b(?:apartments?|studios?|penthouses?|bedsitters?|flats?)\b/u', $tl ) ) {
+					$k[] = 'Apartment';
+				} elseif ( preg_match( '/\bvillas?\b/u', $tl ) ) {
+					$k[] = 'SingleFamilyResidence';
+				} elseif ( preg_match( '/\b(?:town\s?houses?|maisonettes?|bungalows?|houses?)\b/u', $tl ) ) {
+					$k[] = 'House';
+				}
+			}
+			$type = $k ? $k[0] : 'Accommodation';
+		}
+		$a = array( '@type' => $type );
+		if ( 'Place' !== $type ) {
+			$beds = array();
+			foreach ( (array) $d['units'] as $u ) {
+				$beds = array_merge( $beds, 'studio' === $u['key'] ? array( 0 ) : blockke_dev_key_beds( $u['key'] ) );
+			}
+			if ( ! $beds ) {
+				$b    = (int) get_post_meta( $id, 'property_bedrooms', true );
+				$beds = $b > 0 ? array( $b ) : ( 'studio' === $d['ctx']['key'] ? array( 0 ) : array() );
+			}
+			if ( $beds ) {
+				$a['numberOfBedrooms'] = min( $beds ) === max( $beds ) ? min( $beds ) : array( '@type' => 'QuantitativeValue', 'minValue' => min( $beds ), 'maxValue' => max( $beds ) );
+			}
+		}
+		$q = null;
+		if ( 'Place' === $type ) { // its size field, in the theme's measure (a commercial table's "Size" row is often the building's)
+			$q = (float) get_post_meta( $id, 'property_size', true ) > 0 ? array( '@type' => 'QuantitativeValue', 'value' => blockke_dev_ld_n( get_post_meta( $id, 'property_size', true ) ), 'unitCode' => 1 === blockke_dev_sqft_factor() ? 'MTK' : 'FTK' ) : null;
+		} else {
+			foreach ( (array) $d['facts'] as $f ) {
+				if ( 'Size' === $f[0] || 'Sizes' === $f[0] ) {
+					$q = blockke_dev_ld_qty( $f[1] );
+					break;
+				}
+			}
+		}
+		if ( $q && 'Place' === $type ) {
+			unset( $q['@type'] );
+			$a['additionalProperty'] = array( '@type' => 'PropertyValue', 'name' => 'Floor size' ) + $q;
+		} elseif ( $q ) {
+			$a['floorSize'] = $q;
+		}
+		$city = blockke_dev_first_term( $id, 'property_city' );
+		$cn   = $city ? blockke_dev_text( $city->name ) : '';
+		$adr  = array( '@type' => 'PostalAddress' );
+		if ( '' !== $d['area'] ) {
+			$adr['addressLocality'] = $d['area'];
+		}
+		if ( '' !== $cn && 0 !== strcasecmp( $cn, $d['area'] ) ) {
+			$adr['addressRegion'] = $cn;
+		}
+		$adr['addressCountry'] = 'KE';
+		$a['address']          = $adr;
+		return $a;
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld; spec 7.6): the rent as the page states it, as an Offer with businessFunction LeaseOut: the price
+	 * and currency the lease is set in (blockke_dev_rent_phrase()'s 'num' and 'cur': a rent set in US dollars in US dollars,
+	 * KES first or not) and a UnitPriceSpecification with its period (unitCode MON, WEE, DAY or ANN; per sq ft: FTK, a
+	 * referenceQuantity of 1 FTK and unitText "per sq ft per month"). A rent the page gives as "From" is an AggregateOffer (and
+	 * "Up to" one with its highest price); the dearest home's rent is its highPrice when the homes are let at different KES
+	 * rents. No availability but availabilityStarts from a dated "Available from" row; no seller; null when the rent is on
+	 * request. $layout: the development layout draws the page (its hero's "From"), else the classic page (its rent box's).
+	 */
+	function blockke_dev_ld_offer( $d, $layout ) {
+		$ra = $layout ? blockke_dev_rent_amount( $d ) : blockke_dev_classic_rent_say( $d );
+		if ( ! empty( $ra['on_request'] ) || '' === $ra['amt'] || $ra['num'] <= 0 ) {
+			return null;
+		}
+		$pre  = $layout ? blockke_dev_ld_lead( $d, $ra ) : trim( $ra['pre'] );
+		$num  = blockke_dev_ld_n( $ra['num'] );
+		$sqft = 'unit' === $d['ctx']['flag'];
+		$per  = array( 'a month' => 'MON', 'a week' => 'WEE', 'a day' => 'DAY', 'a night' => 'DAY', 'a year' => 'ANN' );
+		$ps   = array( '@type' => 'UnitPriceSpecification' );
+		$o    = array( '@type' => '' === $pre ? 'Offer' : 'AggregateOffer', 'businessFunction' => 'http://purl.org/goodrelations/v1#LeaseOut' );
+		if ( '' === $pre ) {
+			$o['price']  = $num;
+			$ps['price'] = $num;
+		} elseif ( 'Up to' === $pre ) {
+			$o['highPrice']  = $num;
+			$ps['maxPrice'] = $num;
+		} else {
+			$o['lowPrice']  = $num;
+			$ps['minPrice'] = $num;
+			$up             = array();
+			foreach ( (array) $d['units'] as $u ) {
+				if ( $u['price'] > 0 ) {
+					$up[] = blockke_dev_ld_n( round( (float) $u['price'] ) );
+				}
+			}
+			if ( ! $sqft && blockke_dev_config()['currency'] === $ra['cur'] && count( $up ) > 1 && max( $up ) > $num ) { // per sq ft rows may be whole rents
+				$o['highPrice']  = max( $up );
+				$ps['maxPrice'] = max( $up );
+				$o['offerCount'] = count( $up );
+			}
+		}
+		$o['priceCurrency']  = $ra['cur'];
+		$ps['priceCurrency'] = $ra['cur'];
+		if ( $sqft ) {
+			$ps['unitCode']          = 'FTK';
+			$ps['referenceQuantity'] = array( '@type' => 'QuantitativeValue', 'value' => 1, 'unitCode' => 'FTK' );
+			$ps['unitText']          = 'per sq ft ' . preg_replace( '/^an?\s+/', 'per ', $ra['per'] );
+		} elseif ( isset( $per[ $ra['per'] ] ) ) {
+			$ps['unitCode'] = $per[ $ra['per'] ];
+			if ( 'a night' === $ra['per'] ) {
+				$ps['unitText'] = 'per night';
+			}
+		} else {
+			$ps['unitText'] = $ra['per']; // a label that names no period, as the page writes it
+		}
+		$o['priceSpecification'] = $ps;
+		$st                      = isset( $d['rent']['stated']['available'] ) ? blockke_dev_ld_day( $d['rent']['stated']['available'][1] ) : '';
+		if ( '' !== $st ) {
+			$o['availabilityStarts'] = $st;
+		}
+		$o['url'] = $d['url'];
+		return $o;
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld; spec 7.6, plan 4): a rental page's structured data, printed as script#bke-schema-ld in its head
+	 * (that id also stands down the header injection's script#bke-listing-schema, which would build a second listing, InStock,
+	 * in the browser). One RealEstateListing (@id {url}#webpage, the page itself: its name as the H1 says it, datePosted, every
+	 * photo, the home it lets and its offer) and the BreadcrumbList of the trail the page shows (@id {url}#breadcrumb, Rank
+	 * Math's, whose own Home > Properties trail blockke_dev_ld_rank_math() takes out): the layout's Home / For Rent / area /
+	 * development / home, the classic page's Home > category > For Rent > title. A listing whose text already prints a
+	 * RealEstateListing keeps that one: only the trail is printed. $layout: the development layout draws the page. null when
+	 * the listing is not read as a rental.
+	 */
+	function blockke_dev_ld_graph( $d, $layout ) {
+		if ( ! $d || empty( $d['rent'] ) ) {
+			return null;
+		}
+		$id  = (int) $d['id'];
+		$url = $d['url'];
+		$cr  = array( array( 'Home', home_url( '/' ) ) );
+		if ( $layout ) {
+			foreach ( $d['crumbs'] as $c ) {
+				$cr[] = array( $c[0], $c[1] );
+			}
+			if ( '' !== $d['crumb_here'] ) {
+				$cr[] = array( $d['crumb_here'], $url );
+			}
+		} else { // the theme's trail: the first of each term list it prints (get_the_term_list())
+			foreach ( array( 'property_category', 'property_action_category' ) as $tax ) {
+				$t = get_the_terms( $id, $tax );
+				$l = is_array( $t ) && $t ? get_term_link( $t[0] ) : '';
+				if ( $l && ! is_wp_error( $l ) ) {
+					$cr[] = array( blockke_dev_text( $t[0]->name ), $l );
+				}
+			}
+			$cr[] = array( $d['title'], $url );
+		}
+		$items = array();
+		foreach ( $cr as $i => $c ) {
+			$items[] = array( '@type' => 'ListItem', 'position' => $i + 1, 'name' => $c[0], 'item' => $c[1] );
+		}
+		$graph = array();
+		if ( ! blockke_dev_ld_own( $layout ? $d['desc'] : get_post_field( 'post_content', $id ) ) ) {
+			$n   = array(
+				'@type'      => 'RealEstateListing',
+				'@id'        => $url . '#webpage',
+				'url'        => $url,
+				'name'       => $layout ? $d['name'] : $d['title'],
+			);
+			$dp  = get_post_time( 'c', false, $id );
+			if ( $dp ) {
+				$n['datePosted'] = $dp;
+			}
+			$n['breadcrumb'] = array( '@id' => $url . '#breadcrumb' );
+			$img = array();
+			foreach ( $d['images'] as $aid ) {
+				$f = wp_get_attachment_image_url( $aid, '1536x1536' );
+				$f = $f ? $f : wp_get_attachment_url( $aid );
+				if ( $f ) {
+					$img[] = $f;
+				}
+			}
+			if ( $img ) {
+				$n['image'] = $img;
+			}
+			$n['about'] = blockke_dev_ld_about( $d );
+			$o          = blockke_dev_ld_offer( $d, $layout );
+			if ( $o ) {
+				$n['offers'] = $o;
+			}
+			$graph[] = $n;
+		}
+		$graph[] = array( '@type' => 'BreadcrumbList', '@id' => $url . '#breadcrumb', 'itemListElement' => $items );
+		return array( '@context' => 'https://schema.org', '@graph' => $graph );
+	}
+
+	/** v1.8.3 (R1, listing_jsonld): this request's script#bke-schema-ld graph (blockke_dev_ld_graph()), else null. */
+	function blockke_dev_ld_head() {
+		static $g = false;
+		if ( false === $g ) {
+			$id = blockke_dev_ld_target();
+			$g  = $id ? blockke_dev_ld_graph( blockke_dev_data( $id ), ! empty( $GLOBALS['blockke_dev_active'] ) ) : null;
+		}
+		return $g;
+	}
+
+	/**
+	 * v1.8.3 (R1, listing_jsonld): Rank Math's graph on a page that prints script#bke-schema-ld: its BreadcrumbList (Home >
+	 * Properties > title) gives way to ours, under the same @id; a WebPage node with our listing's @id (none on listing pages
+	 * today) is retyped RealEstateListing, so the page stays one listing, with Block as Rank Math's publisher. Every other page
+	 * and node is left as it is.
+	 */
+	function blockke_dev_ld_rank_math( $data ) {
+		$g = is_array( $data ) ? blockke_dev_ld_head() : null;
+		if ( ! $g ) {
+			return $data;
+		}
+		$own = 'RealEstateListing' === $g['@graph'][0]['@type'] ? $g['@graph'][0]['@id'] : '';
+		foreach ( $data as $k => $node ) {
+			$t = is_array( $node ) && isset( $node['@type'] ) ? $node['@type'] : '';
+			if ( 'BreadcrumbList' === $t ) {
+				unset( $data[ $k ] );
+			} elseif ( 'WebPage' === $t && '' !== $own && isset( $node['@id'] ) && $own === $node['@id'] ) {
+				$data[ $k ]['@type'] = 'RealEstateListing';
+			}
+		}
+		return $data;
+	}
+
+	add_filter( 'rank_math/json_ld', 'blockke_dev_ld_rank_math', 99 );
+
+	add_action(
+		'wp_head',
+		function () {
+			$g = blockke_dev_ld_head();
+			$j = $g ? wp_json_encode( $g, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG ) : '';
+			if ( $j ) {
+				echo '<script type="application/ld+json" id="bke-schema-ld">' . $j . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput -- JSON, its tags escaped.
+			}
+		},
+		2 // right after Rank Math's head (priority 1)
+	);
 
 	/** The development layout; $lp: as an ad landing page (own header and footer, no ways off the page but contact). */
 	function blockke_dev_render( $d, $lp = false ) {
@@ -6871,6 +8562,8 @@ JS;
 		$cx0   = $d['ctx'];
 		$land  = ! empty( $d['land'] ); // land mode (blockke_dev_is_land()): plot words; $L: the smallest plot, deposit, plan months
 		$L     = $land && is_array( $d['land'] ) ? $d['land'] : array( 'from' => '', 'deposit' => 0, 'term' => 0 );
+		$rent  = ! empty( $d['rent'] ); // v1.8.3: a home for rent: rent a month and a viewing, never a sale's price list, payment plan or mortgage
+		$R     = $rent && isset( $d['rent']['stated'] ) ? (array) $d['rent']['stated'] : array(); // what its listing states (blockke_dev_rent_info())
 		$p_lab = 'From';
 		$p_txt = $d['price_from'] ? blockke_dev_short( $d['price_from'] ) : '';
 		// v1.8: one fixed price reads "Price" off-plan too (the Runda townhouse, a unit at KES 53.16M, 1899's KES 116.4M): a villa
@@ -6890,6 +8583,22 @@ JS;
 			}
 		}
 		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in " . $d['short'] . ( $p_txt ? ' (' . ( 'Price' === $p_lab ? '' : strtolower( $p_lab ) . ' ' ) . $p_txt . ')' : '' ) . ( $land ? '. Please share the price list, the site plan and the payment plan. ' : ( $d['plans'] ? '. Please share the price list and floor plans. ' : '. Please share the price list. ' ) ) . $d['url'] );
+		$r_pre = 'Price' === $p_lab ? '' : $p_lab . ' '; // v1.8.3 (rent): "From", "Up to" before the monthly rent
+		$r_amt = $d['price_from'] ? blockke_dev_money( $d['price_from'] ) . ( 'unit' === $cx0['flag'] && 'Price' === $p_lab && false !== strpos( $p_txt, 'per sq ft' ) ? ' per sq ft' : '' ) : '';
+		$RA    = $rent ? blockke_dev_rent_amount( $d ) : array(); // v1.8.3 fix: the rent's own unit ("a month", "a night") and currency (a USD rent); R1: blockke_dev_rent_phrase()
+		$wa_ct = ''; // R1: a rental's WhatsApp links are marked done for snippet 40769 (data-blkct), which would rewrite their text
+		if ( $rent ) { // v1.8.3: "Rent / month  KES 200,000" (R1: the exact rent, not the cards' short "KES 200K"); the WhatsApp asks to view
+			if ( ! $d['price_from'] && '' !== $RA['amt'] ) { // a USD rent with no price field: one rent, not a "From"
+				$p_lab = 'Price';
+				$r_pre = '';
+			}
+			$p_txt = $RA['amt']; // R1: the exact rent in the hero cell and the WhatsApp text ("KES 6,500", "KES 710,000", "KES 130 per sq ft", "USD 5,500"), never "KES 7K"; '' on request
+			$r_amt = $RA['amt'];
+			// R1: "viewing" and its own "Ref W-{id}", so snippet 40769 leaves the text alone (plan-check H2); the name without "to Let"
+			$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm interested in renting " . blockke_dev_rent_name( $d['short'] ) . ( $p_txt ? ' (' . strtolower( $r_pre ) . $p_txt . ' ' . $RA['per'] . ')' : '' ) . '. Is it still available, and when could I arrange a viewing? Ref W-' . (int) $d['id'] . '. ' . $d['url'] );
+			$wa_ct = ' data-blkct="1"';
+			$p_lab = ( 'Price' === $p_lab ? 'Rent' : 'Rent ' . strtolower( $p_lab ) ) . ( preg_match( '/^(?:a|an|per)\s+(\w+)$/u', $RA['per'], $pm ) ? ' / ' . $pm[1] : '' );
+		}
 		$o     = array();
 		$cx    = $d['ctx'];
 		// Landing pages stay a closed funnel: no search, no similar homes and none of their queries
@@ -6930,8 +8639,13 @@ JS;
 			$un .= '<a class="bkd-un-all" href="' . esc_url( $cx['master_url'] ) . '">' . ( $land ? 'All plots' : 'All homes' ) . blockke_dev_icon( 'arrow' ) . '</a></div></nav>';
 		}
 		$hfacts   = array();
-		$hfacts[] = $p_txt ? array( $p_lab, $p_txt ) : array( 'Price', 'On request' );
-		if ( $land ) { // never "Status" or "Completion"; short values (the facts cut long text with an ellipsis)
+		$hfacts[] = $p_txt ? array( $p_lab, $p_txt ) : array( $rent ? 'Rent' : 'Price', 'On request' );
+		if ( $rent ) { // v1.8.3: the availability the listing states, else its viewing arrangement; never "Status Ready", "Completion" or a deposit
+			$hfacts[] = isset( $R['available'] ) ? $R['available'] : ( isset( $R['viewing'] ) ? $R['viewing'] : array( 'Availability', 'On request' ) );
+			if ( $d['area'] ) {
+				$hfacts[] = array( 'Location', $d['area'] );
+			}
+		} elseif ( $land ) { // never "Status" or "Completion"; short values (the facts cut long text with an ellipsis)
 			if ( '' !== $L['from'] ) {
 				$hfacts[] = array( 'Plots from', $L['from'] );
 			}
@@ -6959,7 +8673,7 @@ JS;
 		$hf_html = '';
 		foreach ( $hfacts as $f ) {
 			// v1.8: a long Location ("Ongata Rongai", "Spring Valley") may take two lines on phones instead of being cut off
-			$hf_html .= '<div><dt>' . $e( $f[0] ) . '</dt><dd' . ( ! $land && 'Location' === $f[0] && mb_strlen( $f[1] ) > 10 ? ' class="bkd-hf-long"' : '' ) . '>' . $e( $f[1] ) . '</dd></div>';
+			$hf_html .= '<div><dt>' . $e( $f[0] ) . '</dt><dd' . ( ! $land && ( 'Location' === $f[0] || ( $rent && in_array( $f[0], array( 'Availability', 'Viewing' ), true ) ) ) && mb_strlen( $f[1] ) > 10 ? ' class="bkd-hf-long"' : '' ) . '>' . $e( $f[1] ) . '</dd></div>'; // v1.8.3: a rental's "By appointment" too
 		}
 		// Landing pages on phones lay the offer and the key figures over the photo, like a cover. The area
 		// label stays above the name, so the offer names the street without repeating the area.
@@ -7045,9 +8759,9 @@ JS;
 		}
 		$o[]    = '<section class="bkd-hero' . ( $vt ? ' bkd-hero-vt' : '' ) . '" id="bkd-top"><div class="bkd-wrap bkd-hero-grid">' . ( $vt ? $fig . $head : $head . $fig )
 			. '<div class="bkd-hero-body"><dl class="bkd-hfacts">' . $hf_html;
-		$o[] = '</dl>' . blockke_dev_progress_hero( $d ) . '<div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : ( $d['plans'] ? 'Get the price list and floor plans' : 'Get the price list' ) ) . '</div>'
-			. '<div class="bkd-quick-s">Sent straight to your WhatsApp. Two details, no obligation.</div>'
-			. blockke_dev_quick_form( 'hero', 'Send me the price list', $d )
+		$o[] = '</dl>' . blockke_dev_progress_hero( $d ) . '<div class="bkd-quick" id="bkd-quick"><div class="bkd-quick-t">' . ( $land ? 'Get the price list and site plan' : ( $rent ? 'Arrange a viewing' : ( $d['plans'] ? 'Get the price list and floor plans' : 'Get the price list' ) ) ) . '</div>'
+			. '<div class="bkd-quick-s">' . ( $rent ? 'We\'ll confirm availability and a time to view. Two details, no obligation.' : 'Sent straight to your WhatsApp. Two details, no obligation.' ) . '</div>'
+			. blockke_dev_quick_form( 'hero', $rent ? 'Check availability' : 'Send me the price list', $d )
 			. ( $d['brochure'] ? '<div class="bkd-quick-alt"><button class="bkd-link" type="button" data-bkd-enquire="brochure">Or download the brochure' . blockke_dev_icon( 'arrow' ) . '</button></div>' : '' )
 			. ( $lp && $ag['name'] ? '<div class="bkd-qa">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" width="40" height="40" loading="lazy">' : '<span class="bkd-qa-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</span>' )
 				. '<span><b>' . $e( $ag['name'] ) . '</b>' . $e( $ag['role'] ? $ag['role'] : 'Your advisor' ) . '</span></div>' : '' )
@@ -7067,7 +8781,9 @@ JS;
 		if ( $d['amenities'] ) {
 			$nav['amenities'] = 'Amenities';
 		}
-		if ( ! $land ) {
+		if ( $rent ) { // v1.8.3: renting, not a payment plan or a mortgage
+			$nav['renting'] = 'Renting';
+		} elseif ( ! $land ) {
 			$nav['payment'] = $d['offplan'] ? 'Payment plan' : ( $plan['instalments'] ? 'Ways to pay' : 'Mortgage' );
 		} elseif ( 'rent' !== $cx['action'] ) { // land for lease has no payment section
 			$nav['payment'] = 'Payment plan';
@@ -7087,8 +8803,8 @@ JS;
 		}
 		$o[] = '</div><div class="bkd-subnav-r">' . ( $search ? ( $land ? '<a class="bkd-subnav-srch" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search land" title="Search land">' . blockke_dev_icon( 'search' ) . '</a>'
 			: '<a class="bkd-subnav-srch" data-bkd-search="subnav" href="' . esc_url( $s_url ) . '"' . $s_nf . ' aria-label="Search homes" title="Search homes">' . blockke_dev_icon( 'search' ) . '</a>' ) : '' )
-			. '<a class="bkd-subnav-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
-			. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm" type="button" data-bkd-enquire="subnav">Get the price list</button></div></div></nav>';
+			. '<a class="bkd-subnav-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa' . $wa_ct . '>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '<span>WhatsApp</span></a>'
+			. '<button class="bkd-btn bkd-btn-navy bkd-btn-sm" type="button" data-bkd-enquire="subnav">' . ( $rent ? 'Arrange a viewing' : 'Get the price list' ) . '</button></div></div></nav>';
 
 		// Facts band
 		if ( $d['facts'] ) {
@@ -7129,6 +8845,9 @@ JS;
 					. ( $cap ? '<span class="bkd-gal-cap">' . $e( $cap ) . '</span>' : '' )
 					. blockke_dev_img( $aid, 'large', array( 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => 0 === $i ? '(min-width: 900px) 66vw, 100vw' : '(min-width: 900px) 33vw, 50vw', 'alt' => blockke_dev_alt( $aid, $d['short'] . ' photo ' . ( $i + 1 ) ), 'data-ph' => $d['short'] ) )
 					. '</button>';
+			}
+			if ( $n_img > 5 && blockke_dev_gallery_more_on( $d ) ) { // v1.8.3 (R1, gallery_ssr): photos 6+ in the HTML too
+				$o[] = blockke_dev_gallery_more( $d );
 			}
 			$o[] = '</div><div class="bkd-sh-row bkd-gal-foot"><p class="bkd-fine">' . $e( $d['gallery_note'] ) . '</p><button class="bkd-link" type="button" data-bkd-open="0">' . blockke_dev_icon( 'grid' ) . 'View all ' . $n_img . ' photos</button></div></div></section>';
 		}
@@ -7176,8 +8895,8 @@ JS;
 				}
 				$filters .= '</div>';
 			}
-			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">' . ( $land ? 'Plots' : 'Residences' ) . '</p><h2 class="bkd-h2">' . ( $land ? 'Plot sizes <em>and prices</em>' : 'Availability <em>and pricing</em>' ) . '</h2></div>' . $filters . '</div>'
-				. '<table class="bkd-tbl bkd-rv"><thead><tr><th>' . ( $land ? 'Plot' : 'Residence' ) . '</th>' . ( $has_size ? '<th>Size</th>' : '' ) . ( $has_pr ? '<th>Price from</th>' : '' ) . '<th><span class="bkd-sr">Actions</span></th></tr></thead><tbody>';
+			$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-residences"><div class="bkd-wrap"><div class="bkd-sh bkd-sh-row bkd-rv"><div><p class="bkd-label">' . ( $land ? 'Plots' : 'Residences' ) . '</p><h2 class="bkd-h2">' . ( $land ? 'Plot sizes <em>and prices</em>' : ( $rent ? 'Availability <em>and rent</em>' : 'Availability <em>and pricing</em>' ) ) . '</h2></div>' . $filters . '</div>'
+				. '<table class="bkd-tbl bkd-rv"><thead><tr><th>' . ( $land ? 'Plot' : 'Residence' ) . '</th>' . ( $has_size ? '<th>Size</th>' : '' ) . ( $has_pr ? ( $rent ? '<th>Rent a month</th>' : '<th>Price from</th>' ) : '' ) . '<th><span class="bkd-sr">Actions</span></th></tr></thead><tbody>';
 			$ulab = $land ? blockke_dev_land_unit_labels( $d['units'] ) : array(); // land: "Residential, unserviced · 1/8 acre"
 			foreach ( $d['units'] as $ui => $u ) {
 				$label = $land ? $ulab[ $ui ] : $u['type'] . ( $u['size'] ? ' · ' . $u['size'] : '' );
@@ -7185,9 +8904,9 @@ JS;
 					. ( $has_size ? '<td class="bkd-s">' . $e( $u['size'] ? $u['size'] : '—' ) . '</td>' : '' )
 					. ( $has_pr ? '<td class="bkd-p">' . $e( $u['price'] ? blockke_dev_money( $u['price'] ) : 'On request' ) . ( $u['price'] && ! empty( $u['pnote'] ) ? '<small>' . $e( $u['pnote'] ) . '</small>' : '' ) . '</td>' : '' )
 					. '<td class="bkd-a">' . ( $u['url'] && ! $lp ? '<a class="bkd-link" href="' . esc_url( $u['url'] ) . '">Details</a>' : '' )
-					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">' . ( $land || ! $d['plans'] ? 'Price &amp; availability' : 'Floor plan &amp; price' ) . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
+					. '<button class="bkd-link" type="button" data-bkd-enquire="floorplan" data-unit="' . esc_attr( $label ) . '">' . ( $rent ? 'Availability &amp; viewing' : ( $land || ! $d['plans'] ? 'Price &amp; availability' : 'Floor plan &amp; price' ) ) . blockke_dev_icon( 'arrow' ) . '</button></td></tr>';
 			}
-			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">' . ( $has_pr ? 'Starting prices. ' : '' ) . 'Ask for the latest price list for current availability.</p>';
+			$o[] = '</tbody></table><p class="bkd-fine bkd-tbl-note">' . ( $rent ? 'Ask us for current availability and a time to view.' : ( $has_pr ? 'Starting prices. ' : '' ) . 'Ask for the latest price list for current availability.' ) . '</p>';
 			if ( ! $lp && $cx['area_name'] ) {
 				$noun = $land ? ( 'rent' === $cx['action'] ? 'land for lease' : 'land for sale' ) : ( 'rent' === $cx['action'] ? 'rentals' : 'homes for sale' );
 				$base = blockke_dev_search_url( array( 'area' => $cx['area_name'], 'action' => $cx['action'] ) + ( $land ? array( 'type' => 'land' ) : array() ) );
@@ -7224,7 +8943,7 @@ JS;
 			}
 			if ( $am['rest'] ) {
 				$o[] = '<div class="bkd-ess bkd-rv' . ( $am['tiles'] ? '' : ' bkd-ess-solo' ) . '"><div><h3 class="bkd-ess-h">' . ( $land ? 'Also <em>listed</em>' : ( $am['essentials'] ? 'The everyday <em>essentials</em>' : 'Also <em>included</em>' ) ) . '</h3>'
-					. '<p>' . ( $land ? $e( ! empty( $am['note'] ) ? $am['note'] : 'More of what the developer lists for ' . $d['short'] . '. Ask which are in place today and which serve your plot.' ) :( $am['essentials'] ? 'The practical things buyers ask about first.' : 'More of what comes with a home at ' . $e( $d['short'] ) . '.' ) ) . '</p></div><ul>';
+					. '<p>' . ( $land ? $e( ! empty( $am['note'] ) ? $am['note'] : 'More of what the developer lists for ' . $d['short'] . '. Ask which are in place today and which serve your plot.' ) :( $am['essentials'] ? ( $rent ? 'The practical things tenants ask about first.' : 'The practical things buyers ask about first.' ) : 'More of what comes with a home at ' . $e( $d['short'] ) . '.' ) ) . '</p></div><ul>';
 				foreach ( $am['rest'] as $it ) {
 					$o[] = '<li>' . blockke_dev_icon( 'check' ) . '<span>' . $e( $it ) . '</span></li>';
 				}
@@ -7277,6 +8996,37 @@ JS;
 						. '<p class="bkd-mt"><button class="bkd-link" type="button" data-bkd-enquire="payment-plan">Get the official payment plan' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
 				}
 			}
+		} elseif ( $rent ) {
+			// v1.8.3: a home for rent: the monthly rent, what its listing states about renting it (blockke_dev_rent_info()) and
+			// a way to view it; never a payment plan, a deposit estimate or a mortgage. What the listing leaves open is named
+			$rows = array();
+			foreach ( array( 'deposit', 'lease', 'service', 'furnish', 'available', 'viewing' ) as $k ) {
+				if ( isset( $R[ $k ] ) ) {
+					$rows[] = $R[ $k ];
+				}
+			}
+			$left = array();
+			foreach ( array( 'deposit' => 'the deposit', 'lease' => 'the lease length', 'service' => 'any service charge' ) as $k => $w ) {
+				if ( ! isset( $R[ $k ] ) ) {
+					$left[] = $w;
+				}
+			}
+			$left[] = 'what the rent covers';
+			$last   = array_pop( $left );
+			$open   = ucfirst( ( $left ? implode( ', ', $left ) . ' and ' : '' ) . $last ) . ( $left ? ' are' : ' is' ) . ' confirmed when you enquire.';
+			$cur    = '' !== $RA['note'] ? $RA['note'] . ' ' : ''; // v1.8.3 fix: a USD rent says so; R1: KES first only with a dated rate (bke_rent_usd_date)
+			$o[]    = '<section class="bkd-sec bkd-sec-mist" id="bkd-renting"><div class="bkd-wrap bkd-split"><div class="bkd-rv"><p class="bkd-label">Renting</p><h2 class="bkd-h2">'
+				. ( '' !== $r_amt ? $e( $r_pre ) . '<em>' . $e( $r_amt ) . '</em> ' . $e( $RA['per'] ) . ( '' !== $RA['kes'] ? ' ' . $e( '(' . $RA['usd'] . ')' ) : '' ) : 'Rent <em>on request</em>' ) . '</h2>'
+				. '<p class="bkd-body bkd-mt">' . $e( $cur . $open . ' Ask for the full tenancy agreement in writing before you pay a deposit or sign.' ) . '</p>';
+			if ( $rows ) {
+				$o[] = '<ul class="bkd-places">';
+				foreach ( $rows as $r ) {
+					$o[] = '<li><b>' . $e( $r[0] ) . '</b><span>' . $e( $r[1] ) . '</span></li>';
+				}
+				$o[] = '</ul>';
+			}
+			$o[] = '</div><div class="bkd-panel bkd-rv"><p class="bkd-panel-t">See it in person</p><p class="bkd-body">' . $e( 'Tell us when suits you. We\'ll confirm that ' . blockke_dev_rent_name( $d['short'] ) . ' is still available and arrange a time for you to view it.' ) . '</p>'
+				. '<p class="bkd-mt"><button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="viewing">Arrange a viewing' . blockke_dev_icon( 'arrow' ) . '</button></p></div></div></section>';
 		} elseif ( $d['offplan'] ) {
 			// No stated plan and completion weeks away: an estimate would only show the whole balance over a month or two
 			$close   = $plan['deposit'] <= 0 && empty( $plan['inst_pct'] ) && empty( $plan['terms'] ) && (int) $plan['months'] > 0 && (int) $plan['months'] <= 3;
@@ -7338,7 +9088,8 @@ JS;
 
 		// Who it suits, and the investor view
 		$suits = $d['suits'];
-		if ( $suits['items'] || $d['investors'] ) {
+		$inv   = $rent ? '' : $d['investors']; // R1 (review item 8): no "For investors" on a rental
+		if ( $suits['items'] || $inv ) {
 			$o[] = '<section class="bkd-sec" id="bkd-suits"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">' . ( $suits['items'] ? 'Is it right for you?' : 'For investors' ) . '</p><h2 class="bkd-h2">'
 				. ( $suits['items'] ? 'Who it <em>suits best</em>' : 'The <em>investor view</em>' ) . '</h2>'
 				. ( $suits['note'] ? '<p class="bkd-body bkd-mt">Our honest view of who it suits, and who it may not.</p>' : '' ) . '</div><div class="bkd-rv">';
@@ -7349,9 +9100,9 @@ JS;
 				}
 				$o[] = '</ul>' . ( $suits['note'] ? '<p class="bkd-suits-note">' . $e( $suits['note'] ) . '</p>' : '' );
 			}
-			if ( $d['investors'] ) {
-				$o[] = '<div class="bkd-inv"><p class="bkd-inv-t">' . blockke_dev_icon( 'chart' ) . 'For investors</p><p class="bkd-inv-p">' . $e( $d['investors'] ) . '</p>'
-					. '<button class="bkd-link" type="button" data-bkd-enquire="comparables">' . ( $land ? 'Ask for recent plot prices nearby' : 'Ask for rental and resale comparables' ) . blockke_dev_icon( 'arrow' ) . '</button></div>';
+			if ( $inv ) {
+				$o[] = '<div class="bkd-inv"><p class="bkd-inv-t">' . blockke_dev_icon( 'chart' ) . 'For investors</p><p class="bkd-inv-p">' . $e( $inv ) . '</p>'
+					. '<button class="bkd-link" type="button" data-bkd-enquire="comparables">' . ( $land ? 'Ask for recent plot prices nearby' : ( $rent ? 'Ask for comparable rents nearby' : 'Ask for rental and resale comparables' ) ) . blockke_dev_icon( 'arrow' ) . '</button></div>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -7389,10 +9140,13 @@ JS;
 
 		// Why Block (land: config land_why, else the code's own; the saved option is merged shallowly)
 		$why = $land ? ( ! empty( $cfg['land_why'] ) && is_array( $cfg['land_why'] ) ? $cfg['land_why'] : blockke_dev_land_defaults()['land_why'] ) : $cfg['why'];
+		if ( $rent ) { // v1.8.3: config rent_why, else the code's own (no developments, sale documents or handover)
+			$why = ! empty( $cfg['rent_why'] ) && is_array( $cfg['rent_why'] ) ? $cfg['rent_why'] : blockke_dev_rent_defaults()['rent_why'];
+		}
 		if ( ! empty( $why ) ) {
 			$o[] = '<section class="bkd-sec bkd-sec-navy" id="bkd-why"><div class="bkd-wrap"><div class="bkd-sh bkd-rv"><p class="bkd-label">Why ' . $e( $cfg['brand'] ) . '</p><h2 class="bkd-h2">Advice first. <em>Then a decision.</em></h2></div><div class="bkd-why">';
 			foreach ( $why as $i => $w ) {
-				$o[] = '<div class="bkd-rv"><b>0' . ( $i + 1 ) . '</b><h3 class="bkd-h3">' . $e( $w[0] ) . '</h3><p>' . $e( $land ? $w[1] : ( ! $d['offplan'] && ! empty( $w[2] ) ? $w[2] : $w[1] ) ) . '</p></div>';
+				$o[] = '<div class="bkd-rv"><b>0' . ( $i + 1 ) . '</b><h3 class="bkd-h3">' . $e( $w[0] ) . '</h3><p>' . $e( $land || $rent ? $w[1] : ( ! $d['offplan'] && ! empty( $w[2] ) ? $w[2] : $w[1] ) ) . '</p></div>';
 			}
 			$o[] = '</div></div></section>';
 		}
@@ -7429,8 +9183,8 @@ JS;
 
 		// FAQ
 		if ( $d['faqs'] ) {
-			$o[] = '<section class="bkd-sec" id="bkd-faq"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">FAQ</p><h2 class="bkd-h2">Questions buyers <em>ask</em></h2>'
-				. '<p class="bkd-body bkd-mt">Can\'t see yours? <a class="bkd-inline" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>Ask us on WhatsApp</a>.</p></div><div class="bkd-faq bkd-rv">';
+			$o[] = '<section class="bkd-sec" id="bkd-faq"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">FAQ</p><h2 class="bkd-h2">' . ( $rent ? 'Questions tenants <em>ask</em>' : 'Questions buyers <em>ask</em>' ) . '</h2>'
+				. '<p class="bkd-body bkd-mt">Can\'t see yours? <a class="bkd-inline" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa' . $wa_ct . '>Ask us on WhatsApp</a>.</p></div><div class="bkd-faq bkd-rv">';
 			foreach ( $d['faqs'] as $f ) {
 				$o[] = '<details><summary>' . $e( $f[0] ) . '</summary><div class="bkd-faq-a">' . ( $lp ? preg_replace( '#</?a\b[^>]*>#i', '', $f[1] ) : $f[1] ) . '</div></details>';
 			}
@@ -7438,26 +9192,27 @@ JS;
 		}
 
 		// Enquire
+		$np_st = blockke_dev_np_on( $d ) ? blockke_dev_np_state() : ''; // R1 (forms_post): back from a no-script post: the thank-you, or the form with its note
 		$o[] = '<section class="bkd-sec bkd-sec-mist" id="bkd-enquire"><div class="bkd-wrap bkd-split"><div class="bkd-sticky bkd-rv"><p class="bkd-label">Enquire</p><h2 class="bkd-h2">Speak to an advisor about <em>' . $e( $d['short'] ) . '</em></h2>'
-			. '<p class="bkd-body bkd-mt">' . ( $land ? 'Get the price list, the site plan and the payment plan, or book a site visit.' : ( $d['plans'] ? 'Get the price list, floor plans and payment plan, or book a viewing.' : 'Get the price list and payment plan, or book a viewing.' ) ) . ' We usually reply within a few hours on working days.</p>';
+			. '<p class="bkd-body bkd-mt">' . ( $land ? 'Get the price list, the site plan and the payment plan, or book a site visit.' : ( $rent ? 'Ask about availability, the lease terms and what the rent covers, or arrange a viewing.' : ( $d['plans'] ? 'Get the price list, floor plans and payment plan, or book a viewing.' : 'Get the price list and payment plan, or book a viewing.' ) ) ) . ' We usually reply within a few hours on working days.</p>';
 		if ( $ag['name'] ) {
 			$o[] = '<div class="bkd-agent">' . ( $ag['photo'] ? '<img src="' . esc_url( $ag['photo'] ) . '" alt="" loading="lazy" width="64" height="64">' : '<div class="bkd-av">' . $e( mb_substr( $ag['name'], 0, 1 ) ) . '</div>' )
 				. '<div><b>' . $e( $ag['name'] ) . '</b><span>' . $e( trim( $ag['role'] . ', ' . $cfg['brand_full'], ', ' ) ) . '</span>'
 				. ( $ag['url'] && ! $lp ? '<a class="bkd-inline" href="' . esc_url( $ag['url'] ) . '">View profile</a>' : '' ) . '</div></div>';
 		}
 		$o[] = '<div class="bkd-direct"><a href="tel:' . esc_attr( $ag['phone'] ) . '">' . blockke_dev_icon( 'phone' ) . $e( $ag['phone_display'] ) . '</a>'
-			. '<a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'WhatsApp</a>'
+			. '<a href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa' . $wa_ct . '>' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . 'WhatsApp</a>'
 			. '<a href="mailto:' . esc_attr( $cfg['email'] ) . '?subject=' . rawurlencode( $d['short'] . ' enquiry' ) . '">' . blockke_dev_icon( 'mail' ) . $e( $cfg['email'] ) . '</a></div></div>'
-			. '<div class="bkd-formcard bkd-rv">' . blockke_dev_full_form( $d ) . '</div></div>'
-			. '<div class="bkd-wrap"><p class="bkd-disc">' . $e( $land ? ( ! empty( $cfg['land_disclaimer'] ) && is_string( $cfg['land_disclaimer'] ) ? $cfg['land_disclaimer'] : blockke_dev_land_defaults()['land_disclaimer'] ) : $cfg['disclaimer'] ) . '</p></div></section>';
+			. '<div class="bkd-formcard bkd-rv">' . ( 'sent' === $np_st ? blockke_dev_np_thanks( $d ) : blockke_dev_full_form( $d, '' !== $np_st ? blockke_dev_np_alert( $np_st, $wa ) : '' ) ) . '</div></div>'
+			. '<div class="bkd-wrap"><p class="bkd-disc">' . $e( $land ? ( ! empty( $cfg['land_disclaimer'] ) && is_string( $cfg['land_disclaimer'] ) ? $cfg['land_disclaimer'] : blockke_dev_land_defaults()['land_disclaimer'] ) : ( $rent ? ( ! empty( $cfg['rent_disclaimer'] ) && is_string( $cfg['rent_disclaimer'] ) ? $cfg['rent_disclaimer'] : blockke_dev_rent_defaults()['rent_disclaimer'] ) : $cfg['disclaimer'] ) ) . '</p></div></section>';
 
 		// Mobile bar, enquiry dialog, gallery viewer
-		$o[] = '<nav class="bkd-mb" id="bkd-mb" aria-label="Quick contact"><a class="bkd-mb-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '</a>'
-			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar">Get the price list</button></nav>';
+		$o[] = '<nav class="bkd-mb" id="bkd-mb" aria-label="Quick contact"><a class="bkd-mb-wa" href="' . esc_url( $wa ) . '" target="_blank" rel="noopener" data-bkd-wa' . $wa_ct . ' aria-label="WhatsApp">' . blockke_dev_icon( 'wa', 'bkd-wa-ic' ) . '</a>'
+			. '<button class="bkd-btn bkd-btn-navy" type="button" data-bkd-enquire="mobile-bar">' . ( $rent ? 'Arrange a viewing' : 'Get the price list' ) . '</button></nav>';
 		$o[] = '<div class="bkd-md" id="bkd-md" hidden role="dialog" aria-modal="true" aria-labelledby="bkd-md-t"><div class="bkd-md-box">'
 			. '<button class="bkd-md-x" type="button" data-bkd-close aria-label="Close">' . blockke_dev_icon( 'close' ) . '</button>'
-			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">Get the price list</h2><p class="bkd-md-sub" id="bkd-md-sub">' . ( $land ? 'The site plan and the payment plan, sent to your WhatsApp.' : ( $d['plans'] ? 'Floor plans and the payment plan, sent to your WhatsApp.' : 'With the payment plan, sent to your WhatsApp.' ) ) . '</p>'
-			. '<div id="bkd-md-form">' . blockke_dev_quick_form( 'modal', 'Send it to me', $d ) . '</div></div></div>';
+			. '<p class="bkd-label">' . $e( $d['short'] ) . '</p><h2 class="bkd-h2" id="bkd-md-t">' . ( $rent ? 'Arrange a viewing' : 'Get the price list' ) . '</h2><p class="bkd-md-sub" id="bkd-md-sub">' . ( $land ? 'The site plan and the payment plan, sent to your WhatsApp.' : ( $rent ? 'Availability and viewing times, sent to your WhatsApp.' : ( $d['plans'] ? 'Floor plans and the payment plan, sent to your WhatsApp.' : 'With the payment plan, sent to your WhatsApp.' ) ) ) . '</p>'
+			. '<div id="bkd-md-form">' . blockke_dev_quick_form( 'modal', $rent ? 'Check availability' : 'Send it to me', $d ) . '</div></div></div>';
 		if ( $search && ! $land ) { // land pages link to land in the area instead of the homes search sheet
 			$o[] = blockke_dev_search_sheet( $d );
 		}
@@ -7469,7 +9224,7 @@ JS;
 			$o[] = blockke_dev_lp_footer( $d );
 		}
 		$o[] = '</div>';
-		return implode( '', $o );
+		return blockke_dev_np_on( $d ) ? blockke_dev_np_triggers( implode( '', $o ) ) : implode( '', $o ); // R1 (forms_post): the pop-up triggers as links to #bkd-enquire
 	}
 
 	/* =====================================================================
@@ -8494,6 +10249,9 @@ JS;
 				return $template;
 			}
 			$GLOBALS['blockke_dev_active'] = true;
+			if ( '' !== blockke_dev_np_state() && blockke_dev_np_on( $data ) ) { // v1.8.3 (R1, forms_post): the page a no-script post returned to
+				blockke_dev_np_noindex();
+			}
 			if ( empty( blockke_dev_config()['price_check_popup'] ) ) {
 				$_GET['blockpop'] = '0'; // the popup snippet's own off switch; its attribution keeper still runs
 			}
@@ -8564,7 +10322,7 @@ JS;
 					$js = array(
 						'id'       => $data['id'],
 						'slug'     => $data['slug'],
-						'name'     => $data['short'],
+						'name'     => ! empty( $data['rent'] ) ? blockke_dev_rent_name( $data['short'] ) : $data['short'], // R1: a rental's script sentences, without "to Let"
 						'title'    => $data['title'],
 						'url'      => $data['url'],
 						'brand'    => $cfg['brand'],
@@ -8600,6 +10358,8 @@ JS;
 					$script = blockke_dev_js();
 					if ( $land ) {
 						$script = blockke_dev_land_js( $script );
+					} elseif ( ! empty( $data['rent'] ) ) {
+						$script = blockke_dev_rent_js( $script ); // v1.8.3: a home for rent: a viewing and availability
 					} elseif ( empty( $data['plans'] ) ) {
 						$script = blockke_dev_noplans_js( $script ); // v1.8.1: no floor plans to offer
 					}
@@ -8707,13 +10467,16 @@ JS;
 			return new WP_REST_Response( array( 'ok' => false, 'message' => 'Those answers could not be added, but your enquiry was received.' ), 400 );
 		}
 		$row      = $log[ $key ];
+		// v1.8.3: a home for rent: when to move in, no "Buying to". R1: the saved row's kind when it has one, else rent_pages
+		// (blockke_dev_rent_on()) or the editor's preview the lead was sent from (its saved page URL)
+		$rent     = ! empty( $row['listing'] ) && ( isset( $row['kind'] ) ? 'rent' === $row['kind'] : blockke_dev_rent_on( (int) $row['listing'] ) || blockke_dev_rent_rp( (int) $row['listing'], '', isset( $row['page'] ) ? $row['page'] : '' ) ) && ! blockke_dev_is_land( (int) $row['listing'] );
 		$unit     = $get( 'unit', 160 );
-		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ) );
-		$purpose  = in_array( $get( 'purpose', 20 ), array_unique( array_merge( blockke_dev_purposes( false ), blockke_dev_purposes( true ) ) ), true ) ? $get( 'purpose', 20 ) : ''; // homes' and land's answers
+		$timeline = blockke_dev_timeline( $get( 'timeline', 40 ), $rent );
+		$purpose  = ! $rent && in_array( $get( 'purpose', 20 ), array_unique( array_merge( blockke_dev_purposes( false ), blockke_dev_purposes( true ) ) ), true ) ? $get( 'purpose', 20 ) : ''; // homes' and land's answers
 		if ( '' === $unit . $timeline . $purpose ) {
 			return new WP_REST_Response( array( 'ok' => true ), 200 );
 		}
-		$lines = array( 'MORE DETAILS ON A DEVELOPMENT ENQUIRY', $row['name'] . ' answered the optional questions after enquiring about ' . $row['dev'] . ' (' . $row['time'] . ').', '' );
+		$lines = array( $rent ? 'MORE DETAILS ON A RENTAL ENQUIRY' : 'MORE DETAILS ON A DEVELOPMENT ENQUIRY', $row['name'] . ' answered the optional questions after enquiring about ' . $row['dev'] . ' (' . $row['time'] . ').', '' );
 		if ( $unit ) {
 			$lines[] = 'Interested in: ' . $unit;
 			if ( empty( $row['unit'] ) ) {
@@ -8721,7 +10484,7 @@ JS;
 			}
 		}
 		if ( $timeline ) {
-			$lines[]         = 'Timeline: ' . $timeline;
+			$lines[]         = ( $rent ? 'Move-in: ' : 'Timeline: ' ) . $timeline;
 			$row['timeline'] = $timeline;
 		}
 		if ( $purpose ) {
@@ -8739,6 +10502,35 @@ JS;
 			wp_mail( $to, sprintf( '[Block] More details: %s - %s', $row['name'], $row['dev'] ), implode( "\n", $lines ), array( 'Content-Type: text/plain; charset=UTF-8' ) );
 		}
 		return new WP_REST_Response( array( 'ok' => true ), 200 );
+	}
+
+	/**
+	 * v1.8.3 (R1, Zoho option A): a rental enquiry's Zoho web-form post, changed in flight. The price-check popup snippet (40752)
+	 * posts 'Company' => 'Individual buyer' for every lead and has no placeholder for it, so for a rental lead the handler adds
+	 * this http_request_args filter just before blockke_bp_send_zoho() and removes it just after, on every path. It acts once,
+	 * and only on a post to that snippet's own Zoho endpoint: "Individual buyer" becomes "Individual tenant", and when config
+	 * 'zoho_enquiry_field' names the owner's optional "Enquiry type" field, that field is sent as "Rental". Sale leads never
+	 * get it, so their post is unchanged (Zoho's own default fills "Enquiry type" for them).
+	 */
+	function blockke_dev_zoho_rent_args() {
+		$bp   = function_exists( 'blockke_bp_config' ) ? blockke_bp_config() : array();
+		$url  = isset( $bp['zoho']['endpoint'] ) && is_string( $bp['zoho']['endpoint'] ) ? $bp['zoho']['endpoint'] : '';
+		$fld  = blockke_dev_config()['zoho_enquiry_field'];
+		$fld  = is_scalar( $fld ) ? trim( (string) $fld ) : '';
+		$done = false;
+		return function ( $args, $to ) use ( $url, $fld, &$done ) {
+			if ( $done || '' === $url || $to !== $url || ! isset( $args['body'] ) || ! is_array( $args['body'] ) ) {
+				return $args;
+			}
+			$done = true;
+			if ( isset( $args['body']['Company'] ) && 'Individual buyer' === $args['body']['Company'] ) {
+				$args['body']['Company'] = 'Individual tenant';
+			}
+			if ( '' !== $fld ) {
+				$args['body'][ $fld ] = 'Rental';
+			}
+			return $args;
+		};
 	}
 
 	function blockke_dev_handle_lead( $req ) {
@@ -8770,6 +10562,7 @@ JS;
 			return new WP_REST_Response( array( 'ok' => true ), 200 ); // pretend, so bots learn nothing
 		}
 
+		unset( $GLOBALS['blockke_dev_rent_rp'] ); // v1.8.3 (R1): set below for a lead from an editor's preview, for this lead only
 		$more = preg_replace( '/[^A-Za-z0-9]/', '', $get( 'more', 40 ) );
 		if ( '' !== $more ) {
 			return blockke_dev_lead_more( $more, $get );
@@ -8919,6 +10712,26 @@ JS;
 		} elseif ( in_array( 'floorplan', array( $intent, $source ), true ) && $lid && ! $at && ! $ix && '' === $tp && ! blockke_dev_has_plans( $lid ) ) {
 			$forms['floorplan'] = 'Price and availability request'; // v1.8.1: the row offered no floor plan (the form keeps intent "floorplan")
 		}
+		if ( $lid && ! $at && ! $ix && '' === $tp && ! $land_lead && blockke_dev_rent_rp( $lid, $get( 'rp', 2 ), $page ) ) {
+			$GLOBALS['blockke_dev_rent_rp'] = $lid; // v1.8.3 (R1): sent from an editor's ?bke_rent=1 preview: this listing reads as a rental, as on the preview
+		}
+		$rent_lead = $lid && ! $at && ! $ix && '' === $tp && ! $land_lead && blockke_dev_rent_on( $lid ); // v1.8.3: a home for rent's own page; R1: only with rent_pages on (or its preview)
+		if ( $rent_lead ) { // a viewing and availability, not a price list, floor plan, payment plan or sale
+			$forms['hero']        = 'Hero form (viewing)';
+			$forms['floorplan']   = 'Availability and viewing request';
+			$forms['comparables'] = 'Comparable rents request';
+			$forms['compare']     = 'Compare request (similar rentals)';
+			$forms['viewing']     = 'Viewing request';
+			$forms['classic']     = 'Classic page (viewing)'; // R1: the classic rental page's box (blockke_dev_classic_rent_box())
+			$own_name             = blockke_dev_text( get_post_meta( $lid, 'bke_dev_name', true ) );
+			$rent_d               = blockke_dev_data( $lid ); // fix: the page's own name and rent, as the page states them
+			$dev_name             = $rent_d && '' !== (string) $rent_d['short'] ? $rent_d['short'] : ( '' !== $own_name ? $own_name : blockke_dev_listing_name( $lid ) ); // the page's name, not a whole SEO title
+			$rent_a               = $rent_d ? blockke_dev_rent_amount( $rent_d ) : blockke_dev_rent_phrase( $lid, $price, blockke_dev_price_flag( $lid ) ); // R1: the one rent phrase
+			$timeline             = blockke_dev_timeline( $get( 'timeline', 40 ), true ); // when to move in
+		}
+		// v1.8.3 (R1, rent_pages): an area or segment page enquiry "Looking to: Rent" is a rental enquiry too (its subject, saved
+		// kind and Zoho); its description stays the area one
+		$rent_area = $at && 'Rent' === $get( 'look', 60 ) && blockke_bkn_on( 'rent_pages', 'bke_rent' );
 		if ( $at ) {
 			$forms['hero'] = 'Hero form (send me matches)';
 			$forms['find'] = 'Find-me-one request (none listed)';
@@ -8943,6 +10756,10 @@ JS;
 				$lines[] = 'Interested in: ' . $unit;
 			}
 			$lines = array_merge( $lines, $extra );
+		} elseif ( $rent_lead ) { // v1.8.3: agents triage rentals apart from sales
+			$lines[] = 'classic' === $source ? 'RENTAL ENQUIRY (classic page)' : 'RENTAL ENQUIRY (property page)'; // R1: the classic box, else the layout
+			$lines[] = 'Rental: ' . blockke_dev_rent_name( $dev_name ) . ( '' !== $rent_a['line'] ? ' - ' . $rent_a['line'] : ' - rent on request' ); // fix: per sq ft, a night, USD; R1: the phrase helper, KES first with a dated rate
+			$lines[] = 'Interested in: ' . ( $unit ? $unit : '-' );
 		} else {
 			$lines[] = 'DEVELOPMENT ENQUIRY (property page)';
 			$lines[] = 'Development: ' . $dev_name . ( $price > 0 ? ' - from ' . blockke_dev_money( $price ) : '' );
@@ -8956,10 +10773,10 @@ JS;
 		$lines[] = 'Phone / WhatsApp: ' . blockke_dev_phone_display( $phone ) . '  (https://wa.me/' . $phone . ')';
 		$lines[] = 'Email: ' . ( $email ? $email : '-' );
 		if ( $purpose ) {
-			$lines[] = 'Buying to: ' . $purpose;
+			$lines[] = ( $rent_lead ? 'Purpose: ' : 'Buying to: ' ) . $purpose;
 		}
 		if ( $timeline ) {
-			$lines[] = 'Timeline: ' . $timeline;
+			$lines[] = ( $rent_lead ? 'Move-in: ' : 'Timeline: ' ) . $timeline;
 		}
 		if ( $contact ) {
 			$lines[] = 'Best way to reach them: ' . $contact;
@@ -9007,37 +10824,47 @@ JS;
 				'zoho'     => 'not sent',
 				'mail'     => false,
 				'ref'      => $ref,
-			)
+			) + ( $rent_lead || $rent_area ? array( 'kind' => 'rent' ) : array() ) // v1.8.3 (R1): rental rows only (a preview's included); sale rows unchanged
 		);
 
 		$zoho = 'skipped (price-check popup snippet not active)';
 		if ( function_exists( 'blockke_bp_send_zoho' ) ) {
 			$submarkets = array( 'Westlands', 'Kilimani', 'Kileleshwa', 'Lavington', 'Parklands', 'Karen', 'Upperhill', 'Riverside', 'Runda', 'Muthaiga', 'Spring Valley', 'Loresho', 'Kitisuru', 'Ruaka', 'Syokimau', 'Athi River', 'Ngong Road', 'Langata', 'South B / South C', 'Nairobi CBD', 'Thika Road', 'Kiambu Road', 'Mombasa Road' );
 			$sm         = 'upper hill' === strtolower( $area ) ? 'Upperhill' : $area;
-			$zoho       = blockke_bp_send_zoho(
-				array(
-					'lead_source' => $lead_source,
-					'submarket'   => in_array( $sm, $submarkets, true ) ? $sm : ( $area ? 'Other' : '-None-' ),
-					'buyer_type'  => 0 === strpos( $phone, '254' ) ? 'Local' : 'Diaspora',
-					'name'        => $name,
-					'phone'       => $phone,
-					'email'       => $email,
-					'areas'       => $area ? array( $area ) : array(),
-					'budget'      => '', // the band is in the description; Zoho's budget picklist uses the popup's own bands
-					'unit'        => $at || $ix || '' !== $tp ? $title : trim( $dev_name . ( $unit ? ' - ' . $unit : '' ) ),
-					'alerts'      => false,
-					'channel'     => $channel,
-					'campaign'    => $campaign,
-					'page'        => $page ? $page : ( $at || $ix || '' !== $tp ? $area_url : get_permalink( $lid ) ),
-					'page_title'  => $title,
-					'description' => $description,
-				)
-			);
+			$zr         = $rent_lead || $rent_area ? blockke_dev_zoho_rent_args() : null; // v1.8.3 (R1): "Individual tenant" (and "Rental") for a rental lead only
+			if ( $zr ) {
+				add_filter( 'http_request_args', $zr, 10, 2 );
+			}
+			try {
+				$zoho = blockke_bp_send_zoho(
+					array(
+						'lead_source' => $lead_source,
+						'submarket'   => in_array( $sm, $submarkets, true ) ? $sm : ( $area ? 'Other' : '-None-' ),
+						'buyer_type'  => 0 === strpos( $phone, '254' ) ? 'Local' : 'Diaspora',
+						'name'        => $name,
+						'phone'       => $phone,
+						'email'       => $email,
+						'areas'       => $area ? array( $area ) : array(),
+						'budget'      => '', // the band is in the description; Zoho's budget picklist uses the popup's own bands
+						'unit'        => $at || $ix || '' !== $tp ? $title : trim( $dev_name . ( $unit ? ' - ' . $unit : '' ) ),
+						'alerts'      => false,
+						'channel'     => $channel,
+						'campaign'    => $campaign,
+						'page'        => $page ? $page : ( $at || $ix || '' !== $tp ? $area_url : get_permalink( $lid ) ),
+						'page_title'  => $title,
+						'description' => $description,
+					)
+				);
+			} finally {
+				if ( $zr ) {
+					remove_filter( 'http_request_args', $zr, 10 );
+				}
+			}
 		}
 
 		$to      = blockke_dev_lead_to( $lid );
-		$subject = $ix ? sprintf( '[Block] New developments enquiry: %s', $name ) : ( $at ? sprintf( '[Block] Area enquiry: %s - %s', $name, $title ) : ( '' !== $tp ? sprintf( '[Block] %s enquiry: %s%s', $title, $name, $unit ? ' - ' . $unit : '' ) : null ) );
-		$subject = null !== $subject ? $subject : sprintf( '[Block] Development enquiry: %s - %s%s', $name, $dev_name, $unit ? ' - ' . $unit : '' );
+		$subject = $ix ? sprintf( '[Block] New developments enquiry: %s', $name ) : ( $at ? sprintf( $rent_area ? '[Block] Rental enquiry: %s - %s' : '[Block] Area enquiry: %s - %s', $name, $title ) : ( '' !== $tp ? sprintf( '[Block] %s enquiry: %s%s', $title, $name, $unit ? ' - ' . $unit : '' ) : null ) );
+		$subject = null !== $subject ? $subject : sprintf( $rent_lead ? '[Block] Rental enquiry: %s - %s%s' : '[Block] Development enquiry: %s - %s%s', $name, $dev_name, $unit ? ' - ' . $unit : '' );
 		$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
 		if ( $email ) {
 			$headers[] = 'Reply-To: ' . $name . ' <' . $email . '>';
@@ -9064,6 +10891,72 @@ JS;
 		return new WP_REST_Response( $out, 200 );
 	}
 
+	/**
+	 * v1.8.3 (R1): the development-lead route. A form posted without script (form-encoded, with the hidden marker bkd_np=1,
+	 * which only blockke_dev_np_fields() prints: 'forms_post' pages and the classic rental box; plan-check M8) is handled by
+	 * blockke_dev_handle_lead() as the script's lead would be (bkd_hp is the honeypot, "Not sure yet" no unit, and the page's
+	 * campaign tags its attribution unless the form sends attr[]), then answered with a 303 back to its page: ?bkd_sent=1,
+	 * or ?bkd_err=<code> (blockke_dev_np_errors()), at #bkd-enquire or the form's own section (bkd_back). A page on another
+	 * host goes home instead; a honeypot hit is answered as sent. Every other request (the page script's JSON, a
+	 * form-encoded post without the marker) goes to blockke_dev_handle_lead() exactly as before.
+	 */
+	function blockke_dev_lead_route( $req ) {
+		$ct = $req->get_content_type();
+		$bp = $req->get_body_params();
+		if ( empty( $ct['value'] ) || 'application/x-www-form-urlencoded' !== $ct['value'] || ! isset( $bp['bkd_np'] ) || '1' !== $bp['bkd_np'] ) {
+			return blockke_dev_handle_lead( $req );
+		}
+		$s = function ( $k ) use ( $bp ) {
+			return isset( $bp[ $k ] ) && is_scalar( $bp[ $k ] ) ? (string) $bp[ $k ] : '';
+		};
+		if ( '' !== $s( 'bkd_hp' ) ) {
+			$req->set_param( 'hp', $s( 'bkd_hp' ) ); // the honeypot's name in the form; the script sends it as hp
+		}
+		if ( 'Not sure yet' === $s( 'unit' ) ) {
+			$req->set_param( 'unit', '' ); // as the script sends it
+		}
+		$page = esc_url_raw( mb_substr( trim( $s( 'page' ) ), 0, 300 ) );
+		if ( ! isset( $bp['attr'] ) || ! is_array( $bp['attr'] ) ) {
+			$req->set_param( 'attr', blockke_dev_np_attr( $page ) ); // plan-check H1: the campaign tags of the page the form was on
+		}
+		$res  = rest_ensure_response( blockke_dev_handle_lead( $req ) );
+		$st   = is_wp_error( $res ) ? 500 : $res->get_status();
+		$data = is_wp_error( $res ) ? null : $res->get_data();
+		$code = '';
+		if ( 200 !== $st || ! is_array( $data ) || empty( $data['ok'] ) ) {
+			$code = 429 === $st ? 'rate' : array_search( is_array( $data ) && isset( $data['message'] ) ? $data['message'] : '', blockke_dev_np_errors(), true );
+			$code = false === $code ? 'fail' : $code;
+		}
+		$back = in_array( $s( 'bkd_back' ), array( 'bkd-enquire', 'bkd-rent' ), true ) ? $s( 'bkd_back' ) : 'bkd-enquire';
+		return new WP_REST_Response( null, 303, array( 'Location' => blockke_dev_np_back( $page, $code, $back ) ) + array_filter( wp_get_nocache_headers(), 'is_string' ) );
+	}
+
+	/** v1.8.3 (R1): a no-script lead's attribution, as the script's attr() sends it: the campaign tags (utm_*, gclid, fbclid, gbraid, wbraid) of its page, and the page as its landing page. */
+	function blockke_dev_np_attr( $page ) {
+		$a = array();
+		parse_str( (string) wp_parse_url( $page, PHP_URL_QUERY ), $q );
+		foreach ( array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'gbraid', 'wbraid' ) as $k ) {
+			if ( isset( $q[ $k ] ) && is_scalar( $q[ $k ] ) && '' !== (string) $q[ $k ] ) {
+				$a[ $k ] = mb_substr( (string) $q[ $k ], 0, 120 );
+			}
+		}
+		if ( '' !== $page ) {
+			$a['land'] = mb_substr( $page, 0, 250 );
+		}
+		return $a;
+	}
+
+	/** v1.8.3 (R1): where a no-script post's 303 goes: its page when that is on this site's own host (else home), with ?bkd_sent=1 or ?bkd_err=<code>, at #$back. */
+	function blockke_dev_np_back( $page, $code, $back ) {
+		$h    = wp_parse_url( home_url( '/' ) );
+		$u    = '' !== $page ? wp_parse_url( $page ) : false;
+		$same = is_array( $u ) && isset( $u['scheme'], $u['host'], $h['host'] ) && in_array( strtolower( $u['scheme'] ), array( 'http', 'https' ), true ) && ! isset( $u['user'] ) && ! isset( $u['pass'] )
+			&& strtolower( $u['host'] ) === strtolower( $h['host'] ) && ( isset( $u['port'] ) ? (int) $u['port'] : 0 ) === ( isset( $h['port'] ) ? (int) $h['port'] : 0 );
+		$to   = $same ? preg_replace( '/#.*$/s', '', $page ) : home_url( '/' );
+		$to   = add_query_arg( '' === $code ? array( 'bkd_sent' => '1' ) : array( 'bkd_err' => $code ), remove_query_arg( array( 'bkd_sent', 'bkd_err' ), $to ) );
+		return wp_validate_redirect( wp_sanitize_redirect( $to ), home_url( '/' ) ) . '#' . $back;
+	}
+
 	add_action(
 		'rest_api_init',
 		function () {
@@ -9072,7 +10965,7 @@ JS;
 				'/development-lead',
 				array(
 					'methods'             => 'POST',
-					'callback'            => 'blockke_dev_handle_lead',
+					'callback'            => 'blockke_dev_lead_route', // v1.8.3 (R1): a form posted without script gets a 303; everything else goes to blockke_dev_handle_lead() as before
 					'permission_callback' => '__return_true',
 				)
 			);
@@ -9192,7 +11085,7 @@ JS;
 			$bkd_hook,
 			function ( $mid, $object_id, $meta_key ) {
 				// the last four feed the v1.6 cards (layout, the editor's line, the photo count), often written without a post save
-				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label', 'prop_featured', 'bke_dev_layout', 'bke_index_line', 'wpestate_property_gallery', 'image_to_attach', 'bke_dev_kind' ), true ) && blockke_dev_sim_live( $object_id ) ) {
+				if ( in_array( $meta_key, array( 'property_price', 'property_label', 'property_label_before', 'property_bedrooms', 'property_size', 'property_subunits_master', 'property_has_subunits', 'property_subunits_list', '_thumbnail_id', 'bke_dev_similar', 'bke_dev_area', 'bke_completion_stated', 'bke_unit_label', 'prop_featured', 'bke_dev_layout', 'bke_index_line', 'wpestate_property_gallery', 'image_to_attach', 'bke_dev_kind', 'bke_rent_usd', 'bke_rent_usd_date' ), true ) && blockke_dev_sim_live( $object_id ) ) {
 					blockke_dev_sim_bump();
 				}
 			},
@@ -9310,6 +11203,109 @@ JS;
 				$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-lp', 'title' => 'Open the ad landing page', 'href' => add_query_arg( 'lp', '1', $url ) ) );
 			}
 			$bar->add_node( array( 'parent' => 'bkd', 'id' => 'bkd-edit', 'title' => 'Layout settings', 'href' => get_edit_post_link( $id ) . '#bkd-meta' ) );
+		},
+		90
+	);
+
+	/* =====================================================================
+	   v1.8.3 (R1): redirects, the listings family (config 'redirects' = array( 'listings' => 301 ), and 'redirect_ids'): the
+	   URL of a listing taken down (batch D drafts one copy of each duplicate) goes to the listing kept for it. With both keys
+	   empty nothing here prints, sends or redirects anything.
+	   ===================================================================== */
+
+	/** v1.8.3 (R1, redirects): the status a family of redirects is switched on with (config 'redirects': family => 301 or 302), else 0 (off). */
+	function blockke_dev_redirect_status( $fam ) {
+		$cfg = blockke_dev_config();
+		$all = isset( $cfg['redirects'] ) && is_array( $cfg['redirects'] ) ? $cfg['redirects'] : array();
+		$s   = isset( $all[ $fam ] ) && is_scalar( $all[ $fam ] ) && is_numeric( $all[ $fam ] ) ? (int) $all[ $fam ] : 0;
+		return 301 === $s || 302 === $s ? $s : 0;
+	}
+
+	/** v1.8.3 (R1, redirects): config 'redirect_ids' (a listing taken down => the listing kept for it) as whole IDs; anything else, or a listing mapped to itself, is left out. */
+	function blockke_dev_redirect_ids() {
+		$cfg = blockke_dev_config();
+		$out = array();
+		foreach ( isset( $cfg['redirect_ids'] ) && is_array( $cfg['redirect_ids'] ) ? $cfg['redirect_ids'] : array() as $from => $to ) {
+			$from = is_numeric( $from ) ? (int) $from : 0;
+			$to   = is_scalar( $to ) && is_numeric( $to ) ? (int) $to : 0;
+			if ( $from > 0 && $to > 0 && $from !== $to ) {
+				$out[ $from ] = $to;
+			}
+		}
+		return $out;
+	}
+
+	/** v1.8.3 (R1, redirects): an editor's dry run (?bke_redir=1): the admin bar says where the page would go, and it does not go. */
+	function blockke_dev_redirect_dry() {
+		return isset( $_GET['bke_redir'] ) && is_scalar( $_GET['bke_redir'] ) && '1' === (string) $_GET['bke_redir'] && current_user_can( 'edit_posts' ); // phpcs:ignore WordPress.Security.NonceVerification
+	}
+
+	/**
+	 * v1.8.3 (R1, redirects): where this request goes in the listings family, else null. Only a GET or HEAD request that is a
+	 * 404 (a listing taken down, as a visitor sees it) or shows a listing that is not published (as its editor sees a draft),
+	 * whose path ends in the slug of a listing in 'redirect_ids' that is not published (get_page_by_path(), any status). Gives
+	 * both IDs, the status the family is switched on with (0: off), and the URL: the listing kept, with the request's query
+	 * string, or '' while that listing is not published (never a chain: no redirect to a page that is not there, or to another
+	 * listing taken down, which would redirect again).
+	 */
+	function blockke_dev_redirect_target() {
+		$ids = blockke_dev_redirect_ids();
+		$how = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET';
+		if ( ! $ids || is_admin() || ( 'GET' !== $how && 'HEAD' !== $how ) ) {
+			return null;
+		}
+		$q = get_queried_object();
+		if ( ! is_404() && ! ( is_singular( 'estate_property' ) && $q instanceof WP_Post && 'publish' !== $q->post_status ) ) {
+			return null;
+		}
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$segs = array_values( array_filter( explode( '/', (string) wp_parse_url( $uri, PHP_URL_PATH ) ), 'strlen' ) );
+		$old  = $segs ? get_page_by_path( end( $segs ), OBJECT, 'estate_property' ) : null;
+		if ( ! $old instanceof WP_Post || 'estate_property' !== $old->post_type || 'publish' === $old->post_status || ! isset( $ids[ $old->ID ] ) ) {
+			return null;
+		}
+		$to  = $ids[ $old->ID ];
+		$url = 'estate_property' === get_post_type( $to ) && 'publish' === get_post_status( $to ) ? (string) get_permalink( $to ) : '';
+		$qs  = (string) wp_parse_url( $uri, PHP_URL_QUERY );
+		if ( '' !== $url && '' !== $qs ) {
+			$url .= ( false === strpos( $url, '?' ) ? '?' : '&' ) . $qs;
+		}
+		return array( 'from' => (int) $old->ID, 'to' => $to, 'status' => blockke_dev_redirect_status( 'listings' ), 'url' => $url );
+	}
+
+	// Priority 0: before redirect_canonical (10, which guesses a published listing for a 404 by the start of its slug), WordPress's
+	// old-slug redirect and every other redirect of ours. Only while 'redirects' has the listings family, and not on a dry run.
+	add_action(
+		'template_redirect',
+		function () {
+			if ( ! blockke_dev_redirect_status( 'listings' ) || blockke_dev_redirect_dry() ) {
+				return;
+			}
+			$t = blockke_dev_redirect_target();
+			if ( $t && '' !== $t['url'] && wp_safe_redirect( $t['url'], $t['status'], 'Block' ) ) {
+				exit;
+			}
+		},
+		0
+	);
+
+	// The dry run's note: "would 301 to /property/…/ (listing 44048 → 42590)", the URL as a visitor would get it (without the
+	// dry run's own bke_redir), or why it would not go. Also while the family is off, so the IDs can be checked before switching it on.
+	add_action(
+		'admin_bar_menu',
+		function ( $bar ) {
+			$t = ! is_admin() && blockke_dev_redirect_dry() ? blockke_dev_redirect_target() : null;
+			if ( ! $t ) {
+				return;
+			}
+			$go  = '' === $t['url'] ? '' : remove_query_arg( 'bke_redir', $t['url'] );
+			$off = $t['status'] ? '' : " (off: config redirects['listings'] is not 301 or 302)";
+			if ( '' === $go ) {
+				$say = 'Redirect: none, listing ' . $t['to'] . ' (kept for ' . $t['from'] . ') is not a published listing' . $off;
+			} else {
+				$say = 'Redirect: would ' . ( $t['status'] ? $t['status'] : 'go' ) . ' to ' . wp_make_link_relative( $go ) . ' (listing ' . $t['from'] . ' → ' . $t['to'] . ')' . $off;
+			}
+			$bar->add_node( array( 'id' => 'bkr', 'title' => esc_html( $say ), 'href' => '' === $go ? false : $go ) );
 		},
 		90
 	);
@@ -9586,7 +11582,7 @@ JS;
 			return blockke_area_v16_data( $term );
 		}
 		$cfg = blockke_dev_config();
-		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v15|' . md5( wp_json_encode( array( $cfg['studio_cat'], $cfg['area_cap'], $cfg['beds_mode'] ) ) );
+		$ver = (string) get_option( 'bkd_sim_ver', '0' ) . '|v15|' . md5( wp_json_encode( array( $cfg['studio_cat'], $cfg['area_cap'], $cfg['beds_mode'] ) ) ) . blockke_dev_rent_ver(); // v1.8.3 (R1): rental switches at the end
 		$tk  = 'bkd_area_' . (int) $term->term_id;
 		$hit = get_transient( $tk );
 		if ( is_array( $hit ) && isset( $hit['ver'] ) && $hit['ver'] === $ver ) {
@@ -9710,7 +11706,9 @@ JS;
 			'segs' => $segs,
 			'city' => $cities ? (string) key( $cities ) : '',
 		);
-		set_transient( $tk, array( 'ver' => $ver, 'data' => $data ), max( 300, (int) $cfg['sim_ttl'] ) );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( $tk, array( 'ver' => $ver, 'data' => $data ), max( 300, (int) $cfg['sim_ttl'] ) );
+		}
 		return $data;
 	}
 
@@ -9795,6 +11793,9 @@ JS;
 		$desc  = '';
 		if ( $seg ) {
 			$rg = blockke_area_range( $sd, 'rent' === $seg[1], $v16 );
+			if ( '' === $rg && isset( $sd['umin'] ) ) { // v1.8.3 (R1, rent_cards): a segment let only per sq ft states that rent in its hero and description
+				$rg = ( $sd['umax'] > $sd['umin'] ? 'from ' . blockke_dev_money( $sd['umin'] ) . ' to ' : ( 1 === (int) $sd['homes'] ? 'at ' : 'from ' ) ) . blockke_dev_money( $sd['umax'] ) . ' per sq ft a month';
+			}
 			if ( $sd['n'] ) {
 				$tag  = $noun( $sd['n'] ) . ( '' !== $rg ? ( 0 === strpos( $rg, 'at ' ) ? ' ' : ', ' ) . $rg : '' ) . '.';
 				$desc = $label . ' in ' . $where . ': ' . $noun( $sd['n'] ) . ( '' !== $rg ? ' ' . $rg : '' ) . '. Compare photos and prices, then speak to a ' . $cfg['brand_full'] . ' advisor.';
@@ -10514,7 +12515,8 @@ JS;
 						$js['listLabel'] = $p['seg'] ? $p['lname'] : $p['area'];
 					}
 					echo '<script id="bkd-cfg" data-cfasync="false" data-no-optimize="1" data-no-defer="1">window.BKDEV=' . wp_json_encode( $js, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ";</script>\n";
-					$own = $v16 ? blockke_area_js_v16() . "\n" . blockke_bkn_nav_js() : blockke_area_js();
+					$rng = $v16 && $p['seg'] && 'rent' === $p['action'] && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) && isset( $p['data']['segs'][ $p['slug'] ]['cards'] ) ? array_filter( $p['data']['segs'][ $p['slug'] ]['cards'], function ( $c ) { return ! empty( $c['rng'] ); } ) : array(); // v1.8.3 (R1): a rent segment page with a rental for several sizes
+					$own = $v16 ? ( $rng ? blockke_area_js_v16_rc( blockke_area_js_v16() ) : blockke_area_js_v16() ) . "\n" . blockke_bkn_nav_js() : blockke_area_js(); // its filter knows the range-rental rule
 					echo '<script id="bkd-js" data-cfasync="false" data-no-optimize="1" data-no-defer="1">' . blockke_dev_noprog( blockke_dev_js() ) . "\n" . $own . "</script>\n"; // phpcs:ignore WordPress.Security.EscapeOutput
 				},
 				20
@@ -10580,7 +12582,7 @@ JS;
 			return $GLOBALS['blockke_bkn_rows_ver'];
 		}
 		$cfg = blockke_dev_config();
-		return (string) get_option( 'bkd_sim_ver', '0' ) . '|v163|' . substr( md5( wp_json_encode( array( $cfg['enabled'], $cfg['auto'], $cfg['auto_units'], $cfg['neighbours'], $cfg['studio_cat'] ) ) ), 0, 10 );
+		return (string) get_option( 'bkd_sim_ver', '0' ) . '|v163|' . substr( md5( wp_json_encode( array( $cfg['enabled'], $cfg['auto'], $cfg['auto_units'], $cfg['neighbours'], $cfg['studio_cat'] ) ) ), 0, 10 ) . blockke_dev_rent_ver(); // v1.8.3 (R1): rental switches at the END, so part [1] (the row format) still matches and the old rows are served while one request rebuilds
 	}
 
 	/** Lowercase, no punctuation or the generic words, for "is this the same building" checks. */
@@ -10640,7 +12642,10 @@ JS;
 				return $rows;
 			}
 		}
-		set_transient( 'bkn_build_lock', 1, 60 );
+		$pv = blockke_dev_rent_preview(); // v1.8.3 (R1): an editor's rental preview builds the rows in memory: no lock, nothing stored
+		if ( ! $pv ) {
+			set_transient( 'bkn_build_lock', 1, 60 );
+		}
 		$keep = array( isset( $_GET['completion'] ) ? $_GET['completion'] : null, isset( $_REQUEST['bke_completion'] ) ? $_REQUEST['bke_completion'] : null ); // phpcs:ignore WordPress.Security.NonceVerification
 		unset( $_GET['completion'], $_REQUEST['bke_completion'] ); // another snippet narrows property queries by these
 		$args = array(
@@ -10695,8 +12700,10 @@ JS;
 			$rows                            = $hit['rows'];
 			return $rows;
 		}
-		set_transient( 'bkn_rows', array( 'ver' => $ver, 'rows' => $rows, 't' => time() ), $rows ? WEEK_IN_SECONDS : 5 * MINUTE_IN_SECONDS );
-		delete_transient( 'bkn_build_lock' );
+		if ( ! $pv ) {
+			set_transient( 'bkn_rows', array( 'ver' => $ver, 'rows' => $rows, 't' => time() ), $rows ? WEEK_IN_SECONDS : 5 * MINUTE_IN_SECONDS );
+			delete_transient( 'bkn_build_lock' );
+		}
 		$GLOBALS['blockke_bkn_rows_ver'] = $ver;
 		return $rows;
 	}
@@ -10768,7 +12775,7 @@ JS;
 		$lo  = (string) blockke_dev_pm( $id, 'bke_dev_layout' );
 		$dev = '1' === (string) blockke_dev_pm( $id, 'property_has_subunits' );
 		$cfg = blockke_dev_config();
-		return array(
+		$row = array(
 			'id'    => $id,
 			't'     => blockke_dev_text( get_the_title( $id ) ),
 			'u'     => get_permalink( $id ),
@@ -10784,7 +12791,7 @@ JS;
 			'ma'    => $ma,
 			'cy'    => $cy ? blockke_dev_text( $cy->name ) : '',
 			'p'     => (float) blockke_dev_pm( $id, 'property_price' ),
-			'f'     => blockke_dev_price_flag( $id ),
+			'f'     => blockke_dev_price_flag( $id, 'rent' === $act ), // v1.8.3 (R1): 'period' for a rental's row while rent_cards is on
 			'b'     => (int) blockke_dev_pm( $id, 'property_bedrooms' ),
 			'k'     => 'home' === $kt[0] ? blockke_dev_sim_key( $id ) : '',
 			'sq'    => (float) blockke_dev_pm( $id, 'property_size' ),
@@ -10798,6 +12805,140 @@ JS;
 			'ln'    => blockke_dev_text( (string) blockke_dev_pm( $id, 'bke_index_line' ) ),
 			'd'     => (int) get_post_time( 'U', true, $id ),
 		);
+		if ( 'rent' === $act && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) { // v1.8.3 (R1): a rental's row also carries what its card states
+			$row += blockke_bkn_rent_row( $id, $row['p'], $row['f'] );
+		}
+		return $row;
+	}
+
+	/**
+	 * v1.8.3 (R1, 'rent_cards'): what a rental's row adds for its card, only while the switch is on (or previewed), so every
+	 * other row, and every row with the switch off, is as before:
+	 *   'usd'   its rent in US dollars, the meta bke_rent_usd as blockke_dev_rent_phrase() reads it (0: none);
+	 *   'usdd'  bke_rent_usd_date when it is a real YYYY-MM-DD date and 'usd' is set ('': none); with both, a card can state
+	 *           the rent KES first, as the page does;
+	 *   'fu'    furnished: the Furnished feature, the Furnished status, or the listing's own Furnishing row
+	 *           (blockke_dev_rent_info()) saying furnished; not "Unfurnished", semi- or part-furnished, "furnished or not" or
+	 *           "there are also furnished apartments". The text is read as written: no shortcode or block runs while the rows
+	 *           are built, so building them never adds anything to the page that asked for them;
+	 *   'rs'    its rent as its card states it (blockke_bkn_rent_text(), from $price and $flag: the row's price and flag); ''
+	 *           when the rent is on request.
+	 */
+	function blockke_bkn_rent_row( $id, $price = 0.0, $flag = '' ) {
+		$m   = array();
+		$usd = get_post_meta( $id, 'bke_rent_usd', true );
+		$usd = is_scalar( $usd ) && preg_match( '/^\s*(?:usd|us\$|\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*$/i', (string) $usd, $m ) ? (float) str_replace( ',', '', $m[1] ) : 0.0;
+		$dt  = $usd > 0 ? get_post_meta( $id, 'bke_rent_usd_date', true ) : '';
+		$dt  = is_scalar( $dt ) && preg_match( '/^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$/', (string) $dt, $m ) && checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ? trim( (string) $dt ) : '';
+		$fu  = has_term( 'furnished', 'property_features', $id ) || has_term( 'furnished', 'property_status', $id );
+		$post = $fu ? null : get_post( $id );
+		if ( $post ) {
+			$c   = (string) $post->post_content;
+			$p   = blockke_dev_sections( function_exists( 'has_blocks' ) && has_blocks( $c ) ? $c : wpautop( $c ) );
+			$i   = blockke_dev_find( $p['sections'], '/glance|snapshot|key facts|quick facts|in brief|at a look|summary/i' ); // its glance table, as blockke_dev_glance()
+			$f   = blockke_dev_rent_info( $i >= 0 ? blockke_dev_kv( $p['sections'][ $i ]['tokens'] ) : array(), $p['sections'] );
+			$fu  = isset( $f['furnish'] ) && preg_match( '/\bfurnished\b/i', $f['furnish'][1] ) && ! preg_match( '/\bun-?\s?furnished|\bsemi|\bpart(?:ly|ially)?\b|\bor\b|\boptional|\balso\b/i', $f['furnish'][1] );
+		}
+		return array(
+			'usd'  => $usd,
+			'usdd' => $dt,
+			'fu'   => (bool) $fu,
+			'rs'   => blockke_bkn_rent_text( $id, $price, $flag ),
+		);
+	}
+
+	/**
+	 * v1.8.3 (R1, 'rent_cards'): one rental's rent as a card states it, worded by blockke_dev_rent_phrase() as its page states
+	 * it: "KES 200K a month", "KES 6,500 a day", "KES 130 per sq ft a month", "KES 711K a month (USD 5,500)" (KES first: the
+	 * dated US dollar rent), "USD 5,500 a month" (US dollars with no dated rate: no KES figure); '' when the rent is on request
+	 * (the card then says "Rent on request"). The figure is the cards' own (rounded up, as every card's: blockke_bkn_money()),
+	 * exact under KES 10,000 ("KES 6,500 a day", never "KES 7K") and, as on the page, per sq ft or in US dollars.
+	 */
+	function blockke_bkn_rent_text( $id, $p, $f ) {
+		$p  = (float) $p;
+		$ph = blockke_dev_rent_phrase( $id, $p, 'unit' === $f ? 'unit' : '' );
+		if ( $ph['on_request'] ) {
+			return '';
+		}
+		if ( '' !== $ph['usd'] && '' === $ph['kes'] ) {
+			return $ph['line'];
+		}
+		$fig = 'unit' === $f ? $ph['amt'] : ( $p < 10000 ? blockke_dev_money( $p ) : blockke_bkn_money( $p ) );
+		return $fig . ' ' . $ph['per'] . ( '' !== $ph['kes'] ? ' (' . $ph['usd'] . ')' : '' );
+	}
+
+	/**
+	 * v1.8.3 (R1, 'rent_cards'): what a rent card says for its rent, from the rows of its rentals (each row's 'rs'): one
+	 * rental, its own ("From " when the card covers several sizes); several with a monthly rent in KES, null (the card's
+	 * range, as before: "From KES 70K a month", "KES 70K–110K a month"); else their rents per sq ft, else their rents by the
+	 * day, night or week, the lowest ("From KES 100 per sq ft a month" when they differ); else '' (rent on request).
+	 */
+	function blockke_bkn_rent_say( $rs, $many ) {
+		$rs = array_values(
+			array_filter(
+				$rs,
+				function ( $r ) {
+					return isset( $r['rs'] );
+				}
+			)
+		);
+		if ( ! $rs ) {
+			return null;
+		}
+		if ( 1 === count( $rs ) ) {
+			return '' !== $rs[0]['rs'] && $many ? 'From ' . $rs[0]['rs'] : $rs[0]['rs'];
+		}
+		foreach ( array( '', 'unit', 'period' ) as $f ) {
+			$by = array();
+			foreach ( $rs as $r ) {
+				if ( $r['p'] > 0 && ( '' === $f ? 'unit' !== $r['f'] && 'period' !== $r['f'] : $f === $r['f'] && '' !== $r['rs'] ) ) {
+					$by[] = $r;
+				}
+			}
+			if ( $by && '' === $f ) {
+				return null;
+			}
+			if ( $by ) {
+				usort(
+					$by,
+					function ( $a, $b ) {
+						return $a['p'] <=> $b['p'];
+					}
+				);
+				return ( $many || count( array_unique( wp_list_pluck( $by, 'p' ) ) ) > 1 ? 'From ' : '' ) . $by[0]['rs'];
+			}
+		}
+		return '';
+	}
+
+	/** v1.8.3 (R1, 'rent_cards'): true when every rental of a card is furnished (its rows' 'fu'). */
+	function blockke_bkn_rent_fu( $rs ) {
+		foreach ( $rs as $r ) {
+			if ( empty( $r['fu'] ) ) {
+				return false;
+			}
+		}
+		return (bool) $rs;
+	}
+
+	/** v1.8.3 (R1, 'rent_cards'): a development's rentals' rows (search cards: all its rentals, as its card's rent range). */
+	function blockke_bkn_rent_rows_of( $d ) {
+		$rows = blockke_bkn_rows();
+		$out  = array();
+		foreach ( $d['ids'] as $id ) {
+			if ( isset( $rows[ $id ]['rs'] ) ) {
+				$out[] = $rows[ $id ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * v1.8.3 (R1, 'rent_cards'): a rent card's rent, bold, in pieces a narrow card can break between ("KES 130 per sq ft" /
+	 * "a month", "KES 711K a month" / "(USD 5,500)"); each piece stays on one line, as every card's price does.
+	 */
+	function blockke_bkn_rent_b( $t ) {
+		return '<b>' . implode( '</b> <b>', array_map( 'esc_html', preg_split( '/ (?=\(USD )|(?<= per sq ft) (?=a )/', $t ) ) ) . '</b>';
 	}
 
 	/**
@@ -10909,7 +13050,9 @@ JS;
 			'devs' => $devs,
 			'of'   => $of,
 		);
-		set_transient( 'bkn_devs', array( 'ver' => $ver, 'data' => $out ), DAY_IN_SECONDS );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( 'bkn_devs', array( 'ver' => $ver, 'data' => $out ), DAY_IN_SECONDS );
+		}
 		return $out;
 	}
 
@@ -10993,7 +13136,7 @@ JS;
 			$ft            = $ft || $r['ft'];
 			$d             = max( $d, $r['d'] );
 			$areas         = array_merge( $areas, $r['areas'] );
-			if ( 'unit' !== $r['f'] && $r['p'] > 0 ) {
+			if ( 'unit' !== $r['f'] && 'period' !== $r['f'] && $r['p'] > 0 ) { // v1.8.3 (R1): nor a rent by the day, night or week (rent_cards)
 				if ( 'sale' === $r['act'] && $r['p'] >= 1000000 ) {
 					$sale[] = $r['p'];
 				} elseif ( 'rent' === $r['act'] ) {
@@ -11086,15 +13229,25 @@ JS;
 			}
 		}
 		$out = array();
+		$rc  = $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ); // v1.8.3 (R1)
 		foreach ( $by as $k => $rs ) {
 			$c     = $all['devs'][ $k ];
 			$ps    = array();
 			$beds  = array();
 			$types = array();
 			$match = array();
+			$rng   = array( array(), array() ); // v1.8.3 (R1, rent_cards): the other homes' prices; each rental for several sizes' smallest size and price
 			foreach ( $rs as $r ) {
-				if ( 'unit' !== $r['f'] && $r['p'] > 0 && ( $rent || $r['p'] >= 1000000 ) ) {
+				if ( 'unit' !== $r['f'] && 'period' !== $r['f'] && $r['p'] > 0 && ( $rent || $r['p'] >= 1000000 ) ) {
 					$ps[] = $r['p'];
+					if ( $rc ) {
+						$rb = 'rent' === $r['act'] && blockke_bkn_is_range( $r ) ? array_unique( blockke_bkn_range_beds( $r ) ) : array();
+						if ( count( $rb ) > 1 ) {
+							$rng[1][] = array( (int) min( $rb ), (int) $r['p'] );
+						} else {
+							$rng[0][] = (int) $r['p'];
+						}
+					}
 				}
 				if ( 'home' === $r['kind'] && ! $r['dev'] && '' !== $r['k'] ) {
 					$beds[] = 'studio' === $r['k'] ? 0 : max( 1, $r['b'] );
@@ -11131,6 +13284,19 @@ JS;
 					return 'unit' === $r['f'];
 				}
 			);
+			if ( $rc && ! $ps && in_array( 'period', wp_list_pluck( $rs, 'f' ), true ) ) {
+				$c['period'] = true; // v1.8.3 (R1): its only rents are by the day, night or week
+			}
+			if ( $rc && $rng[1] ) {
+				$c['rng'] = $rng; // v1.8.3 (R1): blockke_area_v16_match()'s range-rental rule
+			}
+			if ( $rc ) { // v1.8.3 (R1): what the card says for its rent, and "Furnished" when every rental of it is
+				$say = blockke_bkn_rent_say( $rs, count( $beds ) > 1 );
+				if ( null !== $say ) {
+					$c['rsay'] = $say;
+				}
+				$c['fu'] = blockke_bkn_rent_fu( $rs );
+			}
 			$out[ $k ] = blockke_bkn_for_act( $c, wp_list_pluck( $rs, 'id' ), $rent ? 'rent' : 'sale' );
 		}
 		return $out;
@@ -11238,12 +13404,15 @@ JS;
 		$rent  = $ctx['rent'];
 		$many  = 'unit' !== $v && count( $c['beds'] ) > 1;
 		$price = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, $ctx['range'], $many ) : blockke_bkn_price( $c['from'], $c['to'], false, $ctx['range'], $many );
+		$rsay  = $rent && isset( $c['rsay'] ); // v1.8.3 (R1, rent_cards): the rent as its rentals state it ("KES 6,500 a day", "Rent on request")
+		$price = $rsay ? ( '' !== $c['rsay'] ? $c['rsay'] : 'Rent on request' ) : $price;
+		$fu    = $rent && ! empty( $c['fu'] ) ? 'Furnished' : ''; // v1.8.3 (R1, rent_cards): every rental of the card is furnished
 		$place = $ctx['scope'] && $c['area'] === $ctx['scope'] ? '' : $c['place'];
 		$bd    = blockke_bkn_beds( $c['beds'], $c['types'] );
 		$done  = $rent ? '' : blockke_bkn_done_text( $c );
 		// each part on one line, so a narrow card breaks between "KES 5.9M ·" and "Completion Mar 2027", never inside a date
 		$pl    = implode( ' · ', array_filter( array( $e( $place ), '' !== $bd ? '<span class="bkn-nw">' . $e( $bd ) . '</span>' : '' ) ) );
-		$dl    = implode( ' · ', array_filter( array( '' !== $price ? '<b>' . $e( $price ) . '</b>' : '', '' !== $done ? '<span class="bkn-nw">' . $e( $done ) . '</span>' : '' ) ) );
+		$dl    = implode( ' · ', array_filter( array( '' !== $price ? ( $rsay ? blockke_bkn_rent_b( $price ) : '<b>' . $e( $price ) . '</b>' ) : '', '' !== $done ? '<span class="bkn-nw">' . $e( $done ) . '</span>' : '', '' !== $fu ? '<span class="bkn-nw">' . $fu . '</span>' : '' ) ) );
 		$alt   = $c['cover'] ? trim( (string) get_post_meta( $c['cover'], '_wp_attachment_image_alt', true ) ) : '';
 		$alt   = '' !== $alt ? $alt : $c['name'] . ( '' !== $c['place'] ? ', ' . $c['place'] : '' );
 		$size  = 'row' === $v ? 'medium' : ( 'lead' === $v ? 'large' : 'medium_large' );
@@ -11264,7 +13433,7 @@ JS;
 		$link  = '<a class="bkn-a" href="' . esc_url( $c['url'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '"' . ( $ctx['pos'] ? ' data-pos="' . (int) $ctx['pos'] . '"' : '' ) . '>';
 		$tag   = $ctx['tag'] ? '<span class="bkn-tag">New on Block</span>' : '';
 		if ( 'unit' === $v ) { // one home, Compass order: price, what it is, where
-			$what = array_filter( array( blockke_bkn_beds( $c['beds'], $c['types'] ), ! empty( $c['sqm'] ) ? blockke_dev_num( $c['sqm'] ) . ' m²' : '' ) );
+			$what = array_filter( array( blockke_bkn_beds( $c['beds'], $c['types'] ), ! empty( $c['sqm'] ) ? blockke_dev_num( $c['sqm'] ) . ' m²' : '', $fu ) );
 			return '<article class="bkn-card bkn-unit" id="d-' . (int) $c['id'] . '"' . $data . '>' . $link . '<span class="bkn-img">' . $img . $tag . '</span>'
 				. '<span class="bkn-uprice">' . $e( '' !== $price ? $price : 'Price on request' ) . '</span></a>'
 				. '<p class="bkn-place">' . $e( implode( ' · ', $what ) ) . '</p><p class="bkn-data">' . $e( implode( ', ', array_filter( array( $c['name'], $place ) ) ) ) . '</p></article>';
@@ -11295,9 +13464,9 @@ JS;
 			$h .= '<div class="bkn-match"><p class="bkn-mh">' . $e( count( $m ) . ( 1 === count( $m ) ? ' home matches' : ' homes match' ) . ( $bl ? ': ' . ( count( $bl ) > 1 ? implode( ', ', array_slice( $bl, 0, -1 ) ) . ' and ' . end( $bl ) : $bl[0] ) . ( 'studio' === end( $bl ) && 1 === count( $bl ) ? '' : ' bed' ) : '' ) ) . '</p><ul>';
 			foreach ( array_slice( $m, 0, 3 ) as $i => $r ) {
 				$what = array_filter( array( 'studio' === $r['k'] ? 'Studio' : ( $r['b'] ? $r['b'] . ' bed' : '' ), $r['sq'] > 0 ? blockke_dev_num( round( $r['sq'] * blockke_dev_sqft_factor() ) ) . ' m²' : '' ) );
-				$h   .= '<li><a href="' . esc_url( $r['u'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '" data-row="' . ( $i + 1 ) . '"><span>' . $e( implode( ' · ', $what ) ) . '</span><b>' . $e( $r['p'] > 0 && 'unit' !== $r['f'] ? blockke_bkn_money( $r['p'] ) . ( $rent ? ' a month' : '' ) : 'Price on request' ) . '</b></a></li>';
+				$h   .= '<li><a href="' . esc_url( $r['u'] ) . '" data-bkn="' . esc_attr( $ctx['src'] ) . '" data-row="' . ( $i + 1 ) . '"><span>' . $e( implode( ' · ', $what ) ) . '</span><b>' . $e( $rent && isset( $r['rs'] ) ? ( '' !== $r['rs'] ? $r['rs'] : 'Rent on request' ) : ( $r['p'] > 0 && 'unit' !== $r['f'] ? blockke_bkn_money( $r['p'] ) . ( $rent ? ' a month' : '' ) : 'Price on request' ) ) . '</b></a></li>'; // v1.8.3 (R1, rent_cards): each rental's own rent
 			}
-			$h .= '</ul>' . ( count( $m ) > 3 ? '<a class="bkn-mall" href="' . esc_url( $c['url'] ) . '#bkd-residences" data-bkn="' . esc_attr( $ctx['src'] ) . '">' . $e( 'See all ' . count( $m ) . ' in the price list' ) . '</a>' : '' ) . '</div>';
+			$h .= '</ul>' . ( count( $m ) > 3 ? '<a class="bkn-mall" href="' . esc_url( $c['url'] ) . '#bkd-residences" data-bkn="' . esc_attr( $ctx['src'] ) . '">' . $e( 'See all ' . count( $m ) . ( $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ? ' rentals' : ' in the price list' ) ) . '</a>' : '' ) . '</div>'; // v1.8.3 (R1): "See all 5 rentals"
 		}
 		return $h . '</article>';
 	}
@@ -11659,7 +13828,9 @@ JS;
 			'far'   => $far,
 			'skip'  => $skip,
 		);
-		set_transient( 'bkn_index', array( 'ver' => $ver, 'data' => $x ), DAY_IN_SECONDS );
+		if ( ! blockke_dev_rent_preview() ) { // v1.8.3 (R1): an editor's rental preview stores nothing
+			set_transient( 'bkn_index', array( 'ver' => $ver, 'data' => $x ), DAY_IN_SECONDS );
+		}
 		return $x;
 	}
 
@@ -12776,6 +14947,18 @@ JS;
 				'min'   => $ps ? min( $ps ) : 0,
 				'max'   => $ps ? max( $ps ) : 0,
 			);
+			if ( $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) { // v1.8.3 (R1): its rents per sq ft in KES, for a segment let only per sq ft
+				$u = array();
+				foreach ( $ids as $id ) {
+					if ( 'unit' === $in[ $id ]['f'] && $in[ $id ]['p'] > 0 && empty( $in[ $id ]['usd'] ) ) {
+						$u[] = (float) $in[ $id ]['p'];
+					}
+				}
+				if ( $u ) {
+					$segs[ $slug ]['umin'] = min( $u );
+					$segs[ $slug ]['umax'] = max( $u );
+				}
+			}
 		}
 		arsort( $cities );
 		$memo[ $tid ] = array(
@@ -12838,6 +15021,19 @@ JS;
 			$band = blockke_area_v16_bands( $rent )[ $f['price'] ];
 			$fr   = (int) ( $rent ? $c['rfrom'] : $c['from'] );
 			$to   = (int) ( $rent ? $c['rto'] : $c['to'] );
+			if ( $rent && '' !== $f['beds'] && ! empty( $c['rng'] ) ) {
+				// v1.8.3 (R1, rent_cards): a rental listed for several sizes at one price ("1, 2 & 3 Bed from KES 65K") is in the
+				// budget only when the bedrooms asked for are its smallest: its price is that home's
+				$b  = 'studio' === $f['beds'] ? 0 : (int) $f['beds'];
+				$ps = $c['rng'][0];
+				foreach ( $c['rng'][1] as $x ) {
+					if ( 4 === $b ? $x[0] >= 4 : $x[0] === $b ) {
+						$ps[] = $x[1];
+					}
+				}
+				$fr = $ps ? (int) min( $ps ) : 0;
+				$to = $ps ? (int) max( $ps ) : 0;
+			}
 			$to   = $to > 0 ? $to : $fr;
 			if ( $fr <= 0 || $to < $band[0] || ( $band[1] > 0 && $fr >= $band[1] ) ) {
 				return false;
@@ -12873,12 +15069,13 @@ JS;
 		$e     = 'esc_html';
 		$many  = count( $c['beds'] ) > 1;
 		$price = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, false, $many ) : blockke_bkn_price( $c['from'], $c['to'], false, false, $many );
+		$rsay  = $rent && isset( $c['rsay'] ); // v1.8.3 (R1, rent_cards): as its card says it
 		$place = $c['area'] === $scope ? '' : $c['place'];
 		$bd    = blockke_bkn_beds( $c['beds'], $c['types'] );
 		$done  = $rent ? '' : blockke_bkn_done_text( $c );
 		return array(
 			implode( ' · ', array_filter( array( $e( $place ), '' !== $bd ? '<span class="bkn-nw">' . $e( $bd ) . '</span>' : '' ) ) ),
-			implode( ' · ', array_filter( array( '<b>' . $e( '' !== $price ? $price : 'Price on request' ) . '</b>', '' !== $done ? '<span class="bkn-nw">' . $e( $done ) . '</span>' : '' ) ) ),
+			implode( ' · ', array_filter( array( $rsay ? blockke_bkn_rent_b( '' !== $c['rsay'] ? $c['rsay'] : 'Rent on request' ) : '<b>' . $e( '' !== $price ? $price : 'Price on request' ) . '</b>', '' !== $done ? '<span class="bkn-nw">' . $e( $done ) . '</span>' : '', $rent && ! empty( $c['fu'] ) ? '<span class="bkn-nw">Furnished</span>' : '' ) ) ),
 		);
 	}
 
@@ -12911,18 +15108,23 @@ JS;
 	 * area_cards), 'rows' (phones: after the first card), 'text' (developments without a photo, by name, once the grid holds
 	 * every other one), 'all' (every development of that kind is on the page) and 'phone' (and on a phone's screen). A kind
 	 * that is all on the page needs no "See all"; a segment that is all its area has can then point its canonical here.
+	 * v1.8.3 (R1, rent_cards): in a rent section the photo strip and the grid pick only rentals with photos (the listing the
+	 * card opens has a photo and at least 3 in all); the others are listed by name with those without one, and the segment
+	 * page ("See all") lists every one.
 	 */
 	function blockke_area_v16_sections( $data ) {
 		$max = max( 3, (int) blockke_dev_config()['area_cards'] );
 		$out = array();
+		$rcr = blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ? blockke_bkn_rows() : array(); // v1.8.3 (R1): the rows, for a rent section's picks
 		foreach ( blockke_area_segments() as $s => $seg ) {
 			if ( '' !== $seg[4] || empty( $data['segs'][ $s ]['n'] ) ) {
 				continue;
 			}
 			$cover = array();
 			$text  = array();
+			$pick = $rcr && 'rent' === $seg[1];
 			foreach ( $data['segs'][ $s ]['cards'] as $c ) {
-				if ( $c['cover'] ) {
+				if ( $c['cover'] && ( ! $pick || ( isset( $rcr[ $c['id'] ] ) && $rcr[ $c['id'] ]['img'] > 0 && $rcr[ $c['id'] ]['ph'] >= 3 ) ) ) {
 					$cover[] = $c;
 				} else {
 					$text[] = $c;
@@ -12983,6 +15185,7 @@ JS;
 			$x = '<div class="bka16-text">' . ( $h ? '<' . $h . ' class="bka16-h3">' . $e( 'Also listed (' . count( $list ) . ')' ) . '</' . $h . '>' : '' ) . '<ul>';
 			foreach ( $list as $c ) {
 				$pr = $rent ? blockke_bkn_price( $c['rfrom'], $c['rto'], true, false, count( $c['beds'] ) > 1 ) : blockke_bkn_price( $c['from'], $c['to'], false, false, count( $c['beds'] ) > 1 );
+				$pr = $rent && isset( $c['rsay'] ) ? ( '' !== $c['rsay'] ? $c['rsay'] : 'Rent on request' ) : $pr; // v1.8.3 (R1, rent_cards): as its card says it
 				$x .= '<li><a href="' . esc_url( $c['url'] ) . '" data-bkn="area">' . $e( $c['name'] ) . '</a><span>' . $e( '' !== $pr ? $pr : 'Price on request' ) . '</span></li>';
 			}
 			return $x . '</ul></div>';
@@ -13081,7 +15284,7 @@ JS;
 				$i   = 0;
 				foreach ( $list + $show as $r => $c ) { // the matches in order, then the rest, hidden; data-r keeps "Recommended"
 					$h   = $card( $c, $r, $rent, array( 'lazy' => $i > 2, 'range' => '' !== $f['price'] ) );
-					$o[] = preg_replace( '/^<article /', '<article data-r="' . (int) $r . '"' . ( isset( $list[ $r ] ) && $i < $f['n'] ? '' : ' hidden' ) . ' ', $h, 1 );
+					$o[] = preg_replace( '/^<article /', '<article data-r="' . (int) $r . '"' . ( isset( $list[ $r ] ) && $i < $f['n'] ? '' : ' hidden' ) . ( empty( $c['rng'] ) ? '' : ' data-rng="' . esc_attr( wp_json_encode( $c['rng'] ) ) . '"' ) . ' ', $h, 1 ); // v1.8.3 (R1): data-rng, the range-rental rule (rent_cards)
 					$i++;
 				}
 				// nothing matches: the search in words ("No studios for sale in Westlands from KES 60M."); the script
@@ -13409,6 +15612,18 @@ JS;
 #bkd.bka16 .bkn-ask{margin-top:var(--sec)}
 #bkd .bka16-disc{margin-top:56px;color:var(--on-navy)}
 CSS;
+	}
+
+	/**
+	 * v1.8.3 (R1, 'rent_cards'): the script (blockke_area_js_v16()) of a rent segment page that lists a rental for several
+	 * sizes, with blockke_area_v16_match()'s range-rental rule: with bedrooms and a budget set, a card's prices are its other
+	 * homes' and those of its rentals for several sizes whose smallest is the bedrooms asked for (data-rng), so the filters
+	 * in place agree with a reloaded or shared address. All or nothing: a script without the anchor is returned as it is.
+	 */
+	function blockke_area_js_v16_rc( $js ) {
+		$a = "fr=num(c,'from'),to=num(c,'to')||fr;";
+		$b = "fr=num(c,'from'),to=num(c,'to')||fr,rg=skip!=='beds'&&f.beds?c.getAttribute('data-rng'):null;if(rg){try{rg=JSON.parse(rg);}catch(e){rg=null;}}if(rg){var rb=f.beds==='studio'?0:+f.beds,ps=rg[0].slice();rg[1].forEach(function(x){if(rb===4?x[0]>=4:x[0]===rb){ps.push(x[1]);}});fr=ps.length?Math.min.apply(null,ps):0;to=(ps.length?Math.max.apply(null,ps):0)||fr;}";
+		return 1 === substr_count( $js, $a ) ? str_replace( $a, $b, $js ) : $js;
 	}
 
 	/**
@@ -13940,8 +16155,23 @@ JS;
 			}
 		}
 		if ( 'price' !== $skip && ( $q['lo'] > 0 || $q['hi'] > 0 ) ) {
-			if ( 'unit' === $r['f'] ) {
-				return false; // a price per square foot can't be compared with a band
+			if ( 'unit' === $r['f'] || 'period' === $r['f'] ) {
+				return false; // a price per square foot can't be compared with a band (v1.8.3, rent_cards: nor a rent by the day, night or week)
+			}
+			if ( 'beds' !== $skip && '' !== $q['beds'] && 'rent' === $r['act'] && blockke_search_is_range( $r ) && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) {
+				// v1.8.3 (R1): a rental listed for several sizes at one price is in the budget only when the bedrooms asked for are
+				// its smallest: its price is that home's
+				$bs = array();
+				foreach ( blockke_search_row_beds( $r ) as $k ) {
+					$bs[] = 'studio' === $k ? 0 : (int) $k;
+				}
+				if ( count( array_unique( $bs ) ) > 1 ) {
+					$want = 'studio' === $q['beds'] ? 0 : (int) $q['beds'];
+					$low  = min( $bs );
+					if ( ! ( 0 === $want ? 0 === $low : ( 4 === $want || 'min' === blockke_dev_config()['beds_mode'] ? $low >= $want : $low === $want ) ) ) {
+						return false;
+					}
+				}
 			}
 			$lo = $r['p'];
 			$hi = $r['p'];
@@ -14088,11 +16318,11 @@ JS;
 					$a = 'rent' === $act ? $d['rfrom'] : $d['from'];
 					$b = 'rent' === $act ? $d['rto'] : $d['to'];
 				} elseif ( blockke_search_is_range( $r ) ) { // the development matches, with no single home to list
-					$a = 'unit' === $r['f'] ? 0 : $r['p'];
+					$a = 'unit' === $r['f'] || 'period' === $r['f'] ? 0 : $r['p']; // v1.8.3 (R1): no range or price sort from a period rent
 					$b = $a;
 				} else {
 					$units[] = $r;
-					$a       = 'unit' === $r['f'] ? 0 : $r['p'];
+					$a       = 'unit' === $r['f'] || 'period' === $r['f'] ? 0 : $r['p'];
 					$b       = $a;
 				}
 				if ( $a > 0 ) {
@@ -14103,8 +16333,8 @@ JS;
 			usort(
 				$units,
 				function ( $x, $y ) {
-					$px = $x['p'] > 0 && 'unit' !== $x['f'] ? $x['p'] : PHP_INT_MAX;
-					$py = $y['p'] > 0 && 'unit' !== $y['f'] ? $y['p'] : PHP_INT_MAX;
+					$px = $x['p'] > 0 && 'unit' !== $x['f'] && 'period' !== $x['f'] ? $x['p'] : PHP_INT_MAX; // v1.8.3 (R1): a period rent sorts last
+					$py = $y['p'] > 0 && 'unit' !== $y['f'] && 'period' !== $y['f'] ? $y['p'] : PHP_INT_MAX;
 					return $px === $py ? $x['id'] - $y['id'] : ( $px < $py ? -1 : 1 );
 				}
 			);
@@ -14170,7 +16400,7 @@ JS;
 		$c    = $d;
 		if ( 'unit' === $card['v'] ) {
 			$r           = $card['units'][0];
-			$p           = 'unit' === $r['f'] ? 0 : (float) $r['p'];
+			$p           = 'unit' === $r['f'] || 'period' === $r['f'] ? 0 : (float) $r['p']; // v1.8.3 (R1): a period rent is no monthly figure (rent_cards)
 			$c['id']     = (int) $r['id'];
 			$c['url']    = $r['u'];
 			$c['from']   = $rent ? 0 : $p;
@@ -14184,6 +16414,10 @@ JS;
 			$c['areas']  = $r['areas'] ? $r['areas'] : $d['areas'];
 			$c['vt']     = (bool) $r['lo'];
 			$c['d']      = (int) $r['d'];
+			if ( $rent && isset( $r['rs'] ) ) { // v1.8.3 (R1, rent_cards): its rent as it states it, and whether it is furnished
+				$c['rsay'] = $r['rs'];
+				$c['fu']   = ! empty( $r['fu'] );
+			}
 			$h           = blockke_card_html( $c, 'dev', $ctx );
 			// its size after the bedrooms: "Kilimani · 1 bed · 60 m²" (a place line of its own when the area is left out and there are no bedrooms)
 			if ( $c['sqm'] > 0 ) {
@@ -14212,6 +16446,14 @@ JS;
 		}
 		$match      = $card['units'];
 		$c['match'] = $match;
+		if ( $rent && blockke_bkn_on( 'rent_cards', 'bke_rcards' ) ) { // v1.8.3 (R1): the rent its rentals state, and "Furnished" when every one is
+			$rr  = blockke_bkn_rent_rows_of( $d );
+			$say = blockke_bkn_rent_say( $rr, count( $c['beds'] ) > 1 );
+			if ( null !== $say ) {
+				$c['rsay'] = $say;
+			}
+			$c['fu'] = blockke_bkn_rent_fu( $rr );
+		}
 		$h          = blockke_card_html( $c, 'group', $ctx );
 		if ( '' !== $q['beds'] && '4' !== $q['beds'] && 'min' !== blockke_dev_config()['beds_mode'] ) { // "2 homes match", not ": 2 bed" again under "2 bed homes for sale"
 			$h = preg_replace( '#(<p class="bkn-mh">[^<:]*):[^<]*</p>#', '$1</p>', $h, 1 );
@@ -14231,16 +16473,19 @@ JS;
 		$rent = 'rent' === $sec['act'];
 		if ( 'unit' === $card['v'] ) {
 			$r     = $card['units'][0];
-			$p     = 'unit' === $r['f'] ? 0 : (float) $r['p'];
+			$p     = 'unit' === $r['f'] || 'period' === $r['f'] ? 0 : (float) $r['p'];
 			$url   = $r['u'];
 			$what  = 'home' === $r['kind'] && '' !== $r['k'] ? blockke_bkn_beds( array( 'studio' === $r['k'] ? 0 : max( 1, (int) $r['b'] ) ) ) : '';
 			$price = blockke_bkn_price( $p, $p, $rent );
+			$price = $rent && isset( $r['rs'] ) ? ( '' !== $r['rs'] ? $r['rs'] : 'Rent on request' ) : $price; // v1.8.3 (R1, rent_cards)
 			$id    = (int) $r['id'];
 		} else {
 			$url   = $d['url'];
 			$what  = 'home' === $sec['kind'] ? blockke_bkn_beds( $d['beds'], $d['types'] ) : '';
 			$many  = '' !== $what && count( $d['beds'] ) > 1; // "1–2 bed · From KES 8.4M": one price for several sizes is a "from" price, as on the cards
 			$price = $rent ? blockke_bkn_price( $d['rfrom'], $d['rto'], true, false, $many ) : blockke_bkn_price( $d['from'], $d['to'], false, false, $many );
+			$say   = $rent ? blockke_bkn_rent_say( blockke_bkn_rent_rows_of( $d ), $many ) : null; // v1.8.3 (R1, rent_cards): as its card says it
+			$price = null !== $say ? ( '' !== $say ? $say : 'Rent on request' ) : $price;
 			$id    = (int) $d['id'];
 		}
 		$bits = array_filter( array( $d['place'], $what, $price ) );
@@ -14564,7 +16809,7 @@ JS;
 			$parts[] = 'ready-now' === $q['completion'] ? 'ready now' : 'completing ' . blockke_search_done_label( $q['completion'] );
 		}
 		$ag    = blockke_dev_agent( 0 );
-		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm looking for " . blockke_search_words( $q, $kinds, $acts, false, false ) . ( $parts ? ': ' . implode( ', ', $parts ) : '' ) . '. Please send current options and price lists. ' . $url );
+		$wa    = 'https://wa.me/' . $ag['wa'] . '?text=' . rawurlencode( 'Hi ' . $cfg['brand'] . ", I'm looking for " . blockke_search_words( $q, $kinds, $acts, false, false ) . ( $parts ? ': ' . implode( ', ', $parts ) : '' ) . '. Please send current options and ' . ( blockke_bkn_on( 'rent_cards', 'bke_rcards' ) && array( 'rent' ) === ( $q['for'] ? $q['for'] : $acts ) ? 'arrange viewings. ' : 'price lists. ' ) . $url ); // v1.8.3 (R1, rent_cards): a search for rentals asks for viewings
 		// The count once, under the H1: "39 homes in 35 developments" only when some cards hold several homes; when each card is
 		// one home (single rentals, resales, one flat per building), just "5 homes". Land is in projects, as on the index
 		$count = '';

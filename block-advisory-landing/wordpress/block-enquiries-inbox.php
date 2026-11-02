@@ -2,7 +2,7 @@
 /* marker line - keeps the connector from Markdown-converting this snippet; harmless in PHP */
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
- * BLOCK - Enquiries inbox v1.0 (2026-10-10)
+ * BLOCK - Enquiries inbox v1.1 (2026-10-23)
  *
  * Every website enquiry in one place inside WordPress, whether or not the emails arrive.
  *
@@ -17,8 +17,14 @@
  *   the price-check popup's notify list, set in option blockke_buyer_popup['notify_emails'].
  * Keeps the last 300 emails (option blockke_mail_log) and 50 Zoho replies (blockke_zoho_log),
  * neither autoloaded. Emails about passwords, logins or codes are listed without their text.
- * Rollback: deactivate this snippet. Nothing on the public site changes.
- * Created by Claude session 2026-10-10.
+ * v1.1 (2026-10-23): a Type column on the page and in the CSV: Sale (the price-check popup and development pages),
+ *   Rental, Area, Index (the new developments page), Topic (other website pages) or Consultation (the consultation
+ *   page). Rental rows show "Move-in" instead of "Timeline", and no "Buying to". A row is a Rental when the development
+ *   page snippet saved it with 'kind' => 'rent' (v1.8.3), or, saved without a kind, when its listing reads as a rental now.
+ *   Runs as its own snippet at a lower priority number (5) than v1.0 (42847, priority 10), which stays active as the
+ *   fallback: whichever runs first defines these functions, and the other skips itself.
+ * Rollback: deactivate this snippet; v1.0 (42847) takes over. Nothing on the public site changes.
+ * Created by Claude session 2026-10-10; v1.1 by Claude session 2026-10-23.
  */
 
 if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
@@ -183,6 +189,41 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 		5
 	);
 
+	/**
+	 * v1.1: the Type of a development page snippet's enquiry (option blockke_dev_leads). Rental: saved with 'kind' => 'rent'
+	 * (v1.8.3; an area page's "Looking to: Rent" included). Area, Index and Topic: an area page, the new developments page
+	 * and another website page (the saved form starts "area page:", "new developments:" or "{topic} page:"). Otherwise a
+	 * listing's enquiry: saved without a kind (before v1.8.3, or while its rent pages were off), it is a Rental when the
+	 * listing reads as a rental now (blockke_inbox_rent_listing()), else a Sale.
+	 */
+	function blockke_inbox_dev_type( $l ) {
+		$kind = isset( $l['kind'] ) && is_scalar( $l['kind'] ) ? trim( (string) $l['kind'] ) : '';
+		$form = isset( $l['form'] ) && is_scalar( $l['form'] ) ? trim( (string) $l['form'] ) : '';
+		if ( 'rent' === $kind ) {
+			return 'Rental';
+		}
+		if ( 0 === strpos( $form, 'area page:' ) ) {
+			return 'Area';
+		}
+		if ( 0 === strpos( $form, 'new developments:' ) ) {
+			return 'Index';
+		}
+		if ( preg_match( '/^[a-z0-9_-]+ page:/', $form ) ) {
+			return 'Topic';
+		}
+		$lid = isset( $l['listing'] ) && is_scalar( $l['listing'] ) ? (int) $l['listing'] : 0;
+		return '' === $kind && $lid > 0 && blockke_inbox_rent_listing( $lid ) ? 'Rental' : 'Sale';
+	}
+
+	/** v1.1: whether a listing reads as a rental now, by the development page snippet (v1.8.3's blockke_dev_rent_mode()); without it, no. */
+	function blockke_inbox_rent_listing( $lid ) {
+		static $known = array();
+		if ( ! isset( $known[ $lid ] ) ) {
+			$known[ $lid ] = function_exists( 'blockke_dev_rent_mode' ) && 'estate_property' === get_post_type( $lid ) && blockke_dev_rent_mode( $lid );
+		}
+		return $known[ $lid ];
+	}
+
 	/** Website enquiries from the price-check popup and the development pages, newest first. */
 	function blockke_inbox_leads() {
 		$s    = function ( $a, $k ) {
@@ -206,24 +247,61 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 				'page'     => $s( $l, 'page' ),
 				'mail'     => ! empty( $l['mail'] ),
 				'zoho'     => $s( $l, 'zoho' ),
+				'type'     => 'Sale', // v1.1
 			);
 		}
-		foreach ( (array) get_option( 'blockke_dev_leads', array() ) as $l ) {
+		$dev = (array) get_option( 'blockke_dev_leads', array() );
+		$ids = array(); // v1.1: rows saved without a kind are typed by their listing; its post and terms are read for all of them at once
+		foreach ( $dev as $l ) {
+			if ( is_array( $l ) && '' === $s( $l, 'kind' ) && (int) $s( $l, 'listing' ) > 0 ) {
+				$ids[] = (int) $s( $l, 'listing' );
+			}
+		}
+		if ( $ids && function_exists( 'blockke_dev_rent_mode' ) && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_values( array_unique( $ids ) ), true, false );
+		}
+		foreach ( $dev as $l ) {
 			if ( ! is_array( $l ) ) {
 				continue;
 			}
+			$type   = blockke_inbox_dev_type( $l );
+			$rent   = 'Rental' === $type; // v1.1: when to move in, and no "Buying to"
 			$rows[] = array(
 				'time'     => $s( $l, 'time' ),
 				'name'     => $s( $l, 'name' ),
 				'phone'    => preg_replace( '/\D+/', '', $s( $l, 'phone' ) ),
 				'email'    => $s( $l, 'email' ),
 				'interest' => $s( $l, 'dev' ) . ( '' !== $s( $l, 'unit' ) ? ' – ' . $s( $l, 'unit' ) : '' ),
-				'details'  => implode( '; ', array_filter( array( '' !== $s( $l, 'purpose' ) ? 'Buying to ' . strtolower( $s( $l, 'purpose' ) ) : '', '' !== $s( $l, 'timeline' ) ? 'Timeline: ' . $s( $l, 'timeline' ) : '' ) ) ),
+				'details'  => implode( '; ', array_filter( array( '' !== $s( $l, 'purpose' ) && ! $rent ? 'Buying to ' . strtolower( $s( $l, 'purpose' ) ) : '', '' !== $s( $l, 'timeline' ) ? ( $rent ? 'Move-in: ' : 'Timeline: ' ) . $s( $l, 'timeline' ) : '' ) ) ),
 				'form'     => 'Development page' . ( '' !== $s( $l, 'form' ) ? ' (' . $s( $l, 'form' ) . ')' : '' ),
 				'source'   => $s( $l, 'channel' ),
 				'page'     => $s( $l, 'page' ),
 				'mail'     => ! empty( $l['mail'] ),
 				'zoho'     => $s( $l, 'zoho' ),
+				'type'     => $type, // v1.1
+			);
+		}
+		// Consultation page requests (snippet "Consultation request endpoint", option blockke_consult_leads).
+		$cr_intents = function_exists( 'blockke_cr_intents' ) ? blockke_cr_intents() : array();
+		foreach ( (array) get_option( 'blockke_consult_leads', array() ) as $l ) {
+			if ( ! is_array( $l ) ) {
+				continue;
+			}
+			$intent = $s( $l, 'intent' );
+			$label  = isset( $cr_intents[ $intent ] ) ? $cr_intents[ $intent ][0] : ucfirst( $intent );
+			$rows[] = array(
+				'time'     => $s( $l, 'time' ),
+				'name'     => $s( $l, 'name' ),
+				'phone'    => preg_replace( '/[^0-9]/', '', $s( $l, 'phone' ) ),
+				'email'    => $s( $l, 'email' ),
+				'interest' => 'Consultation' . ( '' !== $label ? ' – ' . $label : '' ),
+				'details'  => implode( '; ', array_filter( array( $s( $l, 'based' ), '' !== $s( $l, 'via' ) ? 'Prefers ' . $s( $l, 'via' ) : '', $s( $l, 'budget' ), $s( $l, 'area' ) ) ) ),
+				'form'     => 'Consultation page',
+				'source'   => $s( $l, 'channel' ),
+				'page'     => $s( $l, 'page' ),
+				'mail'     => ! empty( $l['mail'] ),
+				'zoho'     => $s( $l, 'zoho' ),
+				'type'     => 'Consultation', // v1.1
 			);
 		}
 		usort(
@@ -300,9 +378,9 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 		if ( ! $leads ) {
 			echo '<p class="bki-muted">No enquiries yet.</p>';
 		} else {
-			echo '<table class="widefat striped"><thead><tr><th>When</th><th>Name</th><th>Phone / WhatsApp</th><th>Email</th><th>Interested in</th><th>Details</th><th>Came from</th><th>Email sent</th><th>Zoho</th></tr></thead><tbody>';
+			echo '<table class="widefat striped"><thead><tr><th>When</th><th>Type</th><th>Name</th><th>Phone / WhatsApp</th><th>Email</th><th>Interested in</th><th>Details</th><th>Came from</th><th>Email sent</th><th>Zoho</th></tr></thead><tbody>';
 			foreach ( $leads as $r ) {
-				echo '<tr><td>' . esc_html( blockke_inbox_when( $r['time'] ) ) . '</td><td><b>' . esc_html( $r['name'] ) . '</b></td><td>' . blockke_inbox_phone_links( $r['phone'] ) . '</td>'
+				echo '<tr><td>' . esc_html( blockke_inbox_when( $r['time'] ) ) . '</td><td>' . esc_html( $r['type'] ) . '</td><td><b>' . esc_html( $r['name'] ) . '</b></td><td>' . blockke_inbox_phone_links( $r['phone'] ) . '</td>'
 					. '<td>' . ( $r['email'] ? '<a href="' . esc_url( 'mailto:' . $r['email'] ) . '">' . esc_html( $r['email'] ) . '</a>' : '–' ) . '</td>'
 					. '<td>' . ( $r['page'] ? '<a href="' . esc_url( $r['page'] ) . '" target="_blank" rel="noopener">' . esc_html( $r['interest'] ) . '</a>' : esc_html( $r['interest'] ) ) . '<br><span class="bki-muted">' . esc_html( $r['form'] ) . '</span></td>'
 					. '<td>' . esc_html( $r['details'] ) . '</td><td>' . esc_html( $r['source'] ) . '</td>'
@@ -377,10 +455,11 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 	}
 
 	function blockke_inbox_csv_rows() {
-		$rows = array( array( 'Date', 'Name', 'Phone', 'WhatsApp', 'Email', 'Interested in', 'Details', 'Form', 'Came from', 'Page', 'Email handed over', 'Zoho' ) );
+		$rows = array( array( 'Date', 'Type', 'Name', 'Phone', 'WhatsApp', 'Email', 'Interested in', 'Details', 'Form', 'Came from', 'Page', 'Email handed over', 'Zoho' ) );
 		foreach ( blockke_inbox_leads() as $r ) {
 			$rows[] = array(
 				$r['time'],
+				$r['type'],
 				blockke_inbox_cell( $r['name'] ),
 				$r['phone'] ? trim( chunk_split( $r['phone'], 3, ' ' ) ) : '',
 				$r['phone'] ? 'https://wa.me/' . $r['phone'] : '',
