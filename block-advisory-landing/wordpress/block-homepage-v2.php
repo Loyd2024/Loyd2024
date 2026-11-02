@@ -2,7 +2,42 @@
 /* marker line - keeps the connector from Markdown-converting this snippet; harmless in PHP */
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
- * BLOCK - Homepage v2.0 (2026-10-23)
+ * BLOCK - Homepage v2.1 (2026-11-02) = v2.0.2 + search by development name
+ * v2.1.1: the counts under the hero (homes for sale, developments, neighbourhoods) are never stored or shown when
+ * WPResidence's taxonomies are not registered in that request or a count comes back empty or as an error (a save made
+ * through the site connection once rendered the page that way and cached 0 / 0 / 1 for 12 hours). Such a count is
+ * left out rather than shown as 0, and the page itself is then not stored in the page cache either.
+ * v2.1 adds, under the Buy | Rent | Off-plan filters in the hero, "Know the development?": its own small GET form
+ * (?bkdev=<name>, posted to the homepage) with a server-rendered <datalist> of every development name, so it works
+ * without JavaScript. The page script turns it into a typeahead (ARIA 1.2 combobox + listbox): up to 8 developments
+ * with area and price as you type, Rent mode preferring developments with rentals; choosing one, or submitting an exact
+ * or single clear match, goes straight to that development's page. Otherwise ?bkdev= renders a results panel under the
+ * search (up to 12, best first; no match says so and offers the closest names, the main developments, all new
+ * developments and WhatsApp). Names come from snippet 42706's developments (blockke_bkn_devs(): homes, land and
+ * commercial; Project names that read differently are aliases), else from property_project terms with listings.
+ * Matching ignores case, accents, punctuation and filler words (apartments, residence(s), residency, homes, estate, the,
+ * at), reads "&" and a lone "n" between words as "and" ("Oak n Ivy"), and leaves out the development's own area typed with the name
+ * ("Capella Westlands", "Capella W"); a near miss (one slip, a swap of two letters included, c for k) is offered only
+ * when nothing else matches, and when it is the only one and every word typed is a slip of a word of the name
+ * ("capela", "golden hills") it too goes straight there; letters inside a word ("commUNITY") are offered only when no
+ * name starts with them. Equal matches go to the mode's preference, then to the homepage's own developments (config
+ * developments: "gol" puts Golden Hill first), then to the shorter name. Opened upwards, the list never covers the
+ * Buy | Rent | Off-plan tabs or leaves a sliver of the filters above it; where it fits neither way, typing scrolls the
+ * page just enough to open it below. A click into the box never moves the page while the button is down (the list
+ * opens where it fits and is fitted once the click is over), and the mouse highlights an option only when it really
+ * moves. The text shown back, sent to GA4 and carried in the address is cleaned of web and e-mail addresses, @handles
+ * and numbers of 5 or more digits. Pages with ?bkdev= are never read from or stored in the page cache (on a page that
+ * is not the front page, such as a preview, the search posts to that page and its cached copy has its own key). While
+ * it has a copy under 12 hours old, the names index waits for 42706 to rebuild its own developments after a listing
+ * change (its development pages do), so the homepage does not pay for that rebuild. GA4 'search' fires with placement
+ * home_dev. Config 'dev_search' => false hides it. The matching, the panel's wording and the input safety are Home
+ * v3.1's, under this snippet's own names (blockke_home_dev_*); the look is v2's: a slim rounded card under the filter
+ * card, a rounded list and panel, Montserrat labels and Instrument Serif prices.
+ * v2.1 also shows no "Authorised sales agent" tag: config 'mandates' is empty by default (the live option already
+ * says so; the mandate code is otherwise unchanged), and the developments lede no longer says "On some we sell
+ * directly for the developer." Everything else is v2.0.2 unchanged: where the hero is at its minimum height (screens
+ * 768px and wider) it grows by the strip's height (70px with its margin), so nothing above the strip moves, and from
+ * 901px the Find button takes the width of the Search button above it, which keeps its own.
  * The block.ke homepage, rendered by this one snippet where the shortcode [wpcode id=<this snippet>] is placed
  * (one Elementor Shortcode widget in a full-width container, the same wiring as the blog hub on /blog/).
  * Everything on the page comes from the site itself, so it stays current without edits:
@@ -31,7 +66,7 @@
 if ( ! function_exists( 'blockke_home_config' ) ) {
 
 	function blockke_home_ver() {
-		return '2.0.2';
+		return '2.1.1';
 	}
 
 	function blockke_home_config() {
@@ -47,7 +82,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			'hero_sub'       => 'Homes for sale, rentals and new developments — every one checked before you view, and negotiated on your side.',
 			'quick_areas'    => array( 'westlands', 'kilimani', 'kileleshwa', 'lavington', 'tatu-city' ),
 			'developments'   => array( 'golden-hill', 'capital-heights', 'santorini-residences', 'gaia-brookside', 'astra-bay', 'mara-grove-apartments' ),
-			'mandates'       => array( 'golden-hill' ), // project slugs Block sells for the developer (badge)
+			'mandates'       => array(),                // project slugs Block sells for the developer (badge); v2.1: none, so no "Authorised sales agent" tag
 			'dev_link'       => 'lp',                  // 'lp' = ad landing page when one exists, 'listing' = always the listing
 			'neighbourhoods' => array( 'westlands', 'kilimani', 'kileleshwa', 'lavington', 'riverside', 'parklands', 'runda', 'karen', 'syokimau', 'tatu-city' ),
 			'listings_count' => 6,
@@ -59,6 +94,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			'phone_label'    => '0184 027 349',
 			'wa_text'        => "Hi Block — I'm on block.ke and I'd like to talk about ",
 			'cache_minutes'  => 60,   // the key also changes whenever a listing, article or agent is saved
+			'dev_search'     => true, // v2.1: "Know the development?" search by development name (false hides it)
 			'urls'           => array(
 				'search'       => '/advanced-search/',
 				'for_sale'     => '/for-sale/',
@@ -217,11 +253,34 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 
 	/* ------------------------------------------------------------------ data */
 
+	/** v2.1.1: true only when every taxonomy the counts and cards read is registered in this request. */
+	function blockke_home_tax_ready() {
+		foreach ( array( 'property_action_category', 'property_project', 'property_area', 'property_city' ) as $tax ) {
+			if ( ! taxonomy_exists( $tax ) ) {
+				return false;
+			}
+		}
+		return post_type_exists( 'estate_property' );
+	}
+
+	/** v2.1.1: marks this render as one that must not be stored in the page cache. */
+	function blockke_home_nostore( $set = null ) {
+		static $flag = false;
+		if ( null !== $set ) {
+			$flag = (bool) $set;
+		}
+		return $flag;
+	}
+
 	function blockke_home_stats() {
 		$key = 'blockke_home_v2_stats_' . blockke_home_stamp();
 		$s   = get_transient( $key );
-		if ( is_array( $s ) ) {
+		if ( is_array( $s ) && ! empty( $s['sale'] ) && ! empty( $s['projects'] ) && ! empty( $s['areas'] ) ) {
 			return $s;
+		}
+		if ( ! blockke_home_tax_ready() ) {
+			blockke_home_nostore( true );
+			return array( 'sale' => 0, 'rent' => 0, 'projects' => 0, 'areas' => 0 );
 		}
 		$sale = get_term_by( 'slug', 'for-sale', 'property_action_category' );
 		$rent = get_term_by( 'slug', 'for-rent', 'property_action_category' );
@@ -243,7 +302,8 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			}
 		}
 		if ( ! $areas ) {
-			$areas = (int) wp_count_terms( array( 'taxonomy' => 'property_area', 'hide_empty' => true ) );
+			$n     = wp_count_terms( array( 'taxonomy' => 'property_area', 'hide_empty' => true ) );
+			$areas = is_wp_error( $n ) ? 0 : (int) $n;
 		}
 		$s = array(
 			'sale'     => $sale ? (int) $sale->count : 0,
@@ -251,7 +311,11 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			'projects' => $projects,
 			'areas'    => $areas,
 		);
-		set_transient( $key, $s, 12 * HOUR_IN_SECONDS );
+		if ( $s['sale'] && $s['projects'] && $s['areas'] ) {
+			set_transient( $key, $s, 12 * HOUR_IN_SECONDS );
+		} else {
+			blockke_home_nostore( true );
+		}
 		return $s;
 	}
 
@@ -520,6 +584,1019 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		);
 	}
 
+	/* ------------------------------------------------------------------ development-name search (v2.1) */
+
+	/** Words a development's name is often typed with or without ("Capella" finds "Capella Residency"). */
+	function blockke_home_dev_filler() {
+		return array( 'apartment' => 1, 'apartments' => 1, 'residence' => 1, 'residences' => 1, 'residency' => 1, 'residencies' => 1, 'homes' => 1, 'estate' => 1, 'the' => 1, 'at' => 1 );
+	}
+
+	/**
+	 * Lowercase ASCII words: accents folded, "&" read as "and", and so is a lone "n" or "n’" between two words ("Oak n Ivy";
+	 * as the last word it is a name still being typed, "N" for Nova), apostrophes dropped, other punctuation a space.
+	 * Same as fold() in the page script.
+	 */
+	function blockke_home_dev_fold( $s ) {
+		$s = html_entity_decode( (string) $s, ENT_QUOTES, 'UTF-8' );
+		$s = str_replace( array( '&', "'", "\xE2\x80\x99", '`' ), array( ' and ', '', '', '' ), $s );
+		$s = strtolower( remove_accents( $s ) );
+		$w = explode( ' ', trim( preg_replace( '/[^a-z0-9]+/', ' ', $s ) ) );
+		for ( $i = 0, $last = count( $w ) - 1; $i < $last; $i++ ) {
+			if ( 'n' === $w[ $i ] ) {
+				$w[ $i ] = 'and';
+			}
+		}
+		return implode( ' ', $w );
+	}
+
+	/** A name or query ready to compare: w = its words, k = without the filler words (all of them when nothing else is left), c / f = k / w run together, o = only filler words. Same as prep() in the page script. */
+	function blockke_home_dev_prep( $s ) {
+		static $memo = array(); // the same names are compared for every query
+		$s = (string) $s;
+		if ( isset( $memo[ $s ] ) ) {
+			return $memo[ $s ];
+		}
+		if ( count( $memo ) > 5000 ) {
+			$memo = array();
+		}
+		$memo[ $s ] = blockke_home_dev_prep_words( $s );
+		return $memo[ $s ];
+	}
+
+	/** prep() without the memo. */
+	function blockke_home_dev_prep_words( $s ) {
+		$f = blockke_home_dev_fold( $s );
+		$w = '' === $f ? array() : explode( ' ', $f );
+		$x = blockke_home_dev_filler();
+		$k = array();
+		foreach ( $w as $word ) {
+			if ( ! isset( $x[ $word ] ) ) {
+				$k[] = $word;
+			}
+		}
+		$o = $w && ! $k;
+		if ( ! $k ) {
+			$k = $w;
+		}
+		return array( 'w' => $w, 'k' => $k, 'c' => implode( '', $k ), 'f' => implode( '', $w ), 'o' => $o );
+	}
+
+	/**
+	 * Edits between two words, counting two neighbouring letters swapped ("wset" for "west") as one edit, the commonest slip
+	 * (optimal string alignment distance; PHP's levenshtein() counts a swap as two). Same as osa() in the page script.
+	 */
+	function blockke_home_dev_osa( $a, $b ) {
+		if ( $a === $b ) {
+			return 0;
+		}
+		$m = strlen( $a );
+		$n = strlen( $b );
+		if ( ! $m || ! $n ) {
+			return max( $m, $n );
+		}
+		$pp = array();
+		$p  = range( 0, $n );
+		for ( $i = 1; $i <= $m; $i++ ) {
+			$c = array( $i );
+			for ( $j = 1; $j <= $n; $j++ ) {
+				$c[ $j ] = min( $p[ $j ] + 1, $c[ $j - 1 ] + 1, $p[ $j - 1 ] + ( $a[ $i - 1 ] === $b[ $j - 1 ] ? 0 : 1 ) );
+				if ( $i > 1 && $j > 1 && $a[ $i - 1 ] === $b[ $j - 2 ] && $a[ $i - 2 ] === $b[ $j - 1 ] ) {
+					$c[ $j ] = min( $c[ $j ], $pp[ $j - 2 ] + 1 );
+				}
+			}
+			$pp = $p;
+			$p  = $c;
+		}
+		return $p[ $n ];
+	}
+
+	/** Two words start with the same letter, c and k counting as one ("Kapella" for "Capella"): the first letter is rarely the slip, but it is often spelt by its sound. Same as lead() in the page script. */
+	function blockke_home_dev_lead( $t, $u ) {
+		return '' !== $t && '' !== $u && ( $t[0] === $u[0] || ( false !== strpos( 'ck', $t[0] ) && false !== strpos( 'ck', $u[0] ) ) );
+	}
+
+	/** One typed word is a whole-word slip of a word of the name: the same first letter (c = k), one slip, two from eight letters. Same as slip() in the page script. */
+	function blockke_home_dev_slip( $t, $u ) {
+		$n = strlen( $t );
+		return $n >= 4 && $n <= 40 && strlen( $u ) <= 60 && blockke_home_dev_lead( $t, $u ) && blockke_home_dev_osa( $t, $u ) <= ( $n >= 8 ? 2 : 1 ); // no name has such long words
+	}
+
+	/** One typed word is a near miss for a word of the name: a whole-word slip, or one slip from how the word starts. Same as near() in the page script. */
+	function blockke_home_dev_near( $t, $u ) {
+		$n = strlen( $t );
+		if ( $n < 4 || $n > 40 || strlen( $u ) > 60 || ! blockke_home_dev_lead( $t, $u ) ) {
+			return false;
+		}
+		if ( blockke_home_dev_slip( $t, $u ) ) {
+			return true;
+		}
+		if ( strlen( $u ) > $n ) {
+			for ( $k = $n - 1; $k <= $n + 1; $k++ ) {
+				if ( blockke_home_dev_osa( $t, substr( $u, 0, $k ) ) <= 1 ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * How well a query matches one name: 100 the same name, 99 the same once filler words are left out ("Oak Rise" for
+	 * "Oak Rise Residency"), 80 the name starts with it, 60 each word starts a word of the name (64 when the first one starts
+	 * the name), 40 inside the name, 20 a near miss, 0 not at all. Same as score() in the page script.
+	 */
+	function blockke_home_dev_score( $q, $m ) {
+		if ( '' === $q['c'] ) {
+			return 0;
+		}
+		if ( $m['f'] === $q['f'] ) {
+			return 100;
+		}
+		if ( $m['c'] === $q['c'] ) {
+			return 99;
+		}
+		$tg = $q['o'] ? $m['f'] : $m['c'];
+		if ( 0 === strpos( $tg, $q['c'] ) ) {
+			return 80;
+		}
+		$all = true;
+		foreach ( $q['k'] as $t ) {
+			$hit = false;
+			foreach ( $m['w'] as $u ) {
+				if ( 0 === strpos( $u, $t ) ) {
+					$hit = true;
+					break;
+				}
+			}
+			if ( ! $hit ) {
+				$all = false;
+				break;
+			}
+		}
+		if ( $all ) {
+			return 60 + ( $m['k'] && 0 === strpos( $m['k'][0], $q['k'][0] ) ? 4 : 0 );
+		}
+		if ( strlen( $q['c'] ) >= 3 && false !== strpos( $tg, $q['c'] ) ) {
+			return 40;
+		}
+		foreach ( $q['k'] as $t ) {
+			$hit = false;
+			foreach ( $m['w'] as $u ) {
+				if ( 0 === strpos( $u, $t ) || blockke_home_dev_near( $t, $u ) ) {
+					$hit = true;
+					break;
+				}
+			}
+			if ( ! $hit ) {
+				return 0;
+			}
+		}
+		return 20;
+	}
+
+	/** Which developments suit the mode first: Rent prefers those with rentals, Buy and Off-plan those for sale (Off-plan: off-plan ones first). */
+	function blockke_home_dev_pref( $b, $mode ) {
+		$b = (int) $b;
+		if ( 'rent' === $mode ) {
+			return ( $b & 2 ) ? 2 : 0;
+		}
+		return ( ( $b & 1 ) ? 2 : 0 ) + ( ( 'offplan' === $mode && ( $b & 4 ) ) ? 1 : 0 );
+	}
+
+	/** A query against a development's name and its aliases (Project names that read differently), an alias scoring 1 lower. Same as all() in the page script. */
+	function blockke_home_dev_score_all( $q, $e ) {
+		$s = blockke_home_dev_score( $q, blockke_home_dev_prep( $e['n'] ) );
+		foreach ( (array) $e['al'] as $a ) {
+			$s = max( $s, blockke_home_dev_score( $q, blockke_home_dev_prep( $a ) ) - 1 );
+		}
+		return $s;
+	}
+
+	/** Words of an area's name that say nothing on their own ("Ngong Road", "Tatu City", "Lower Kabete"): never taken for the area. */
+	function blockke_home_dev_notarea() {
+		return array( 'road' => 1, 'city' => 1, 'town' => 1, 'general' => 1, 'river' => 1, 'rivers' => 1, 'spring' => 1, 'springs' => 1, 'valley' => 1, 'south' => 1, 'north' => 1, 'east' => 1, 'west' => 1, 'upper' => 1, 'lower' => 1, 'garden' => 1, 'gardens' => 1, 'plains' => 1, 'park' => 1, 'hill' => 1, 'hills' => 1, 'view' => 1, 'views' => 1, 'estate' => 1, 'beach' => 1, 'heights' => 1, 'ridge' => 1, 'gate' => 1, 'green' => 1, 'court' => 1, 'place' => 1, 'square' => 1 );
+	}
+
+	/** Every area word the index knows (from each development's place, at least 4 letters, not a word like "Road"), plus Nairobi and Kenya. Same as areas() in the page script. */
+	function blockke_home_dev_areas( $d ) {
+		$no  = blockke_home_dev_notarea();
+		$out = array();
+		foreach ( $d as $e ) {
+			foreach ( blockke_home_dev_prep( $e['pl'] )['w'] as $u ) {
+				if ( strlen( $u ) >= 4 && ! isset( $no[ $u ] ) ) {
+					$out[ $u ] = true;
+				}
+			}
+		}
+		return array_keys( $out + array( 'nairobi' => true, 'kenya' => true ) );
+	}
+
+	/**
+	 * The query without the words that name a place ("Capella Westlands"): a word of the place, a slip of one (from five
+	 * letters), or the start of one when it is the last word, still being typed ("Capella W"). Null when no word is a place
+	 * word, or when nothing but place or filler words would be left. Same as unplace() in the page script.
+	 */
+	function blockke_home_dev_unplace( $q, $place ) {
+		$n = count( $q['w'] );
+		if ( ! $place || $n < 2 ) {
+			return null;
+		}
+		$keep = array();
+		foreach ( $q['w'] as $i => $t ) {
+			$hit = false;
+			foreach ( $place as $u ) {
+				if ( $u === $t || ( $i === $n - 1 && 0 === strpos( $u, $t ) ) || ( strlen( $t ) >= 5 && blockke_home_dev_slip( $t, $u ) ) ) {
+					$hit = true;
+					break;
+				}
+			}
+			if ( ! $hit ) {
+				$keep[] = $t;
+			}
+		}
+		if ( ! $keep || count( $keep ) === $n ) {
+			return null;
+		}
+		$r = blockke_home_dev_prep( implode( ' ', $keep ) );
+		return $r['o'] ? null : $r;
+	}
+
+	/**
+	 * Developments matching $text, best first: array of array( index, score ). Near misses only when nothing better matched;
+	 * the query inside a word of the name (40) only when no name starts with it or has a word that does ("unity": Unity
+	 * Parkside, not Karunguru Gated Community).
+	 * A query that also names the development's own area is matched without it, 1 lower ("Capella Westlands", "Capella W");
+	 * when nothing better than a near miss matches, without any area word the index knows, 2 lower ("Capella Kilimani").
+	 * Ties: the mode's preference, then the homepage's own developments in their order (config developments, see
+	 * blockke_home_dev_feat()), then the shorter name, then the index order (busiest first). Same as find() in the page script.
+	 */
+	function blockke_home_dev_find( $text, $d, $mode ) {
+		$q = blockke_home_dev_prep( $text );
+		if ( '' === $q['c'] ) {
+			return array();
+		}
+		$ft  = blockke_home_dev_feat( $d );
+		$sc  = array();
+		$len = array();
+		$top = 0;
+		foreach ( $d as $i => $e ) {
+			$len[ $i ] = strlen( blockke_home_dev_prep( $e['n'] )['c'] );
+			$s         = blockke_home_dev_score_all( $q, $e );
+			$q1        = blockke_home_dev_unplace( $q, blockke_home_dev_prep( $e['pl'] )['w'] );
+			if ( $q1 ) {
+				$s = max( $s, blockke_home_dev_score_all( $q1, $e ) - 1 );
+			}
+			$sc[ $i ] = $s;
+			$top      = max( $top, $s );
+		}
+		$q2 = $top < 35 ? blockke_home_dev_unplace( $q, blockke_home_dev_areas( $d ) ) : null;
+		if ( $q2 ) {
+			foreach ( $d as $i => $e ) {
+				$sc[ $i ] = max( $sc[ $i ], blockke_home_dev_score_all( $q2, $e ) - 2 );
+				$top      = max( $top, $sc[ $i ] );
+			}
+		}
+		$out = array();
+		$min = $top < 35 ? 1 : ( $top >= 50 ? 50 : 35 ); // near misses only when nothing better; inside a word ("commUNITY") only when nothing starts with it
+		foreach ( $sc as $i => $s ) {
+			if ( $s >= $min ) {
+				$out[] = array( (int) $i, $s );
+			}
+		}
+		usort(
+			$out,
+			function ( $x, $y ) use ( $d, $mode, $len, $ft ) {
+				if ( $x[1] !== $y[1] ) {
+					return $y[1] - $x[1];
+				}
+				$px = blockke_home_dev_pref( $d[ $x[0] ]['b'], $mode );
+				$py = blockke_home_dev_pref( $d[ $y[0] ]['b'], $mode );
+				if ( $px !== $py ) {
+					return $py - $px;
+				}
+				$fx = isset( $ft[ $x[0] ] ) ? $ft[ $x[0] ] : 999;
+				$fy = isset( $ft[ $y[0] ] ) ? $ft[ $y[0] ] : 999;
+				if ( $fx !== $fy ) {
+					return $fx - $fy;
+				}
+				if ( $len[ $x[0] ] !== $len[ $y[0] ] ) {
+					return $len[ $x[0] ] - $len[ $y[0] ];
+				}
+				return $x[0] - $y[0];
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * The homepage's own developments (config developments: property_project slugs) as index => position in that
+	 * list; a development not on it is left out. It breaks ties in blockke_home_dev_find() and orders blockke_home_dev_top(), and
+	 * the page script gets it as dv.f. Worked out per request from the config, so a config change counts at once.
+	 */
+	function blockke_home_dev_feat( $d ) {
+		static $memo = array();
+		$cfg   = blockke_home_config();
+		$slugs = array_values( array_filter( (array) $cfg['developments'], 'is_string' ) );
+		$key   = md5( wp_json_encode( array( $slugs, count( $d ), isset( $d[0]['n'] ) ? (string) $d[0]['n'] : '' ) ) ); // the index is a list
+		if ( isset( $memo[ $key ] ) ) {
+			return $memo[ $key ];
+		}
+		$want = array();
+		foreach ( $slugs as $slug ) {
+			$t = '' !== $slug ? get_term_by( 'slug', $slug, 'property_project' ) : null;
+			if ( $t ) {
+				$want[] = (int) $t->term_id;
+			}
+		}
+		$out = array();
+		foreach ( $want ? $d : array() as $i => $e ) {
+			foreach ( $want as $pos => $tid ) {
+				if ( in_array( $tid, (array) $e['pj'], true ) ) {
+					$out[ $i ] = $pos;
+					break;
+				}
+			}
+		}
+		$memo[ $key ] = $out;
+		return $out;
+	}
+
+	/**
+	 * The one development a search clearly means (index), or null (never for filler words alone): the exact name, scoring above
+	 * every other (the full name beats one that differs only by "Residency"); the only result, when more than a near miss; or
+	 * the only one the name starts or words start with, when the rest merely contain the letters. A near miss counts when it is
+	 * the only result, the name typed has five letters or more, and every word of it starts a word of the name (or of one
+	 * alias) or is a whole-word slip of one ("capela", "golden hills", "capella recidency"); words naming the development's own
+	 * area are left out first ("capela westlands"). A slip of how a word starts does not count ("santa" is not Santorini).
+	 * Same as strong() in the page script.
+	 */
+	function blockke_home_dev_strong( $res, $text, $d ) {
+		$q = blockke_home_dev_prep( $text );
+		if ( ! $res || $q['o'] ) {
+			return null;
+		}
+		$i = $res[0][0];
+		$a = $res[0][1];
+		$b = count( $res ) > 1 ? $res[1][1] : 0;
+		if ( ( $a >= 99 && $b < $a ) || ( 1 === count( $res ) && $a >= 40 ) || ( $a >= 60 && $b <= 40 ) ) {
+			return $i;
+		}
+		if ( 1 !== count( $res ) || $a >= 35 || ! isset( $d[ $i ] ) ) {
+			return null;
+		}
+		$k = blockke_home_dev_unplace( $q, blockke_home_dev_prep( $d[ $i ]['pl'] )['w'] );
+		$k = $k ? $k : $q;
+		if ( preg_match_all( '/[a-z]/', $k['c'] ) < 5 ) {
+			return null;
+		}
+		foreach ( array_merge( array( $d[ $i ]['n'] ), (array) $d[ $i ]['al'] ) as $nm ) {
+			$w  = blockke_home_dev_prep( $nm )['w'];
+			$ok = true;
+			foreach ( $k['k'] as $t ) {
+				$hit = false;
+				foreach ( $w as $u ) {
+					if ( 0 === strpos( $u, $t ) || blockke_home_dev_slip( $t, $u ) ) {
+						$hit = true;
+						break;
+					}
+				}
+				if ( ! $hit ) {
+					$ok = false;
+					break;
+				}
+			}
+			if ( $ok ) {
+				return $i;
+			}
+		}
+		return null;
+	}
+
+	/** A name worth offering: not a listing title ("3 Bedroom Apartment for Sale"), at most 60 characters. */
+	function blockke_home_dev_named( $n ) {
+		$n = trim( (string) $n );
+		return '' !== $n && mb_strlen( $n ) <= 60 && preg_match( '/\p{L}/u', $n ) && ! preg_match( '/\b(?:bedrooms?|for sale|for rent|to let)\b/iu', $n );
+	}
+
+	/** Project names that read differently from the development's own name (compared as the search compares them). */
+	function blockke_home_dev_aliases( $name, $names ) {
+		$seen = array( blockke_home_dev_prep( $name )['c'] => true );
+		$out  = array();
+		foreach ( $names as $n ) {
+			$n = trim( html_entity_decode( (string) $n, ENT_QUOTES, 'UTF-8' ) );
+			$c = blockke_home_dev_prep( $n )['c'];
+			if ( '' === $c || isset( $seen[ $c ] ) || ! blockke_home_dev_named( $n ) ) {
+				continue;
+			}
+			$seen[ $c ] = true;
+			$out[]      = $n;
+		}
+		return array_slice( $out, 0, 4 );
+	}
+
+	/** Listing id => array( term_id => term name ) for property_project, in one query per 500 listings. */
+	function blockke_home_dev_projects( $ids ) {
+		$out = array();
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$rel = wp_get_object_terms( $chunk, 'property_project', array( 'fields' => 'all_with_object_id', 'update_term_meta_cache' => false ) );
+			if ( is_wp_error( $rel ) ) {
+				continue;
+			}
+			foreach ( $rel as $t ) {
+				$out[ (int) $t->object_id ][ (int) $t->term_id ] = $t->name;
+			}
+		}
+		return $out;
+	}
+
+	/** The developments from snippet 42706 (blockke_bkn_devs()): one per development, its main listing, the site's own cleaned name. */
+	function blockke_home_dev_from_bkn() {
+		$all = blockke_bkn_devs();
+		if ( empty( $all['devs'] ) || ! is_array( $all['devs'] ) ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( $all['devs'] as $c ) {
+			$ids = array_merge( $ids, (array) $c['ids'] );
+		}
+		$pj  = blockke_home_dev_projects( $ids );
+		$out = array();
+		foreach ( $all['devs'] as $c ) {
+			$name = trim( (string) $c['name'] );
+			if ( ! blockke_home_dev_named( $name ) || empty( $c['url'] ) ) {
+				continue;
+			}
+			$acts = (array) $c['acts'];
+			$b    = ( in_array( 'sale', $acts, true ) ? 1 : 0 ) | ( in_array( 'rent', $acts, true ) ? 2 : 0 ) | ( 'offplan' === $c['st'] ? 4 : 0 ) | ( 'land' === $c['kind'] ? 8 : ( 'commercial' === $c['kind'] ? 16 : 0 ) );
+			$ru   = '';
+			if ( 3 === ( $b & 3 ) && function_exists( 'blockke_bkn_for_act' ) ) { // for sale and to rent: Rent mode opens a rental
+				$r = blockke_bkn_for_act( $c, (array) $c['ids'], 'rent' );
+				if ( ! empty( $r['url'] ) && $r['url'] !== $c['url'] ) {
+					$ru = (string) $r['url'];
+				}
+			}
+			$terms = array();
+			foreach ( (array) $c['ids'] as $id ) {
+				if ( isset( $pj[ (int) $id ] ) ) {
+					$terms += $pj[ (int) $id ];
+				}
+			}
+			$out[] = array(
+				'n'  => $name,
+				'pl' => (string) $c['place'],
+				'u'  => (string) $c['url'],
+				'ru' => $ru,
+				's'  => (float) $c['from'],
+				'sf' => $c['to'] > $c['from'] || count( (array) $c['beds'] ) > 1,
+				'r'  => (float) $c['rfrom'],
+				'rf' => $c['rto'] > $c['rfrom'],
+				'b'  => $b,
+				'al' => blockke_home_dev_aliases( $name, $terms ),
+				'pj' => array_keys( $terms ),
+				'k'  => (int) $c['n'],
+				'ft' => ! empty( $c['ft'] ),
+				'vt' => ! empty( $c['vt'] ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Without snippet 42706: property_project terms with listings, each linked to its main listing (the one with units, else
+	 * the newest by date), as blockke_home_development() does. Its area: the main listing's bke_dev_area (a slug) when set, else
+	 * the one of its areas that most of the development's listings carry, else the first. A few queries for every project
+	 * together, not one per project.
+	 */
+	function blockke_home_dev_from_terms() {
+		global $wpdb;
+		$ids = get_posts( array(
+			'post_type'      => 'estate_property',
+			'post_status'    => 'publish',
+			'posts_per_page' => 3000,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'orderby'        => array( 'date' => 'DESC', 'ID' => 'ASC' ), // newest first, as blockke_home_development() takes a project's listings (same date: the lower ID, as MariaDB returns them there)
+			'tax_query'      => array( array( 'taxonomy' => 'property_project', 'operator' => 'EXISTS' ) ),
+		) );
+		$ids = array_map( 'intval', $ids );
+		if ( ! $ids ) {
+			return array();
+		}
+		$rank = array_flip( $ids ); // a listing's place in that order
+		$tx   = array();
+		$proj = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$rel = wp_get_object_terms( $chunk, array( 'property_project', 'property_action_category', 'property_status', 'property_area', 'property_category' ), array( 'fields' => 'all_with_object_id', 'update_term_meta_cache' => false ) );
+			if ( is_wp_error( $rel ) ) {
+				continue;
+			}
+			foreach ( $rel as $t ) {
+				$oid = (int) $t->object_id;
+				if ( 'property_project' === $t->taxonomy ) {
+					$proj[ (int) $t->term_id ]['name']  = $t->name;
+					$proj[ (int) $t->term_id ]['ids'][] = $oid;
+				} elseif ( 'property_area' === $t->taxonomy ) {
+					$tx[ $oid ]['area'][ (string) $t->slug ] = $t->name;
+				} else {
+					$tx[ $oid ][ $t->taxonomy ][] = $t->slug;
+				}
+			}
+		}
+		$meta = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$rows = $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ('property_price','property_has_subunits','bke_dev_area') AND post_id IN (" . implode( ',', array_map( 'intval', $chunk ) ) . ')' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			foreach ( (array) $rows as $r ) {
+				$meta[ (int) $r->post_id ][ $r->meta_key ] = $r->meta_value;
+			}
+		}
+		$has = function ( $id, $tax, $slugs ) use ( $tx ) {
+			return isset( $tx[ $id ][ $tax ] ) && array_intersect( (array) $slugs, $tx[ $id ][ $tax ] );
+		};
+		$devs = array();
+		$need = array();
+		foreach ( $proj as $tid => $p ) {
+			$live = array();
+			foreach ( array_unique( $p['ids'] ) as $id ) {
+				if ( ! $has( $id, 'property_status', array( 'sold', 'let' ) ) ) {
+					$live[] = $id;
+				}
+			}
+			$name = trim( html_entity_decode( (string) $p['name'], ENT_QUOTES, 'UTF-8' ) );
+			if ( ! $live || ! blockke_home_dev_named( $name ) ) {
+				continue;
+			}
+			usort(
+				$live,
+				function ( $a, $b ) use ( $rank ) {
+					return $rank[ $a ] - $rank[ $b ];
+				}
+			);
+			$master = 0;
+			$rent   = 0;
+			$sale   = array();
+			$rents  = array();
+			$cats   = array();
+			$b      = 0;
+			foreach ( $live as $id ) {
+				if ( ! $master && ! empty( $meta[ $id ]['property_has_subunits'] ) ) {
+					$master = $id;
+				}
+				$p0 = isset( $meta[ $id ]['property_price'] ) ? (float) $meta[ $id ]['property_price'] : 0;
+				if ( $has( $id, 'property_action_category', 'for-rent' ) ) {
+					$b |= 2;
+					$rent = $rent ? $rent : $id;
+					if ( $p0 > 0 ) {
+						$rents[] = $p0;
+					}
+				} elseif ( $has( $id, 'property_action_category', 'for-sale' ) ) {
+					$b |= 1;
+					if ( $p0 > 0 ) {
+						$sale[] = $p0;
+					}
+				}
+				if ( $has( $id, 'property_status', 'offplan-ongoing' ) ) {
+					$b |= 4;
+				}
+				$cats = array_merge( $cats, isset( $tx[ $id ]['property_category'] ) ? $tx[ $id ]['property_category'] : array() );
+			}
+			$master = $master ? $master : $live[0];
+			$cats   = array_unique( $cats );
+			$homes  = array_intersect( $cats, array( 'residential', 'apartments', 'studio-apartments', 'villas-residential', 'houses-residential', 'studio' ) );
+			if ( ! $homes && array_intersect( $cats, array( 'land', 'residential-land', 'commercial-land' ) ) ) {
+				$b |= 8;
+			} elseif ( ! $homes && array_intersect( $cats, array( 'commercial', 'offices', 'warehouses' ) ) ) {
+				$b |= 16;
+			}
+			$need[] = $master;
+			if ( 3 === ( $b & 3 ) && $rent ) {
+				$need[] = $rent;
+			}
+			$pl  = '';
+			$own = isset( $meta[ $master ]['bke_dev_area'] ) ? sanitize_title( (string) $meta[ $master ]['bke_dev_area'] ) : '';
+			if ( '' !== $own ) { // the main listing's own choice of area, as on its development page
+				foreach ( $live as $id ) {
+					if ( isset( $tx[ $id ]['area'][ $own ] ) ) {
+						$pl = $tx[ $id ]['area'][ $own ];
+						break;
+					}
+				}
+				if ( '' === $pl ) {
+					$at = get_term_by( 'slug', $own, 'property_area' );
+					$pl = $at ? $at->name : '';
+				}
+			}
+			if ( '' === $pl ) { // else the main listing's area that most of the development's listings carry, else its first
+				$cand = isset( $tx[ $master ]['area'] ) ? $tx[ $master ]['area'] : array();
+				if ( ! $cand ) {
+					foreach ( $live as $id ) {
+						$cand += isset( $tx[ $id ]['area'] ) ? $tx[ $id ]['area'] : array();
+					}
+				}
+				$most = 0;
+				foreach ( $cand as $slug => $an ) {
+					$c = 0;
+					foreach ( $live as $id ) {
+						$c += isset( $tx[ $id ]['area'][ $slug ] ) ? 1 : 0;
+					}
+					if ( '' === $pl || $c > $most ) {
+						$pl   = (string) $an;
+						$most = $c;
+					}
+				}
+			}
+			$devs[] = array(
+				'n'  => $name,
+				'pl' => html_entity_decode( $pl, ENT_QUOTES, 'UTF-8' ),
+				'u'  => $master,
+				'ru' => 3 === ( $b & 3 ) ? $rent : 0,
+				's'  => $sale ? min( $sale ) : 0,
+				'sf' => count( $sale ) > 1 || ! empty( $meta[ $master ]['property_has_subunits'] ),
+				'r'  => $rents ? min( $rents ) : 0,
+				'rf' => $rents && max( $rents ) > min( $rents ),
+				'b'  => $b,
+				'al' => array(),
+				'pj' => array( (int) $tid ),
+				'k'  => count( $live ),
+				'ft' => false,
+				'vt' => false,
+			);
+		}
+		if ( $need && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_unique( $need ), false, false );
+		}
+		foreach ( $devs as $i => $e ) {
+			$devs[ $i ]['u']  = (string) get_permalink( $e['u'] );
+			$devs[ $i ]['ru'] = $e['ru'] ? (string) get_permalink( $e['ru'] ) : '';
+		}
+		return $devs;
+	}
+
+	/**
+	 * Every development the search knows, busiest first: array( 'src' => 'bkn' | 'terms' | '', 'd' => list ). Each:
+	 * n name, pl place, u url, ru rental url (when it is also for sale), s / r lowest sale / rent price, sf / rf a "from" price,
+	 * b bits (1 for sale, 2 to rent, 4 off-plan, 8 land, 16 commercial), al aliases, pj Project term ids, k listings, ft featured, vt new layout.
+	 * Kept in one transient (blockke_home_v2_devs, a single row whatever the stamp), current while the content stamp is the
+	 * same and it is younger than config cache_minutes. Built from snippet 42706's developments, it is rebuilt only once 42706
+	 * has rebuilt them for the current listings, which its development, area and search pages do: until then (after a listing
+	 * is saved, say) the copy is kept, at most 12 hours old, so the homepage neither pays for that rebuild (about half a second)
+	 * nor waits on 42706's build lock. Names and links rarely change; prices catch up within the hour.
+	 */
+	function blockke_home_dev_index() {
+		static $idx = null;
+		if ( null !== $idx ) {
+			return $idx;
+		}
+		$cfg  = blockke_home_config();
+		$key  = 'blockke_home_v2_devs';
+		$st   = blockke_home_stamp();
+		$skip = isset( $_GET['bkhome_nocache'] ) || isset( $_GET['elementor-preview'] ) || is_preview(); // phpcs:ignore WordPress.Security.NonceVerification
+		$hit  = $skip ? false : get_transient( $key );
+		$age  = is_array( $hit ) && isset( $hit['st'], $hit['src'], $hit['d'], $hit['t'] ) && is_array( $hit['d'] ) && $hit['d'] ? time() - (int) $hit['t'] : null;
+		if ( null !== $age && $st === $hit['st'] && $age < max( 1, (int) $cfg['cache_minutes'] ) * MINUTE_IN_SECONDS ) {
+			$idx = $hit;
+			return $idx;
+		}
+		if ( null !== $age && 'bkn' === $hit['src'] && $age < 12 * HOUR_IN_SECONDS && ! blockke_home_dev_bkn_ready() ) {
+			$idx = $hit;
+			return $idx;
+		}
+		$d   = array();
+		$src = '';
+		if ( function_exists( 'blockke_bkn_devs' ) ) {
+			try {
+				$d   = blockke_home_dev_from_bkn();
+				$src = 'bkn';
+			} catch ( Throwable $e ) {
+				error_log( 'BLOCK homepage v2.1 (developments from 42706): ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+				$d = array();
+			}
+		}
+		if ( ! $d ) {
+			$d   = blockke_home_dev_from_terms();
+			$src = $d ? 'terms' : '';
+		}
+		usort(
+			$d,
+			function ( $a, $b ) {
+				return $a['k'] !== $b['k'] ? $b['k'] - $a['k'] : strcasecmp( $a['n'], $b['n'] );
+			}
+		);
+		$idx = array( 'st' => $st, 'src' => $src, 't' => time(), 'd' => array_values( $d ) );
+		if ( ! $skip && $d && blockke_home_tax_ready() ) { // v2.1.1
+			set_transient( $key, $idx, 12 * HOUR_IN_SECONDS );
+		}
+		return $idx;
+	}
+
+	/**
+	 * Whether snippet 42706 holds its listing rows for the current listings (transient bkn_rows at the version and within the
+	 * day blockke_bkn_rows() accepts), so reading its developments costs no rebuild. True when that cannot be told (another
+	 * 42706 version): the index is then built as it always was.
+	 */
+	function blockke_home_dev_bkn_ready() {
+		if ( ! function_exists( 'blockke_bkn_ver' ) ) {
+			return true;
+		}
+		try {
+			$h = get_transient( 'bkn_rows' );
+			return is_array( $h ) && isset( $h['ver'], $h['rows'] ) && $h['ver'] === blockke_bkn_ver( true ) && ( ! isset( $h['t'] ) || (int) $h['t'] >= time() - DAY_IN_SECONDS );
+		} catch ( Throwable $e ) {
+			return true;
+		}
+	}
+
+	/**
+	 * The name asked for with ?bkdev=, null without it. It is shown on the homepage, so only what a building's name is written
+	 * with is kept (letters, the digits 0-9, spaces and & ' ’ . , @ ( ) -), and nothing that reads as contact details: words
+	 * with a web address in them (a dot followed by two letters or digits, "www", "http"), e-mail addresses and @handles
+	 * (an @ is kept only between letters, as in Pazuri@Vipingo), and every digit once there are five or more of them, however
+	 * they are spaced (phone, till and paybill numbers). At most 80 characters.
+	 */
+	function blockke_home_dev_query() {
+		static $q = false;
+		if ( false !== $q ) {
+			return $q;
+		}
+		if ( ! isset( $_GET['bkdev'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$q = null;
+			return $q;
+		}
+		$s    = is_scalar( $_GET['bkdev'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['bkdev'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		$s    = (string) preg_replace( '/[^\p{L}\p{M}0-9\s&\'\x{2019}.,@()\-]+/u', ' ', $s );
+		if ( preg_match_all( '/[0-9]/', $s ) >= 5 ) {
+			$s = (string) preg_replace( '/[0-9]+/', ' ', $s );
+		}
+		$keep = array();
+		$dot  = false;
+		foreach ( preg_split( '/\s+/u', $s, -1, PREG_SPLIT_NO_EMPTY ) as $w ) {
+			$tld = $dot && preg_match( '/^(?:com|co|ke|net|org|info|biz|io|me)$/i', $w );
+			$dot = 0 === strcasecmp( $w, 'dot' );
+			if ( $tld ) {
+				array_pop( $keep ); // "dot com": the "dot" goes too
+				continue;
+			}
+			if ( preg_match( '/\.[\p{L}\p{M}0-9]{2}|^(?:https?|www)$|^[\-.,()\'\x{2019}]+$/iu', $w ) || ( false !== strpos( $w, '@' ) && ! preg_match( '/^[\p{L}\p{M}]+@[\p{L}\p{M}]+$/u', $w ) ) ) {
+				continue; // a web or e-mail address, an @handle, or punctuation left on its own
+			}
+			$keep[] = $w;
+		}
+		$s = implode( ' ', $keep );
+		if ( mb_strlen( $s ) > 80 ) {
+			$s = trim( mb_substr( $s, 0, 80 ) );
+		}
+		$q = $s;
+		return $q;
+	}
+
+	/** The search mode the visitor was in (?bkfor=rent | offplan, set by the page script), else 'buy'. */
+	function blockke_home_dev_mode() {
+		$m = isset( $_GET['bkfor'] ) && is_scalar( $_GET['bkfor'] ) ? (string) $_GET['bkfor'] : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		return in_array( $m, array( 'rent', 'offplan' ), true ) ? $m : 'buy';
+	}
+
+	/** The page showing this layout when it is not the front page yet (a preview of this layout), else 0. */
+	function blockke_home_dev_page() {
+		return ( ! is_front_page() && is_singular() ) ? (int) get_queried_object_id() : 0;
+	}
+
+	/** Where the name search posts: the homepage, or the preview page it is on (its cached copy is kept apart, see blockke_home_output()). */
+	function blockke_home_dev_action() {
+		$id = blockke_home_dev_page();
+		$p  = $id ? get_permalink( $id ) : '';
+		return $p ? $p : home_url( '/' );
+	}
+
+	/** "39.5M" / "120K": the price without the currency or "a month" (the page script adds them back). */
+	function blockke_home_dev_short( $n, $rent = false ) {
+		return preg_replace( '/^KES\s+|\s+a month$/', '', blockke_home_price( $n, $rent ) );
+	}
+
+	/** What one development shows in a mode: array( url, price, meta ). Same as show() in the page script. */
+	function blockke_home_dev_show( $e, $mode ) {
+		$b    = (int) $e['b'];
+		$rent = 'rent' === $mode;
+		$use  = $rent ? ( ( $b & 2 ) || ! ( $b & 1 ) ) : ( ! ( $b & 1 ) && ( $b & 2 ) );
+		$n    = $use ? $e['r'] : $e['s'];
+		$from = $use ? $e['rf'] : $e['sf'];
+		$meta = array();
+		if ( '' !== $e['pl'] ) {
+			$meta[] = $e['pl'];
+		}
+		if ( $b & 8 ) {
+			$meta[] = 'Land';
+		} elseif ( $b & 16 ) {
+			$meta[] = 'Commercial';
+		}
+		if ( ! $rent && ( $b & 4 ) && ! $use ) {
+			$meta[] = 'Off-plan';
+		}
+		if ( $rent && ! ( $b & 2 ) && ( $b & 1 ) ) {
+			$meta[] = 'For sale';
+		}
+		if ( ! $rent && $use ) {
+			$meta[] = 'To rent';
+		}
+		return array(
+			'url'   => ( $use && '' !== $e['ru'] ) ? $e['ru'] : $e['u'],
+			'price' => $n > 0 ? ( $from ? 'From ' : '' ) . blockke_home_price( $n, $use ) : 'Prices on request',
+			'meta'  => implode( ' · ', $meta ),
+		);
+	}
+
+	/**
+	 * The index for the page script, as small as it will go: b = the common start of the listing paths, d = one array per
+	 * development: [ name, place, path, sale price ("+" = from), rent price, bits, rental path, aliases ], trailing blanks dropped;
+	 * f = the homepage's own developments, index => position (blockke_home_dev_feat()), which break ties as on the server.
+	 */
+	function blockke_home_dev_data( $d ) {
+		$home = untrailingslashit( home_url() );
+		$rel  = function ( $u ) use ( $home ) {
+			return ( '' !== $home && 0 === strpos( $u, $home . '/' ) ) ? substr( $u, strlen( $home ) ) : $u;
+		};
+		$seg = array();
+		foreach ( $d as $e ) {
+			if ( preg_match( '#^(/[^/?]+/)[^?]*/$#', $rel( $e['u'] ), $m ) ) {
+				$seg[ $m[1] ] = isset( $seg[ $m[1] ] ) ? $seg[ $m[1] ] + 1 : 1;
+			}
+		}
+		arsort( $seg );
+		$base = $seg ? (string) key( $seg ) : '';
+		$path = function ( $u ) use ( $rel, $base ) {
+			$r = $rel( $u );
+			if ( '' !== $base && 0 === strpos( $r, $base ) && '/' === substr( $r, -1 ) && strlen( $r ) > strlen( $base ) + 1 && false === strpos( $r, '?' ) ) {
+				return substr( $r, strlen( $base ), -1 );
+			}
+			return $r;
+		};
+		$out = array();
+		foreach ( $d as $e ) {
+			$row = array(
+				$e['n'],
+				$e['pl'],
+				$path( $e['u'] ),
+				$e['s'] > 0 ? ( $e['sf'] ? '+' : '' ) . blockke_home_dev_short( $e['s'] ) : '',
+				$e['r'] > 0 ? ( $e['rf'] ? '+' : '' ) . blockke_home_dev_short( $e['r'], true ) : '',
+				(int) $e['b'],
+				'' !== $e['ru'] ? $path( $e['ru'] ) : '',
+				array_values( (array) $e['al'] ),
+			);
+			while ( count( $row ) > 3 && in_array( end( $row ), array( '', 0, array() ), true ) ) {
+				array_pop( $row );
+			}
+			$out[] = $row;
+		}
+		return array( 'b' => $base, 'f' => (object) blockke_home_dev_feat( $d ), 'd' => $out );
+	}
+
+	/**
+	 * The developments offered when nothing matches: those that suit the mode first (Rent: with rentals), then the rest, so the
+	 * list is never short where few developments have rentals; within each, the homepage's own (config developments),
+	 * then featured, then on the new layout, then the busiest.
+	 */
+	function blockke_home_dev_top( $d, $mode, $n = 6 ) {
+		$ft   = blockke_home_dev_feat( $d );
+		$rank = array();
+		foreach ( $d as $i => $e ) {
+			$w          = isset( $ft[ $i ] ) ? $ft[ $i ] : 999;
+			$rank[ $i ] = array( blockke_home_dev_pref( $e['b'], $mode ) < 2 ? 1 : 0, $w, $e['ft'] ? 0 : 1, $e['vt'] ? 0 : 1, $i );
+		}
+		uasort(
+			$rank,
+			function ( $a, $b ) {
+				return $a <=> $b;
+			}
+		);
+		return array_slice( array_keys( $rank ), 0, $n );
+	}
+
+	/** The search form under the filters: its own GET form, with a datalist of every name for browsers without the page script. */
+	function blockke_home_dev_form( $d, $q ) {
+		$names = array();
+		foreach ( $d as $e ) {
+			$names[ $e['n'] ] = true;
+		}
+		$names = array_keys( $names );
+		usort( $names, 'strcasecmp' );
+		$o  = '<form class="bkh-ds" role="search" aria-label="Find a development by name" method="get" action="' . esc_url( blockke_home_dev_action() . '#bkh-dr' ) . '">';
+		$o .= '<div class="bkh-ds-field"><label for="bkh-ds-q">Know the development?</label>';
+		$o .= '<div class="bkh-ds-row">' . blockke_home_svg( 'search' ) . '<input id="bkh-ds-q" type="search" name="bkdev" value="' . esc_attr( (string) $q ) . '" maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" placeholder="e.g. Golden Hill" data-long="Type a development name, e.g. Golden Hill" list="bkh-ds-list"></div></div>';
+		$o .= '<input type="hidden" name="bkfor" value="" disabled>';
+		$o .= '<button type="submit" class="bkh-ds-go"><span>Find</span>' . blockke_home_svg( 'arrow' ) . '</button>';
+		$o .= '<datalist id="bkh-ds-list">';
+		foreach ( $names as $n ) {
+			$o .= '<option value="' . esc_attr( $n ) . '">';
+		}
+		$o .= '</datalist></form>';
+		return $o;
+	}
+
+	/**
+	 * For a name that matches nothing: the developments with a word starting like one of its words (three letters or more),
+	 * most such words first, then as the mode prefers. When no name has such a word, those with a word two slips or fewer
+	 * from one of its words (five letters or more, the same first letter, c = k: "kapela" for Capella).
+	 */
+	function blockke_home_dev_partial( $q, $d, $mode ) {
+		$tw = array();
+		foreach ( blockke_home_dev_prep( $q )['k'] as $t ) {
+			if ( strlen( $t ) >= 3 && 'and' !== $t ) {
+				$tw[ $t ] = true;
+			}
+		}
+		$hit = array();
+		foreach ( array( 'start', 'slip' ) as $how ) {
+			foreach ( $tw && ! $hit ? $d : array() as $i => $e ) {
+				$best = 0;
+				foreach ( array_merge( array( $e['n'] ), (array) $e['al'] ) as $nm ) {
+					$w = blockke_home_dev_prep( $nm )['w'];
+					$c = 0;
+					foreach ( array_keys( $tw ) as $t ) {
+						$t = (string) $t;
+						foreach ( $w as $u ) {
+							if ( 'start' === $how ? 0 === strpos( $u, $t ) : ( strlen( $t ) >= 5 && strlen( $t ) <= 40 && strlen( $u ) <= 60 && blockke_home_dev_lead( $t, $u ) && blockke_home_dev_osa( $t, $u ) <= 2 ) ) {
+								$c++;
+								break;
+							}
+						}
+					}
+					$best = max( $best, $c );
+				}
+				if ( $best ) {
+					$hit[] = array( (int) $i, $best, blockke_home_dev_pref( $e['b'], $mode ) );
+				}
+			}
+		}
+		usort(
+			$hit,
+			function ( $x, $y ) {
+				return array( $y[1], $y[2], $x[0] ) <=> array( $x[1], $x[2], $y[0] );
+			}
+		);
+		$out = array();
+		foreach ( $hit as $h ) {
+			$out[] = $h[0];
+		}
+		return $out;
+	}
+
+	/** The results panel for ?bkdev= (rendered fresh, never cached): the matches best first, or a plain "no match" with somewhere to go next. */
+	function blockke_home_dev_results( $d, $q, $mode ) {
+		$res  = '' === $q ? array() : blockke_home_dev_find( $q, $d, $mode );
+		$best = blockke_home_dev_strong( $res, $q, $d );
+		$all  = count( $res );
+		$near = $res && $res[0][1] < 35;
+		$show = array();
+		foreach ( array_slice( $res, 0, 12 ) as $r ) {
+			$show[] = $r[0];
+		}
+		if ( null !== $best ) {
+			$show = array_values( array_unique( array_merge( array( $best ), $show ) ) );
+		}
+		$part = ( $show || '' === $q ) ? array() : array_slice( blockke_home_dev_partial( $q, $d, $mode ), 0, 6 );
+		$top  = $show ? array() : array_slice( array_values( array_unique( array_merge( $part, blockke_home_dev_top( $d, $mode ) ) ) ), 0, 6 );
+		$said = mb_strlen( $q ) > 48 ? rtrim( mb_substr( $q, 0, 47 ) ) . '…' : $q;
+		$item = function ( $i, $is_best ) use ( $d, $mode ) {
+			$p  = blockke_home_dev_show( $d[ $i ], $mode );
+			$o  = '<li' . ( $is_best ? ' class="is-best"' : '' ) . '><a class="bkh-dr-item' . ( $is_best ? ' is-best' : '' ) . '" href="' . esc_url( $p['url'] ) . '">';
+			$o .= $is_best ? '<span class="bkh-dr-tag">Best match</span>' : '';
+			$o .= '<span class="bkh-dr-name">' . esc_html( $d[ $i ]['n'] ) . '</span>';
+			$o .= '' !== $p['meta'] ? '<span class="bkh-dr-meta">' . esc_html( $p['meta'] ) . '</span>' : '';
+			$o .= '<span class="bkh-dr-price">' . esc_html( $p['price'] ) . '</span>';
+			$o .= $is_best ? '<span class="bkh-dr-cta">View the development' . blockke_home_svg( 'arrow' ) . '</span>' : '';
+			return $o . '</a></li>';
+		};
+		$o = '<div class="bkh-dr" id="bkh-dr" role="region" aria-labelledby="bkh-dr-h" data-where="home_dev"><div class="bkh-dr-head">';
+		if ( '' === $q ) {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">Search by <em>development name</em></h2>';
+			$o .= '<p class="bkh-dr-sub">Type the name above &mdash; Golden Hill, say &mdash; or start with one of these.</p>';
+		} elseif ( ! $show ) {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">No development called <em>&ldquo;' . esc_html( $said ) . '&rdquo;</em> on Block yet</h2>';
+			$o .= '<p class="bkh-dr-sub">' . ( $part ? 'Check the spelling. The closest names come first.' : 'Check the spelling, or start with one of these.' ) . ' If it isn&rsquo;t listed, send us the name and we&rsquo;ll check it for you.</p>';
+		} elseif ( $near && null !== $best ) {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">Did you mean <em>' . esc_html( $d[ $best ]['n'] ) . '</em>?</h2>';
+			$o .= '<p class="bkh-dr-sub">No exact match for &ldquo;' . esc_html( $said ) . '&rdquo;. This is the closest name on Block.</p>';
+		} elseif ( $near ) {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">No exact match for <em>&ldquo;' . esc_html( $said ) . '&rdquo;</em></h2>';
+			$o .= '<p class="bkh-dr-sub">Did you mean ' . ( 1 === count( $show ) ? 'this one' : 'one of these' ) . '?</p>';
+		} elseif ( 1 === $all ) {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">One development matches <em>&ldquo;' . esc_html( $said ) . '&rdquo;</em></h2>';
+		} else {
+			$o .= '<h2 class="bkh-dr-title" id="bkh-dr-h">Developments matching <em>&ldquo;' . esc_html( $said ) . '&rdquo;</em></h2>';
+			$o .= '<span class="bkh-dr-n">' . ( $all > 12 ? 'Best 12 of ' . (int) $all : (int) $all . ' developments' ) . '</span>';
+			$o .= $all > 12 ? '<p class="bkh-dr-sub">Add another word of the name to narrow it down.</p>' : '';
+		}
+		$o .= '</div><ol class="bkh-dr-list">';
+		foreach ( $show ? $show : $top as $pos => $i ) {
+			$o .= $item( $i, null !== $best && 0 === $pos );
+		}
+		$o .= '</ol><div class="bkh-dr-foot">';
+		$o .= '<a class="bkh-more" href="' . esc_url( blockke_home_url( 'offplan' ) ) . '">All new developments' . blockke_home_svg( 'arrow' ) . '</a>';
+		$topic = ( '' !== $q && ! $show ) ? 'a development called “' . $said . '”.' : 'a development.';
+		$o .= '<a class="bkh-dr-wa" href="' . esc_url( blockke_home_wa( $topic ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'Ask us on WhatsApp</a>';
+		$o .= '<a class="bkh-dr-alt" href="' . esc_url( blockke_home_url( 'consult' ) ) . '">Or book a free consultation</a>';
+		return $o . '</div></div>';
+	}
+
 	/* ------------------------------------------------------------------ CSS */
 
 	function blockke_home_css() {
@@ -595,6 +1672,86 @@ position:relative;display:block;float:none;clear:both;width:100%;max-width:100%;
 .bkh .bkh-submit{appearance:none;border:0;margin:8px;padding:0 30px;border-radius:14px;background:var(--navy);color:#fff;font:600 12.5px/1 var(--font);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;gap:10px;transition:background .2s}
 .bkh .bkh-submit:hover{background:var(--navy-2)}
 .bkh .bkh-submit svg{width:17px;height:17px}
+/* development-name search (v2.1): a slim rounded card under the filter card, the typeahead (.bkh-dl, placed by the script) and the ?bkdev= panel.
+   The strip and the panel stay in the flow (not positioned), so they paint in the same layer as the filter card, under the Popular links;
+   their shadow falls below them as the filter card's does (0 24px 60px .35) but does not reach the 10px gap above them, so nothing above changes */
+.bkh .bkh-ds{display:flex;align-items:stretch;height:60px;margin:10px 0 0;padding:0;background:var(--paper);border-radius:18px;box-shadow:0 34px 36px -4px rgba(5,18,36,.3);transition:background .2s,box-shadow .2s}
+.bkh .bkh-ds:focus-within{background:#fff;box-shadow:inset 0 0 0 2px var(--brass),0 34px 36px -4px rgba(5,18,36,.3)}
+.bkh .bkh-ds-field{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:0 10px 0 18px}
+.bkh .bkh-ds label{display:block;font:600 10px/1.2 var(--font);letter-spacing:.16em;text-transform:uppercase;color:var(--brass-d);margin:0 0 5px;padding:0;cursor:text}
+.bkh .bkh-ds-row{display:flex;align-items:center;gap:9px;min-width:0}
+.bkh .bkh-ds-row svg{width:15px;height:15px;color:var(--muted)}
+.bkh .bkh-ds input[type="search"]{appearance:none;-webkit-appearance:none;flex:1;display:block;min-width:0;width:100%;max-width:none;height:auto;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;outline:none;font:500 15px/1.3 var(--font);letter-spacing:normal;color:var(--navy);text-overflow:ellipsis}
+.bkh .bkh-ds input[type="search"]::placeholder{color:var(--slate);opacity:1;font-weight:400}
+.bkh .bkh-ds input[type="search"]::-webkit-search-decoration{-webkit-appearance:none}
+.bkh .bkh-ds input[type="search"]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;flex:none;width:13px;height:13px;margin:0 0 0 12px;cursor:pointer;opacity:.7;background:linear-gradient(45deg,transparent 43%,var(--navy) 43%,var(--navy) 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,var(--navy) 43%,var(--navy) 57%,transparent 57%)}
+.bkh .bkh-ds-go{appearance:none;flex:none;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:10px;height:auto;min-height:0;margin:8px;padding:0 26px;border:1.5px solid var(--navy);border-radius:14px;background:transparent;box-shadow:none;color:var(--navy);font:600 12.5px/1 var(--font);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:background .2s,color .2s}
+.bkh .bkh-ds-go:hover{background:var(--navy);color:#fff}
+.bkh .bkh-ds-go svg{width:17px;height:17px;transition:transform .25s}
+.bkh .bkh-ds-go:hover svg{transform:translateX(3px)}
+.bkh .bkh-ds-go:focus-visible,.bkh .bkh-dr a:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+@media (min-width:901px){.bkh .bkh-ds-go{min-width:151px}} /* Find as wide as Search above it (151px in Montserrat; the script matches Search's exact width), so the two buttons line up */
+@media (min-width:768px){.bkh .bkh-hero:has(.bkh-ds){min-height:calc(min(92vh,880px) + 70px)}} /* where the hero is at its minimum height, the strip (60px and its 10px margin) adds to it instead of lifting the headline */
+.bkh .bkh-sr{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.bkh .bkh-dl{position:absolute;z-index:60;top:0;left:0;max-height:460px;overflow-y:auto;overscroll-behavior:contain;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 28px 70px rgba(5,18,36,.34);text-align:left;-webkit-overflow-scrolling:touch}
+.bkh .bkh-dl.is-up{box-shadow:0 -24px 64px rgba(5,18,36,.3)}
+.bkh .bkh-dl ul{display:block;margin:0;padding:0;list-style:none}
+.bkh .bkh-dl li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px 18px;margin:0;padding:12px 20px;border-top:1px solid var(--line);cursor:pointer;color:var(--ink);list-style:none;background:none}
+.bkh .bkh-dl li:first-child{border-top:0}
+.bkh .bkh-dl li[aria-selected="true"]{background:var(--mist);box-shadow:inset 3px 0 0 var(--brass)}
+.bkh .bkh-dl-name{grid-column:1;font:600 14.5px/1.3 var(--font);color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bkh .bkh-dl-name mark{background:none;color:inherit;padding:0;text-decoration:underline;text-decoration-color:var(--brass);text-decoration-thickness:1.5px;text-underline-offset:3px}
+.bkh .bkh-dl-meta{grid-column:1;font:600 10px/1.4 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bkh .bkh-dl-price{grid-column:2;grid-row:1/span 2;font:400 19px/1.1 var(--display);color:var(--navy);white-space:nowrap}
+.bkh .bkh-dl li.bkh-dl-all{display:flex;align-items:center;gap:8px;padding:13px 20px;background:var(--paper);font:600 11px/1.2 var(--font);letter-spacing:.14em;text-transform:uppercase;color:var(--brass-d)}
+.bkh .bkh-dl li.bkh-dl-all svg{width:15px;height:15px}
+.bkh .bkh-dl li.bkh-dl-all[aria-selected="true"]{color:var(--navy);background:var(--mist)}
+.bkh .bkh-dl-msg{margin:0;padding:15px 20px;font:500 13.5px/1.5 var(--font);color:var(--slate)}
+.bkh .bkh-dr{margin-top:10px;padding:28px 30px 24px;background:#fff;color:var(--ink);border-radius:18px;box-shadow:0 34px 36px -4px rgba(5,18,36,.3);scroll-margin-top:110px}
+.bkh .bkh-dr-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px 28px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.bkh .bkh-dr h2.bkh-dr-title{flex:1 1 420px;margin:0!important;padding:0!important;font:400 clamp(28px,2.6vw,36px)/1.1 var(--display)!important;letter-spacing:-.01em!important;text-transform:none!important;color:var(--navy)!important;overflow-wrap:anywhere}
+.bkh .bkh-dr-title em{font-style:italic}
+.bkh .bkh-dr-n{font:600 10.5px/1.4 var(--font);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.bkh .bkh-dr-sub{flex:1 1 100%;font:400 15px/1.6 var(--font);color:var(--slate);margin:0}
+.bkh .bkh-dr-list{display:grid;grid-template-columns:1fr 1fr;gap:0 40px}
+.bkh .bkh-dr-list li.is-best,.bkh .bkh-dr-list li:only-child{grid-column:1/-1}
+.bkh .bkh-dr-list li.is-best{padding:18px 0 8px}
+.bkh .bkh-dr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px 18px;height:100%;padding:14px 0;border-bottom:1px solid var(--line);color:var(--ink)}
+.bkh .bkh-dr-name{grid-column:1;font:600 15px/1.35 var(--font);color:var(--navy);transition:color .2s}
+.bkh .bkh-dr-item:hover .bkh-dr-name{color:var(--brass-d)}
+.bkh .bkh-dr-meta{grid-column:1;font:600 10px/1.4 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.bkh .bkh-dr-price{grid-column:2;grid-row:1/span 2;font:400 21px/1.1 var(--display);color:var(--navy);white-space:nowrap}
+.bkh .bkh-dr-item.is-best{padding:20px 24px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.bkh .bkh-dr-tag{grid-column:1/-1;justify-self:start;margin-bottom:8px;padding:6px 10px;border-radius:999px;background:var(--brass-tint);font:600 10px/1 var(--font);letter-spacing:.14em;text-transform:uppercase;color:var(--brass-d)}
+.bkh .bkh-dr-item.is-best .bkh-dr-name{font:400 clamp(28px,2.8vw,38px)/1.05 var(--display);letter-spacing:-.01em}
+.bkh .bkh-dr-item.is-best .bkh-dr-price{grid-row:2/span 2;font-size:clamp(22px,2vw,28px)}
+.bkh .bkh-dr-cta{grid-column:1;display:inline-flex;align-items:center;gap:8px;margin-top:10px;font:600 11.5px/1 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--brass-d)}
+.bkh .bkh-dr-cta svg{width:16px;height:16px;transition:transform .25s}
+.bkh .bkh-dr-item.is-best:hover .bkh-dr-cta svg{transform:translateX(4px)}
+.bkh .bkh-dr-foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px 30px;margin-top:22px}
+.bkh .bkh-dr-wa{display:inline-flex;align-items:center;gap:8px;font:600 12px/1 var(--font);letter-spacing:.12em;text-transform:uppercase;color:var(--navy)}
+.bkh .bkh-dr-wa svg{width:17px;height:17px;color:var(--wa)}
+.bkh .bkh-dr-alt{font:500 13px/1.4 var(--font);color:var(--slate);border-bottom:1px solid var(--line-2)}
+.bkh .bkh-dr-alt:hover,.bkh .bkh-dr-wa:hover{color:var(--brass-d)}
+@media (max-width:900px){.bkh .bkh-ds,.bkh .bkh-dr{border-radius:16px}.bkh .bkh-ds-go{margin-right:10px}} /* as the form: Search spans the card there, 10px in, and Find lines up with its right edge */
+@media (max-width:767px){
+.bkh .bkh-ds-field{padding:0 4px 0 18px}
+.bkh .bkh-ds input[type="search"]{font-size:16px}
+.bkh .bkh-ds-go{padding:0 16px}
+.bkh .bkh-ds-go span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bkh .bkh-ds-go svg{width:18px;height:18px}
+.bkh .bkh-dl li{padding:12px 16px}
+.bkh .bkh-dr{padding:22px 18px 18px}
+.bkh .bkh-dr-list{grid-template-columns:1fr}
+.bkh .bkh-dr-item.is-best{padding:18px 16px}
+.bkh .bkh-dr-foot{gap:14px 22px}
+}
+@media (max-width:480px){
+.bkh .bkh-dr-item:not(.is-best) .bkh-dr-name,.bkh .bkh-dl-name{grid-column:1/-1}
+.bkh .bkh-dr-item:not(.is-best) .bkh-dr-price,.bkh .bkh-dl-price{grid-row:2;align-self:center;font-size:17px}
+.bkh .bkh-dr-item.is-best{grid-template-columns:minmax(0,1fr)}
+.bkh .bkh-dr-item.is-best .bkh-dr-price{grid-column:1;grid-row:auto;margin-top:6px}
+}
 /* proof strip */
 .bkh .bkh-strip{padding:clamp(34px,4vw,48px) 0 clamp(30px,3.5vw,44px);border-bottom:1px solid var(--line)}
 .bkh .bkh-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
@@ -810,6 +1967,230 @@ CSS;
       try{if(typeof window.gtag==='function'){window.gtag('event','search',{search_term:(form.getAttribute('data-mode')||'buy')+' '+(root.querySelector('[name="property_area[]"]')||{value:''}).value,placement:'home_hero'});}}catch(x){}
     });
   }
+  /* development-name search (v2.1): a typeahead over C.dv, ARIA 1.2 combobox + listbox; matching = blockke_home_dev_find() */
+  (function(){
+    var ds=root.querySelector('.bkh-ds'),inp=ds&&ds.querySelector('input[name="bkdev"]'),dv=C.dv;
+    if(!ds||!inp||!dv||!dv.d||!dv.d.length){return;}
+    var D=dv.d,FP=dv.f||{},fy=ds.querySelector('input[name="bkfor"]'),FILL={apartment:1,apartments:1,residence:1,residences:1,residency:1,residencies:1,homes:1,estate:1,the:1,at:1};
+    function fold(s){s=String(s==null?'':s);try{s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(e){}s=s.toLowerCase().replace(/\u00df/g,'ss').replace(/\u00e6/g,'ae').replace(/\u0153/g,'oe').replace(/\u00f8/g,'o').replace(/&/g,' and ').replace(/['\u2019`]/g,'');var w=s.replace(/[^a-z0-9]+/g,' ').replace(/^ | $/g,'').split(' '),i;for(i=0;i<w.length-1;i++){if(w[i]==='n'){w[i]='and';}}return w.join(' ');}
+    function prep(s){var f=fold(s),w=f?f.split(' '):[],k=[],i;for(i=0;i<w.length;i++){if(!FILL[w[i]]){k.push(w[i]);}}var o=w.length>0&&!k.length;if(!k.length){k=w;}return {w:w,k:k,c:k.join(''),f:w.join(''),o:o};}
+    /* edits between two words, a swap of two neighbouring letters counting as one (optimal string alignment) = blockke_home_dev_osa() */
+    function osa(a,b){if(a===b){return 0;}var m=a.length,n=b.length,pp=[],p=[],c,i,j;if(!m||!n){return Math.max(m,n);}for(j=0;j<=n;j++){p[j]=j;}for(i=1;i<=m;i++){c=[i];for(j=1;j<=n;j++){c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1));if(i>1&&j>1&&a.charAt(i-1)===b.charAt(j-2)&&a.charAt(i-2)===b.charAt(j-1)){c[j]=Math.min(c[j],pp[j-2]+1);}}pp=p;p=c;}return p[n];}
+    /* the same first letter, c = k (= blockke_home_dev_lead()); a whole-word slip (= blockke_home_dev_slip()); a near miss (= blockke_home_dev_near()) */
+    function lead(t,u){var a=t.charAt(0),b=u.charAt(0);return !!a&&!!b&&(a===b||('ck'.indexOf(a)>=0&&'ck'.indexOf(b)>=0));}
+    function slip(t,u){var n=t.length;return n>=4&&n<=40&&u.length<=60&&lead(t,u)&&osa(t,u)<=(n>=8?2:1);}
+    function near(t,u){var n=t.length,k;if(n<4||n>40||u.length>60||!lead(t,u)){return false;}if(slip(t,u)){return true;}if(u.length>n){for(k=n-1;k<=n+1;k++){if(osa(t,u.slice(0,k))<=1){return true;}}}return false;}
+    function starts(t,w){for(var j=0;j<w.length;j++){if(w[j].indexOf(t)===0){return true;}}return false;}
+    function score(q,m){
+      if(!q.c){return 0;}
+      if(m.f===q.f){return 100;}
+      if(m.c===q.c){return 99;}
+      var tg=q.o?m.f:m.c,i,j,ok;
+      if(tg.indexOf(q.c)===0){return 80;}
+      for(i=0,ok=true;i<q.k.length&&ok;i++){ok=starts(q.k[i],m.w);}
+      if(ok){return 60+(m.k.length&&m.k[0].indexOf(q.k[0])===0?4:0);}
+      if(q.c.length>=3&&tg.indexOf(q.c)>=0){return 40;}
+      for(i=0;i<q.k.length;i++){ok=starts(q.k[i],m.w);for(j=0;!ok&&j<m.w.length;j++){ok=near(q.k[i],m.w[j]);}if(!ok){return 0;}}
+      return 20;
+    }
+    var P=[],PL=[],AREA=null,NOTAREA={road:1,city:1,town:1,general:1,river:1,rivers:1,spring:1,springs:1,valley:1,south:1,north:1,east:1,west:1,upper:1,lower:1,garden:1,gardens:1,plains:1,park:1,hill:1,hills:1,view:1,views:1,estate:1,beach:1,heights:1,ridge:1,gate:1,green:1,court:1,place:1,square:1},n,a;
+    for(n=0;n<D.length;n++){P[n]=[prep(D[n][0])];for(a=0;a<(D[n][7]||[]).length;a++){P[n].push(prep(D[n][7][a]));}PL[n]=prep(D[n][1]||'').w;}
+    function all(q,i){var s=score(q,P[i][0]),x;for(x=1;x<P[i].length;x++){s=Math.max(s,score(q,P[i][x])-1);}return s;}
+    /* area words (= blockke_home_dev_areas()) and the query without them (= blockke_home_dev_unplace()) */
+    function areas(){if(AREA){return AREA;}var seen={},i,j,u;AREA=[];for(i=0;i<PL.length;i++){for(j=0;j<PL[i].length;j++){u=PL[i][j];if(u.length>=4&&!NOTAREA[u]&&!seen[u]){seen[u]=1;AREA.push(u);}}}if(!seen.nairobi){AREA.push('nairobi');}if(!seen.kenya){AREA.push('kenya');}return AREA;}
+    function unplace(q,pl){
+      var n=q.w.length,keep=[],i,j,t,u,hit,r;if(!pl.length||n<2){return null;}
+      for(i=0;i<n;i++){t=q.w[i];hit=false;for(j=0;j<pl.length&&!hit;j++){u=pl[j];hit=u===t||(i===n-1&&u.indexOf(t)===0)||(t.length>=5&&slip(t,u));}if(!hit){keep.push(t);}}
+      if(!keep.length||keep.length===n){return null;}
+      r=prep(keep.join(' '));return r.o?null:r;
+    }
+    function pref(i,mode){var b=D[i][5]||0;return mode==='rent'?((b&2)?2:0):((b&1)?2:0)+(mode==='offplan'&&(b&4)?1:0);}
+    function fp(i){var v=FP[i];return typeof v==='number'?v:999;}
+    function find(text,mode){
+      var q=prep(text),r=[],sc=[],top=0,i,s,q1,q2,lo;if(!q.c){return r;}
+      for(i=0;i<D.length;i++){s=all(q,i);q1=unplace(q,PL[i]);if(q1){s=Math.max(s,all(q1,i)-1);}sc[i]=s;if(s>top){top=s;}}
+      q2=top<35?unplace(q,areas()):null;
+      if(q2){for(i=0;i<D.length;i++){sc[i]=Math.max(sc[i],all(q2,i)-2);if(sc[i]>top){top=sc[i];}}}
+      lo=top<35?1:top>=50?50:35;
+      for(i=0;i<D.length;i++){if(sc[i]>=lo){r.push([i,sc[i]]);}}
+      r.sort(function(x,y){return (y[1]-x[1])||(pref(y[0],mode)-pref(x[0],mode))||(fp(x[0])-fp(y[0]))||(P[x[0]][0].c.length-P[y[0]][0].c.length)||(x[0]-y[0]);});
+      return r;
+    }
+    /* the one development a search clearly means, or -1 (= blockke_home_dev_strong()): a single near miss counts when the name typed has 5 letters or more and each word of it starts a word of the name or is a whole-word slip of one */
+    function strong(r,text){
+      var q=prep(text),i,a,b,k,x,j,y,w,ok,hit;if(!r.length||q.o){return -1;}
+      i=r[0][0];a=r[0][1];b=r.length>1?r[1][1]:0;
+      if((a>=99&&b<a)||(r.length===1&&a>=40)||(a>=60&&b<=40)){return i;}
+      if(r.length!==1||a>=35){return -1;}
+      k=unplace(q,PL[i])||q;
+      if((k.c.match(/[a-z]/g)||[]).length<5){return -1;}
+      for(x=0;x<P[i].length;x++){w=P[i][x].w;for(j=0,ok=true;j<k.k.length&&ok;j++){for(y=0,hit=false;y<w.length&&!hit;y++){hit=w[y].indexOf(k.k[j])===0||slip(k.k[j],w[y]);}ok=hit;}if(ok){return i;}}
+      return -1;
+    }
+    /* what the server keeps of the text typed (= blockke_home_dev_query()): tags, web and e-mail addresses, @handles and every digit
+       once there are 5 or more go, at most 80 characters. GA4 and the address only ever get this, never the text as typed */
+    var RX=null;
+    function clean(s){
+      var w,keep=[],dot=false,i,t,tld,cp;
+      s=String(s==null?'':s);
+      if(s.indexOf('<')>=0){s=s.replace(/<[^>]*?(?=<|>|$)>?/g,function(m){return m.indexOf('>')>=0?m:m.replace(/&(?![a-z][a-z0-9]*;|#[0-9]+;|#x[0-9a-f]+;)/gi,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}).replace(/<(script|style)[^>]*?>[\s\S]*?<\/\1>/gi,'').replace(/<(?!\s)[^>]*>/g,'');}
+      s=s.replace(/[\r\n\t ]+/g,' ');while(/%[a-f0-9]{2}/i.test(s)){s=s.replace(/%[a-f0-9]{2}/gi,'');}
+      if(!RX){try{RX=[new RegExp('[^\\p{L}\\p{M}0-9\\s&\'\\u2019.,@()\\-]+','gu'),new RegExp('\\.[\\p{L}\\p{M}0-9]{2}|^(?:https?|www)$|^[\\-.,()\'\\u2019]+$','iu'),new RegExp('^[\\p{L}\\p{M}]+@[\\p{L}\\p{M}]+$','u')];}catch(x){RX=[/[^A-Za-z\u00c0-\u024f\u0300-\u036f0-9\s&'\u2019.,@()\-]+/g,/\.[A-Za-z\u00c0-\u024f0-9]{2}|^(?:https?|www)$|^[\-.,()'\u2019]+$/i,/^[A-Za-z\u00c0-\u024f]+@[A-Za-z\u00c0-\u024f]+$/];}}
+      s=s.replace(RX[0],' ');
+      if((s.match(/[0-9]/g)||[]).length>=5){s=s.replace(/[0-9]+/g,' ');}
+      w=s.split(/\s+/);
+      for(i=0;i<w.length;i++){t=w[i];if(!t){continue;}tld=dot&&/^(?:com|co|ke|net|org|info|biz|io|me)$/i.test(t);dot=t.toLowerCase()==='dot';if(tld){keep.pop();continue;}if(RX[1].test(t)||(t.indexOf('@')>=0&&!RX[2].test(t))){continue;}keep.push(t);}
+      s=keep.join(' ');cp=Array.from?Array.from(s):s.split('');
+      return cp.length>80?cp.slice(0,80).join('').replace(/\s+$/,''):s;
+    }
+    function money(s,rent){if(!s){return '';}var f=s.charAt(0)==='+';return (f?'From ':'')+'KES '+(f?s.slice(1):s)+(rent?' a month':'');}
+    function link(p){return (p.charAt(0)==='/'||/^https?:/i.test(p))?p:(dv.b||'/')+p+'/';}
+    function show(i,mode){
+      var e=D[i],b=e[5]||0,rent=mode==='rent',use=rent?!!((b&2)||!(b&1)):!!(!(b&1)&&(b&2)),meta=[],price=use?money(e[4],true):money(e[3],false);
+      if(e[1]){meta.push(e[1]);}
+      if(b&8){meta.push('Land');}else if(b&16){meta.push('Commercial');}
+      if(!rent&&(b&4)&&!use){meta.push('Off-plan');}
+      if(rent&&!(b&2)&&(b&1)){meta.push('For sale');}
+      if(!rent&&use){meta.push('To rent');}
+      return {url:link(use&&e[6]?e[6]:e[2]),price:price||'Prices on request',meta:meta.join(' \u00b7 ')};
+    }
+    function getMode(){var f=root.querySelector('.bkh-form');return (f&&f.getAttribute('data-mode'))||'buy';}
+    /* the listbox lives in .bkh itself (the hero clips what overflows it) and is placed under the search, or over it when there is more room above */
+    var pop=document.createElement('div'),lb=document.createElement('ul'),msg=document.createElement('p'),live=document.createElement('div'),tl=root.querySelector('.bkh-tabs');
+    pop.className='bkh-dl';pop.hidden=true;lb.id='bkh-ds-lb';lb.setAttribute('role','listbox');lb.setAttribute('aria-label','Developments');
+    msg.className='bkh-dl-msg';msg.hidden=true;pop.appendChild(lb);pop.appendChild(msg);root.appendChild(pop);
+    live.className='bkh-sr';live.setAttribute('role','status');live.setAttribute('aria-live','polite');ds.appendChild(live);
+    inp.removeAttribute('list');
+    inp.setAttribute('role','combobox');inp.setAttribute('aria-autocomplete','list');inp.setAttribute('aria-expanded','false');inp.setAttribute('aria-controls',lb.id);
+    /* the short placeholder fits a phone with or without the script; wider screens get the long one */
+    var phs=inp.getAttribute('placeholder')||'',phl=inp.getAttribute('data-long')||'',mq=window.matchMedia?window.matchMedia('(max-width:600px)'):null;
+    function fitPh(){if(phl&&mq){inp.setAttribute('placeholder',mq.matches?phs:phl);}}
+    fitPh();
+    /* from 901px Find is exactly as wide as Search above it (CSS gives it Search's width in Montserrat; this follows the fonts the page really has) */
+    var sub=root.querySelector('.bkh-submit'),go=ds.querySelector('.bkh-ds-go'),wq=window.matchMedia?window.matchMedia('(min-width:901px)'):null;
+    function fitGo(){if(!sub||!go||!wq){return;}var w=wq.matches?sub.getBoundingClientRect().width:0;go.style.minWidth=w>0?w+'px':'';}
+    fitGo();try{document.fonts.ready.then(fitGo);}catch(x){}
+    var opts=[],act=-1,open=false,down=false,said='',sent='',tmr=0;
+    function say(t){if(t===said){return;}said=t;clearTimeout(tmr);tmr=setTimeout(function(){live.textContent=t;},350);}
+    function track(q){if(!q||q===sent){return;}sent=q;try{if(typeof window.gtag==='function'){window.gtag('event','search',{search_term:q,placement:'home_dev'});}}catch(x){}}
+    /* opened upwards, the list stops under the Buy | Rent | Off-plan tabs while they are on screen, so they can still be clicked;
+       when not even 200px fit either way (laptop and phone screens), the list scrolls the page up just enough to open below,
+       keeping the tabs on screen and the strip clear of a header */
+    function place(fit){
+      if(pop.hidden){return;}
+      var vv=window.visualViewport,vt=vv?vv.offsetTop:0,vh=vv?vv.height:(window.innerHeight||document.documentElement.clientHeight),bar=document.body.classList.contains('bkh-bar-on')?64:0;
+      var r,tb,on,below,above,need,want,d;
+      function room(){r=ds.getBoundingClientRect();tb=tl?tl.getBoundingClientRect():null;on=!!(tb&&tb.height&&tb.bottom>vt&&tb.top<vt+vh);below=vt+vh-r.bottom-10-bar;above=on?r.top-tb.bottom-8:r.top-vt-10;}
+      pop.style.maxHeight='none';pop.style.minHeight='';
+      need=Math.min(pop.scrollHeight,460);want=Math.min(need,280);room();
+      if(fit&&below<Math.min(need,200)&&above<Math.min(need,200)){
+        d=Math.floor(Math.min(want-below,r.top-vt-96,(on&&tb.top>=vt+8)?tb.top-vt-8:1e4));
+        if(d>8){try{window.scrollBy({top:d,left:0,behavior:'instant'});}catch(x){window.scrollBy(0,d);}room();}
+      }
+      var up=below<want&&above>below,rm=up?Math.max(64,Math.min(460,Math.floor(above))):Math.max(150,Math.min(460,Math.floor(below)));
+      pop.style.maxHeight=rm+'px';
+      var h=Math.min(pop.scrollHeight+2,rm),rr=root.getBoundingClientRect(),top=Math.round(up?(r.top-rr.top-h-4):(r.bottom-rr.top+4)),fb=up&&form?form.getBoundingClientRect():null,ft,f1=fb?form.querySelector('.bkh-field'):null,fr=f1?Math.ceil(f1.getBoundingClientRect().bottom-fb.top):24;
+      /* opened upwards over the filters (four rows of them on tablets), a list that would stop inside their first row is raised
+         to the form's top edge, so no sliver of the form shows above the list under its shadow (at least 24px, the rule's first
+         form; v2's first row, Where, is about 63px tall, so a list stopping 24px down still left its label showing) */
+      if(fb&&(ft=Math.floor(fb.top-rr.top))<top&&top<ft+Math.max(24,fr)&&r.top-rr.top-4-ft<=rm){top=ft;h=r.top-rr.top-4-ft;pop.style.maxHeight=pop.style.minHeight=h+'px';}
+      pop.style.left=Math.round(r.left-rr.left)+'px';pop.style.width=Math.round(r.width)+'px';
+      pop.style.top=top+'px';
+      pop.classList.toggle('is-up',up);
+    }
+    function close(){if(pop.hidden&&!open){return;}open=false;act=-1;pop.hidden=true;inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}
+    function mark(el,name,q){
+      var i=q?name.toLowerCase().indexOf(q.toLowerCase()):-1;
+      if(i<0){el.textContent=name;return;}
+      var m=document.createElement('mark');m.textContent=name.substr(i,q.length);
+      el.appendChild(document.createTextNode(name.slice(0,i)));el.appendChild(m);el.appendChild(document.createTextNode(name.slice(i+q.length)));
+    }
+    function render(nofit){
+      var q=inp.value.replace(/^\s+|\s+$/g,''),mode=getMode(),r,i,li,s,sp;
+      if(!q){close();say('');return;}
+      r=find(q,mode);opts=[];act=-1;lb.innerHTML='';inp.removeAttribute('aria-activedescendant');
+      for(i=0;i<r.length&&i<8;i++){
+        s=show(r[i][0],mode);li=document.createElement('li');li.id='bkh-ds-o'+i;li.setAttribute('role','option');li.setAttribute('aria-selected','false');
+        li.setAttribute('aria-label',D[r[i][0]][0]+(s.meta?', '+s.meta:'')+', '+s.price);
+        sp=document.createElement('span');sp.className='bkh-dl-name';mark(sp,D[r[i][0]][0],q);li.appendChild(sp);
+        if(s.meta){sp=document.createElement('span');sp.className='bkh-dl-meta';sp.textContent=s.meta;li.appendChild(sp);}
+        sp=document.createElement('span');sp.className='bkh-dl-price';sp.textContent=s.price;li.appendChild(sp);
+        lb.appendChild(li);opts.push({li:li,url:s.url});
+      }
+      if(r.length>8){
+        li=document.createElement('li');li.id='bkh-ds-o'+i;li.className='bkh-dl-all';li.setAttribute('role','option');li.setAttribute('aria-selected','false');
+        li.textContent=r.length>12?'See the best 12 of '+r.length:'See all '+r.length+' matches';li.insertAdjacentHTML('beforeend','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>');
+        lb.appendChild(li);opts.push({li:li,all:true});
+      }
+      if(opts.length){msg.hidden=true;lb.hidden=false;}
+      else{lb.hidden=true;msg.hidden=false;msg.textContent='No development matches \u201c'+(q.length>40?q.slice(0,39)+'\u2026':q)+'\u201d yet. Search anyway and we\u2019ll suggest some.';}
+      open=opts.length>0;pop.hidden=false;inp.setAttribute('aria-expanded',open?'true':'false');place(nofit!==true);
+      say(opts.length?(r.length+(r.length===1?' development matches':' developments match')+'. Use the up and down arrows to choose one.'):'No developments match.');
+    }
+    function setAct(i,scroll){
+      if(act>=0&&opts[act]){opts[act].li.setAttribute('aria-selected','false');}
+      act=i;
+      if(act<0||!opts[act]){act=-1;inp.removeAttribute('aria-activedescendant');return;}
+      var li=opts[act].li;li.setAttribute('aria-selected','true');inp.setAttribute('aria-activedescendant',li.id);
+      if(scroll){var t=li.offsetTop,b=t+li.offsetHeight;if(t<pop.scrollTop){pop.scrollTop=t;}else if(b>pop.scrollTop+pop.clientHeight){pop.scrollTop=b-pop.clientHeight;}}
+    }
+    function move(d){if(!opts.length){return;}var i=act+d;if(i>=opts.length){i=-1;}else if(i<-1){i=opts.length-1;}setAct(i,true);}
+    function ready(){var m=getMode();if(fy){if(m!=='buy'){fy.value=m;fy.disabled=false;}else{fy.value='';fy.disabled=true;}}}
+    function choose(i){
+      var o=opts[i],q=clean(inp.value);if(!o){return;}
+      track(q);
+      close();
+      if(o.all){inp.value=q;ready();ds.submit();return;}
+      window.location.href=o.url;
+    }
+    /* a press that starts in the search or the list (pd) is never taken for a click outside it, and never scrolls the page
+       while the button is down: focus from it opens the list where it fits, and the list is fitted once the click is over */
+    var pd=false,pdT=0,refit=false;
+    function settle(){clearTimeout(pdT);pd=false;if(refit){refit=false;if(!pop.hidden){place(true);}}}
+    document.addEventListener('pointerdown',function(e){clearTimeout(pdT);pd=!!(e.target&&(ds.contains(e.target)||pop.contains(e.target)));},true);
+    function lift(){if(pd){clearTimeout(pdT);pdT=setTimeout(settle,700);}} /* no click after it (dragged away, cancelled) */
+    document.addEventListener('pointerup',lift,true);document.addEventListener('pointercancel',lift,true);
+    inp.addEventListener('input',function(){refit=false;render();});
+    inp.addEventListener('focus',function(){if(inp.value.replace(/\s+/g,'')){if(pd){refit=true;render(true);}else{render();}}});
+    inp.addEventListener('click',function(){if(pop.hidden&&inp.value.replace(/\s+/g,'')){if(pd){refit=true;render(true);}else{render();}}}); /* closed with Escape: a click opens it again */
+    inp.addEventListener('keydown',function(e){
+      var k=e.key;
+      if(refit){refit=false;if(open&&k!=='Escape'&&k!=='Esc'&&k!=='Tab'){place(true);}}
+      if(k==='ArrowDown'||k==='Down'){e.preventDefault();if(!open){render();}move(1);}
+      else if(k==='ArrowUp'||k==='Up'){e.preventDefault();if(!open){render();}move(-1);}
+      else if(k==='Enter'){if(open&&act>=0){e.preventDefault();choose(act);}}
+      else if(k==='Escape'||k==='Esc'){if(!pop.hidden){e.preventDefault();close();}else if(inp.value){e.preventDefault();inp.value='';say('');}}
+      else if(k==='Tab'){close();}
+      else if((k==='ArrowLeft'||k==='ArrowRight'||k==='Left'||k==='Right'||k==='Home'||k==='End')&&act>=0){setAct(-1,false);} /* the caret moves: focus is back in the text */
+    });
+    inp.addEventListener('blur',function(){setTimeout(function(){if(!down&&document.activeElement!==inp){close();}},150);});
+    pop.addEventListener('mousedown',function(e){e.preventDefault();});
+    pop.addEventListener('pointerdown',function(){down=true;});
+    document.addEventListener('pointerup',function(){setTimeout(function(){down=false;},300);},true);
+    /* the mouse highlights an option only when it really moves: browsers also send mousemove when the list opens, re-renders or
+       scrolls under a resting pointer (WebKit), and that must not override the keyboard's choice */
+    var mx=null,my=null,mv=false;
+    document.addEventListener('mousemove',function(e){mv=mx===null?!!(e.movementX||e.movementY):(e.clientX!==mx||e.clientY!==my);mx=e.clientX;my=e.clientY;},true);
+    pop.addEventListener('mousemove',function(e){if(!mv){return;}var li=e.target&&e.target.closest?e.target.closest('li[role="option"]'):null;if(li){for(var i=0;i<opts.length;i++){if(opts[i].li===li&&act!==i){setAct(i,false);}}}});
+    pop.addEventListener('click',function(e){var li=e.target&&e.target.closest?e.target.closest('li[role="option"]'):null;if(!li){return;}for(var i=0;i<opts.length;i++){if(opts[i].li===li){choose(i);return;}}});
+    /* Buy | Rent | Off-plan while the list is open: it stays open, re-ordered for the new mode, and the text keeps the focus */
+    var keep=false;
+    if(tl){tl.addEventListener('pointerdown',function(){keep=!pop.hidden;if(keep){down=true;}});tl.addEventListener('click',function(){if(keep||!pop.hidden){keep=false;render();try{inp.focus({preventScroll:true});}catch(x){inp.focus();}}});}
+    document.addEventListener('click',function(e){if(pd){clearTimeout(pdT);pdT=setTimeout(settle,0);return;}var t=e.target;if(t&&!ds.contains(t)&&!pop.contains(t)&&!(tl&&tl.contains(t))){close();}});
+    ds.addEventListener('submit',function(e){
+      var q=inp.value.replace(/^\s+|\s+$/g,'');
+      if(!q){e.preventDefault();inp.focus();return;}
+      var m=getMode(),hit=strong(find(q,m),q);
+      track(clean(q));
+      if(hit>=0){e.preventDefault();close();window.location.href=show(hit,m).url;return;}
+      inp.value=clean(q); /* the address carries only the cleaned name (none left: the panel suggests some) */
+      ready();close();
+    });
+    var raf=0;function later(){if(!raf){raf=(window.requestAnimationFrame||setTimeout)(function(){raf=0;place(false);});}}
+    window.addEventListener('resize',function(){fitPh();fitGo();later();});
+    window.addEventListener('scroll',later,{passive:true});
+    if(window.visualViewport){window.visualViewport.addEventListener('resize',later);window.visualViewport.addEventListener('scroll',later);}
+  })();
   /* listing tabs */
   var lt=root.querySelectorAll('.bkh-ltab');
   for(var t=0;t<lt.length;t++){lt[t].addEventListener('click',function(){
@@ -912,7 +2293,11 @@ JS;
 		$h .= '<button type="button" class="bkh-tab" role="tab" data-mode="rent" aria-selected="false">Rent</button>';
 		$h .= '<button type="button" class="bkh-tab" role="tab" data-mode="offplan" aria-selected="false">Off-plan</button>';
 		$h .= '</div>';
-		$h .= '<form class="bkh-form bke-cy-has" data-mode="buy" method="get" action="' . esc_url( $u( 'search' ) ) . '">';
+		/* v2.1: the development-name search; ?bkdev= pages come back in the mode they were searched in */
+		$devq  = blockke_home_dev_query();
+		$devm  = null !== $devq ? blockke_home_dev_mode() : 'buy';
+		$devix = ! empty( $cfg['dev_search'] ) ? blockke_home_dev_index() : array( 'd' => array() );
+		$h .= '<form class="bkh-form bke-cy-has" data-mode="' . esc_attr( $devm ) . '" method="get" action="' . esc_url( $u( 'search' ) ) . '">';
 		$h .= '<input type="hidden" name="property_action_category[]" value="for-sale">';
 		$h .= '<div class="bkh-field bkh-field--where"><label for="bkh-where">Where</label><select id="bkh-where" name="property_area[]">' . $area_opts . '</select></div>';
 		$h .= '<div class="bkh-field bkh-field--type"><label for="bkh-type">Type</label><select id="bkh-type" name="property_category[]"><option value="">Any type</option><option value="apartments">Apartments</option><option value="houses-residential">Houses</option><option value="villas-residential">Villas</option><option value="studio-apartments">Studios</option><option value="land">Land</option><option value="offices">Offices</option><option value="warehouses">Warehouses</option></select></div>';
@@ -921,6 +2306,12 @@ JS;
 		$h .= '<div class="bkh-field bkh-field--completion"><label for="bkh-completion">Completion</label><select id="bkh-completion" name="completion"><option value="any">All projects</option><option value="ready-now">Ready now</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029-plus">2029+</option></select></div>';
 		$h .= '<button type="submit" class="bkh-submit">' . blockke_home_svg( 'search' ) . 'Search</button>';
 		$h .= '</form>';
+		if ( $devix['d'] ) {
+			$h .= blockke_home_dev_form( $devix['d'], $devq );
+			if ( null !== $devq ) {
+				$h .= blockke_home_dev_results( $devix['d'], $devq, $devm );
+			}
+		}
 		$h .= '</div>';
 		if ( $quick ) {
 			$h .= '<div class="bkh-hero-quick"><span>Popular:</span>' . $quick . '</div>';
@@ -933,9 +2324,11 @@ JS;
 
 		/* ---- proof strip ---- */
 		$h .= '<section class="bkh-strip" aria-label="Block in numbers"><div class="bkh-wrap"><div class="bkh-stats">';
-		$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_home_plus( $stats['sale'] ) ) . '</b><span>Homes for sale</span></div>';
-		$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_home_plus( $stats['projects'] ) ) . '</b><span>Developments tracked</span></div>';
-		$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_home_plus( $stats['areas'] ) ) . '</b><span>Nairobi neighbourhoods</span></div>';
+		foreach ( array( 'sale' => 'Homes for sale', 'projects' => 'Developments tracked', 'areas' => 'Nairobi neighbourhoods' ) as $sk => $sl ) {
+			if ( ! empty( $stats[ $sk ] ) ) { // v2.1.1: an empty count is left out, never shown as 0
+				$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_home_plus( $stats[ $sk ] ) ) . '</b><span>' . $sl . '</span></div>';
+			}
+		}
 		$h .= '<div class="bkh-stat"><b>Same day</b><span>Replies from a real person</span></div>';
 		$h .= '</div></div></section>';
 
@@ -950,7 +2343,7 @@ JS;
 		if ( $devs ) {
 			$h .= '<section class="bkh-sec" id="developments"><div class="bkh-wrap">';
 			$h .= '<div class="bkh-head"><div><span class="bkh-eyebrow">New developments</span><h2 class="bkh-display">Buy before it&rsquo;s built, with the homework done.</h2>';
-			$h .= '<p class="bkh-lede">Every project here has been through our checks &mdash; developer record, title, approvals, payment terms &mdash; before it earned a place on the site. On some we sell directly for the developer.</p></div>';
+			$h .= '<p class="bkh-lede">Every project here has been through our checks &mdash; developer record, title, approvals, payment terms &mdash; before it earned a place on the site.</p></div>';
 			$h .= '<a class="bkh-more" href="' . esc_url( $u( 'offplan' ) ) . '">All off-plan projects' . blockke_home_svg( 'arrow' ) . '</a></div>';
 			$h .= '<div class="bkh-devs">';
 			foreach ( $devs as $d ) {
@@ -1024,7 +2417,7 @@ JS;
 				$h .= $card( $l );
 			}
 			$h .= '</div>';
-			$h .= '<div class="bkh-lfoot"><a class="bkh-btn bkh-btn--navy" data-for="bkh-sale" href="' . esc_url( $u( 'for_sale' ) ) . '">Browse all ' . esc_html( blockke_home_plus( $stats['sale'] ) ) . ' homes for sale</a><a class="bkh-btn bkh-btn--navy" data-for="bkh-rent" href="' . esc_url( $u( 'for_rent' ) ) . '" hidden>Browse all rentals</a></div>';
+			$h .= '<div class="bkh-lfoot"><a class="bkh-btn bkh-btn--navy" data-for="bkh-sale" href="' . esc_url( $u( 'for_sale' ) ) . '">Browse all ' . ( empty( $stats['sale'] ) ? '' : esc_html( blockke_home_plus( $stats['sale'] ) ) . ' ' ) . 'homes for sale</a><a class="bkh-btn bkh-btn--navy" data-for="bkh-rent" href="' . esc_url( $u( 'for_rent' ) ) . '" hidden>Browse all rentals</a></div>';
 			$h .= '</div></section>';
 		}
 
@@ -1130,6 +2523,9 @@ JS;
 		$bar = '<div class="bkh-bar" data-where="home_sticky" aria-label="Contact Block"><a class="bkh-bar-wa" href="' . esc_url( blockke_home_wa( 'a property.' ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'WhatsApp</a><a class="bkh-bar-call" href="' . esc_attr( $tel ) . '">' . blockke_home_svg( 'phone' ) . 'Call us</a></div>';
 
 		$js_cfg = array( 'endpoint' => esc_url_raw( rest_url( 'block/v1/contact-click' ) ) );
+		if ( $devix['d'] ) {
+			$js_cfg['dv'] = blockke_home_dev_data( $devix['d'] ); // v2.1: the development-name typeahead
+		}
 		$out    = '<!-- BLOCK homepage v' . blockke_home_ver() . ' -->';
 		$out   .= '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;display=swap">';
 		$out   .= '<style id="bkh-css">' . blockke_home_css() . '</style>';
@@ -1156,8 +2552,8 @@ JS;
 
 	function blockke_home_output() {
 		$cfg   = blockke_home_config();
-		$key   = 'blockke_home_v2_' . blockke_home_stamp();
-		$skip  = isset( $_GET['bkhome_nocache'] ) || isset( $_GET['elementor-preview'] ) || is_preview();
+		$key   = 'blockke_home_v2_' . blockke_home_stamp() . ( blockke_home_dev_page() ? '_p' . blockke_home_dev_page() : '' ); // v2.1: a preview page's copy (its name search posts to itself) is not the front page's
+		$skip  = isset( $_GET['bkhome_nocache'] ) || isset( $_GET['elementor-preview'] ) || is_preview() || isset( $_GET['bkdev'] ); // v2.1: a name search is rendered fresh and never stored
 		$cache = $skip ? false : get_transient( $key );
 		if ( is_string( $cache ) && '' !== $cache ) {
 			return $cache;
@@ -1168,7 +2564,7 @@ JS;
 			error_log( 'BLOCK homepage v2: ' . $e->getMessage() );
 			return '<div style="padding:120px 20px 60px;text-align:center;font-family:Montserrat,sans-serif"><h1 style="font-size:32px">Block Real Estate</h1><p>Nairobi property, block by block.</p><p><a href="' . esc_url( home_url( '/for-sale/' ) ) . '">Homes for sale</a> · <a href="' . esc_url( home_url( '/for-rent/' ) ) . '">Rentals</a> · <a href="' . esc_url( home_url( '/contact-us/' ) ) . '">Contact</a></p></div>';
 		}
-		if ( ! $skip ) {
+		if ( ! $skip && ! blockke_home_nostore() && blockke_home_tax_ready() ) { // v2.1.1
 			set_transient( $key, $html, max( 1, (int) $cfg['cache_minutes'] ) * MINUTE_IN_SECONDS );
 		}
 		return $html;
