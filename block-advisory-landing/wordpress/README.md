@@ -432,3 +432,14 @@ Enquiries the theme's contact forms send to an agent are copied (Bcc) to the enq
 **Emails still need an email service.** WordPress hands email to the web server, and many inboxes reject or hide those messages. Install WP Mail SMTP, or a similar plugin, and connect Gmail, Google Workspace, Zoho Mail or Brevo; then use *Send a test email*. Until then, the Enquiries page shows a warning.
 
 Tested on the local WordPress copy: leads from both sources in date order, the agent copy, failed and sent emails, private subjects, Zoho replies, the page, the dashboard box, the CSV (formulas neutralised, phones kept as text, refused without its security token) and the test email.
+
+## Homepage (`block-homepage.php`)
+
+A separate WPCode PHP snippet that renders the whole block.ke homepage where its shortcode is placed: page 44132's Elementor Shortcode widget holds `[wpcode id=45138]`, and page 44132 is the front page since 2 Nov 2026. Version 3.1 is version 3.0.2 (snippet 44131, unchanged) plus a search by development name under the hero's Buy | Rent | Off-plan filters: "Know the development?" suggests developments as you type, goes straight to the one meant on a clear match, and otherwise shows a results panel (`/?bkdev=<name>`), which also works without JavaScript. Its header comment describes every section and setting.
+
+- **Settings:** option `blockke_homepage_v3` overrides any key of `blockke_hm3_config()`; `'dev_search' => false` hides the name search.
+- **Speed:** snippet 44133 (Homepage speed) acts only on pages carrying one of the snippets in its option `blockke_home_speed` → `shortcode_ids`, now `[44131, 45138]`.
+- **SEO:** page 44132 carries the Rank Math title, description, focus keyword and index setting the previous front page (18618) had.
+- **Roll back:** set the front page back to page 18618 (Settings → Reading), or point page 44132's widget back at `[wpcode id=44131]` to keep the layout without the name search.
+
+The stored snippet is this file without its first line (`<?php`) and final newline (md5 7ebffc317b976b4783daf12026f234d3), checked byte for byte against what WordPress holds.
