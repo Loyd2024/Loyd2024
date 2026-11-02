@@ -3,9 +3,14 @@
 /* <div> markup marker - the connector stores content as-is only when it sees a block-level HTML tag; harmless in PHP */
 /**
  * BLOCK - Homepage v2.1 (2026-11-02) = v2.0.2 + search by development name
+ * v2.1.2: the same page as v2.1.1, with every function renamed from blockke_home_* to blockke_hm21_*. Snippet 44128
+ * (Home v2.0.2, same function names) sits in WPCode's run list (option wpcode_snippets) under "everywhere", so WPCode
+ * runs it on every request at plugins_loaded, before WPResidence registers its taxonomies. Its early run cached the
+ * counts as 0 / 0 / 1 and defined the blockke_home_* functions first, so v2.1.1's own code was skipped and the front
+ * page kept rendering v2.0.2. Under its own names this code cannot be shadowed. Cache keys keep their form
+ * (blockke_home_v2_*); the version inside the stamp keeps them apart from v2.0.2's.
  * v2.1.1: the counts under the hero (homes for sale, developments, neighbourhoods) are never stored or shown when
- * WPResidence's taxonomies are not registered in that request or a count comes back empty or as an error (a save made
- * through the site connection once rendered the page that way and cached 0 / 0 / 1 for 12 hours). Such a count is
+ * WPResidence's taxonomies are not registered in that request or a count comes back empty or as an error. Such a count is
  * left out rather than shown as 0, and the page itself is then not stored in the page cache either.
  * v2.1 adds, under the Buy | Rent | Off-plan filters in the hero, "Know the development?": its own small GET form
  * (?bkdev=<name>, posted to the homepage) with a server-rendered <datalist> of every development name, so it works
@@ -31,7 +36,7 @@
  * it has a copy under 12 hours old, the names index waits for 42706 to rebuild its own developments after a listing
  * change (its development pages do), so the homepage does not pay for that rebuild. GA4 'search' fires with placement
  * home_dev. Config 'dev_search' => false hides it. The matching, the panel's wording and the input safety are Home
- * v3.1's, under this snippet's own names (blockke_home_dev_*); the look is v2's: a slim rounded card under the filter
+ * v3.1's, under this snippet's own names (blockke_hm21_dev_*); the look is v2's: a slim rounded card under the filter
  * card, a rounded list and panel, Montserrat labels and Instrument Serif prices.
  * v2.1 also shows no "Authorised sales agent" tag: config 'mandates' is empty by default (the live option already
  * says so; the mandate code is otherwise unchanged), and the developments lede no longer says "On some we sell
@@ -59,17 +64,17 @@
  * Cache: the rendered HTML is kept in a transient (blockke_home_v2_<stamp>) for up to an hour; the stamp changes
  * whenever a listing, article or agent is saved or the config option changes, so edits show on the next load.
  * ?bkhome_nocache=1 bypasses it. Cloudflare may still serve an older copy until purged.
- * Config: option blockke_homepage (array) overrides any key of the defaults in blockke_home_config().
+ * Config: option blockke_homepage (array) overrides any key of the defaults in blockke_hm21_config().
  * Kill switch / rollback: deactivate this snippet in WPCode, or set the front page back to the previous layout.
  */
 
-if ( ! function_exists( 'blockke_home_config' ) ) {
+if ( ! function_exists( 'blockke_hm21_config' ) ) {
 
-	function blockke_home_ver() {
-		return '2.1.1';
+	function blockke_hm21_ver() {
+		return '2.1.2';
 	}
 
-	function blockke_home_config() {
+	function blockke_hm21_config() {
 		static $cfg = null;
 		if ( null !== $cfg ) {
 			return $cfg;
@@ -127,8 +132,8 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 
 	/* ------------------------------------------------------------------ helpers */
 
-	function blockke_home_url( $key ) {
-		$cfg = blockke_home_config();
+	function blockke_hm21_url( $key ) {
+		$cfg = blockke_hm21_config();
 		$u   = isset( $cfg['urls'][ $key ] ) ? $cfg['urls'][ $key ] : '/';
 		if ( 0 === strpos( $u, 'http' ) ) {
 			return $u;
@@ -136,13 +141,13 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		return home_url( $u );
 	}
 
-	function blockke_home_wa( $topic ) {
-		$cfg = blockke_home_config();
+	function blockke_hm21_wa( $topic ) {
+		$cfg = blockke_hm21_config();
 		return 'https://wa.me/' . preg_replace( '/\D+/', '', $cfg['whatsapp'] ) . '?text=' . rawurlencode( $cfg['wa_text'] . $topic );
 	}
 
 	/** KES price in M notation for sales, K a month for rentals. */
-	function blockke_home_price( $n, $rent = false ) {
+	function blockke_hm21_price( $n, $rent = false ) {
 		$n = (float) $n;
 		if ( $n <= 0 ) {
 			return '';
@@ -165,7 +170,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** "800+" style rounding for live counts. */
-	function blockke_home_plus( $n ) {
+	function blockke_hm21_plus( $n ) {
 		$n = (int) $n;
 		if ( $n >= 1000 ) {
 			return number_format( floor( $n / 100 ) * 100 ) . '+';
@@ -180,7 +185,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Short card title from the long SEO listing title. */
-	function blockke_home_short_title( $title, $max = 46 ) {
+	function blockke_hm21_short_title( $title, $max = 46 ) {
 		$t = html_entity_decode( (string) $title, ENT_QUOTES, 'UTF-8' );
 		$t = preg_replace( '/\s*(—|–|\||:)\s*.*$/u', '', $t );
 		$t = preg_replace( '/\s+(for sale|for rent|to let)\b.*$/iu', '', $t );
@@ -194,7 +199,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		return $t;
 	}
 
-	function blockke_home_first_term( $id, $tax ) {
+	function blockke_hm21_first_term( $id, $tax ) {
 		$terms = get_the_terms( $id, $tax );
 		if ( is_array( $terms ) && ! empty( $terms ) ) {
 			return $terms[0];
@@ -202,7 +207,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		return null;
 	}
 
-	function blockke_home_img( $attachment_id, $size, $class, $alt, $eager = false, $sizes = '' ) {
+	function blockke_hm21_img( $attachment_id, $size, $class, $alt, $eager = false, $sizes = '' ) {
 		$attachment_id = (int) $attachment_id;
 		if ( ! $attachment_id ) {
 			return '<span class="' . esc_attr( $class ) . ' bkh-noimg"></span>';
@@ -225,7 +230,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Term image from WpResidence's taxonomy options (category_attach_id), else null. */
-	function blockke_home_term_image( $term_id ) {
+	function blockke_hm21_term_image( $term_id ) {
 		$opt = get_option( 'taxonomy_' . (int) $term_id );
 		if ( is_array( $opt ) && ! empty( $opt['category_attach_id'] ) ) {
 			return (int) $opt['category_attach_id'];
@@ -235,7 +240,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Area page: /neighbourhoods/<slug>/ when that page exists, else the area archive. */
-	function blockke_home_area_url( $term ) {
+	function blockke_hm21_area_url( $term ) {
 		static $parent = null;
 		if ( null === $parent ) {
 			$p      = get_page_by_path( 'neighbourhoods' );
@@ -254,7 +259,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	/* ------------------------------------------------------------------ data */
 
 	/** v2.1.1: true only when every taxonomy the counts and cards read is registered in this request. */
-	function blockke_home_tax_ready() {
+	function blockke_hm21_tax_ready() {
 		foreach ( array( 'property_action_category', 'property_project', 'property_area', 'property_city' ) as $tax ) {
 			if ( ! taxonomy_exists( $tax ) ) {
 				return false;
@@ -264,7 +269,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** v2.1.1: marks this render as one that must not be stored in the page cache. */
-	function blockke_home_nostore( $set = null ) {
+	function blockke_hm21_nostore( $set = null ) {
 		static $flag = false;
 		if ( null !== $set ) {
 			$flag = (bool) $set;
@@ -272,14 +277,14 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		return $flag;
 	}
 
-	function blockke_home_stats() {
-		$key = 'blockke_home_v2_stats_' . blockke_home_stamp();
+	function blockke_hm21_stats() {
+		$key = 'blockke_home_v2_stats_' . blockke_hm21_stamp();
 		$s   = get_transient( $key );
 		if ( is_array( $s ) && ! empty( $s['sale'] ) && ! empty( $s['projects'] ) && ! empty( $s['areas'] ) ) {
 			return $s;
 		}
-		if ( ! blockke_home_tax_ready() ) {
-			blockke_home_nostore( true );
+		if ( ! blockke_hm21_tax_ready() ) {
+			blockke_hm21_nostore( true );
 			return array( 'sale' => 0, 'rent' => 0, 'projects' => 0, 'areas' => 0 );
 		}
 		$sale = get_term_by( 'slug', 'for-sale', 'property_action_category' );
@@ -314,22 +319,22 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( $s['sale'] && $s['projects'] && $s['areas'] ) {
 			set_transient( $key, $s, 12 * HOUR_IN_SECONDS );
 		} else {
-			blockke_home_nostore( true );
+			blockke_hm21_nostore( true );
 		}
 		return $s;
 	}
 
 	/** One listing's card data. */
-	function blockke_home_listing( $id ) {
+	function blockke_hm21_listing( $id ) {
 		$id     = (int) $id;
 		$rent   = has_term( 'for-rent', 'property_action_category', $id );
 		$price  = (float) get_post_meta( $id, 'property_price', true );
 		$label  = trim( (string) get_post_meta( $id, 'property_label_before', true ) );
 		$subs   = get_post_meta( $id, 'property_has_subunits', true );
 		$from   = ( ! $rent ) && ( $subs || preg_match( '/from/i', $label ) );
-		$area   = blockke_home_first_term( $id, 'property_area' );
-		$city   = blockke_home_first_term( $id, 'property_city' );
-		$comp   = blockke_home_first_term( $id, 'property_completion' );
+		$area   = blockke_hm21_first_term( $id, 'property_area' );
+		$city   = blockke_hm21_first_term( $id, 'property_city' );
+		$comp   = blockke_hm21_first_term( $id, 'property_completion' );
 		$status = '';
 		if ( ! $rent && has_term( 'offplan-ongoing', 'property_status', $id ) ) {
 			$status = 'Off-plan';
@@ -350,17 +355,17 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( $city && ( ! $area || $city->name !== $area->name ) ) {
 			$loc[] = $city->name;
 		}
-		$project = blockke_home_first_term( $id, 'property_project' );
+		$project = blockke_hm21_first_term( $id, 'property_project' );
 		$title   = ( $project && mb_strlen( $project->name ) <= 40 && ! preg_match( '/bedroom|apartments? on|for sale/i', $project->name ) )
 			? html_entity_decode( $project->name, ENT_QUOTES, 'UTF-8' )
-			: blockke_home_short_title( get_the_title( $id ) );
+			: blockke_hm21_short_title( get_the_title( $id ) );
 		return array(
 			'id'     => $id,
 			'url'    => get_permalink( $id ),
 			'title'  => $title,
 			'full'   => html_entity_decode( get_the_title( $id ), ENT_QUOTES, 'UTF-8' ),
 			'thumb'  => (int) get_post_thumbnail_id( $id ),
-			'price'  => $price ? ( ( $from ? 'From ' : '' ) . blockke_home_price( $price, $rent ) ) : 'Price on request',
+			'price'  => $price ? ( ( $from ? 'From ' : '' ) . blockke_hm21_price( $price, $rent ) ) : 'Price on request',
 			'beds'   => (int) get_post_meta( $id, 'property_bedrooms', true ),
 			'baths'  => (int) get_post_meta( $id, 'property_bathrooms', true ),
 			'size'   => (float) get_post_meta( $id, 'property_size', true ),
@@ -370,7 +375,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		);
 	}
 
-	function blockke_home_listings( $action, $n ) {
+	function blockke_hm21_listings( $action, $n ) {
 		$base = array(
 			'post_type'      => 'estate_property',
 			'post_status'    => 'publish',
@@ -404,7 +409,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			if ( ! get_post_thumbnail_id( $id ) ) {
 				continue;
 			}
-			$pt  = blockke_home_first_term( $id, 'property_project' );
+			$pt  = blockke_hm21_first_term( $id, 'property_project' );
 			$key = $pt ? 'p' . $pt->term_id : 'l' . $id;
 			if ( isset( $projects[ $key ] ) ) {
 				continue;
@@ -414,14 +419,14 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		}
 		$out = array();
 		foreach ( $ids as $id ) {
-			$out[] = blockke_home_listing( $id );
+			$out[] = blockke_hm21_listing( $id );
 		}
 		return $out;
 	}
 
 	/** Development card from a property_project slug. */
-	function blockke_home_development( $slug ) {
-		$cfg  = blockke_home_config();
+	function blockke_hm21_development( $slug ) {
+		$cfg  = blockke_hm21_config();
 		$term = get_term_by( 'slug', $slug, 'property_project' );
 		if ( ! $term ) {
 			return null;
@@ -474,10 +479,10 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			};
 			$mix = ( $lo === $hi ) ? $f( $lo ) : $f( $lo ) . ' – ' . $f( $hi );
 		}
-		$area = blockke_home_first_term( $master, 'property_area' );
+		$area = blockke_hm21_first_term( $master, 'property_area' );
 		$comp = get_post_meta( $master, 'bke_completion_stated', true );
 		if ( ! $comp ) {
-			$ct   = blockke_home_first_term( $master, 'property_completion' );
+			$ct   = blockke_hm21_first_term( $master, 'property_completion' );
 			$comp = $ct ? ( 'ready-now' === $ct->slug ? 'Ready now' : 'Completion ' . $ct->name ) : '';
 		} else {
 			$comp = ( 0 === stripos( $comp, 'ready' ) ) ? $comp : 'Completion ' . $comp;
@@ -501,7 +506,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			'slug'    => $slug,
 			'name'    => html_entity_decode( $term->name, ENT_QUOTES, 'UTF-8' ),
 			'area'    => $area ? $area->name : '',
-			'price'   => $min_price ? 'From ' . blockke_home_price( $min_price ) : 'Prices on request',
+			'price'   => $min_price ? 'From ' . blockke_hm21_price( $min_price ) : 'Prices on request',
 			'mix'     => $mix,
 			'comp'    => $comp,
 			'thumb'   => (int) get_post_thumbnail_id( $master ),
@@ -510,15 +515,15 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		);
 	}
 
-	function blockke_home_areas() {
-		$cfg = blockke_home_config();
+	function blockke_hm21_areas() {
+		$cfg = blockke_hm21_config();
 		$out = array();
 		foreach ( (array) $cfg['neighbourhoods'] as $slug ) {
 			$t = get_term_by( 'slug', $slug, 'property_area' );
 			if ( ! $t || (int) $t->count < 1 ) {
 				continue;
 			}
-			$thumb = blockke_home_term_image( $t->term_id );
+			$thumb = blockke_hm21_term_image( $t->term_id );
 			if ( ! $thumb ) {
 				/* no image on the area itself: borrow the newest listing photo in that area */
 				$recent = get_posts( array(
@@ -539,14 +544,14 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			$out[] = array(
 				'name'  => $t->name,
 				'count' => (int) $t->count,
-				'url'   => blockke_home_area_url( $t ),
+				'url'   => blockke_hm21_area_url( $t ),
 				'thumb' => $thumb,
 			);
 		}
 		return $out;
 	}
 
-	function blockke_home_articles( $n = 4 ) {
+	function blockke_hm21_articles( $n = 4 ) {
 		$posts = get_posts( array(
 			'post_type'      => 'post',
 			'post_status'    => 'publish',
@@ -570,7 +575,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		return $out;
 	}
 
-	function blockke_home_agent( $id ) {
+	function blockke_hm21_agent( $id ) {
 		$id = (int) $id;
 		if ( ! $id || 'publish' !== get_post_status( $id ) ) {
 			return null;
@@ -587,7 +592,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	/* ------------------------------------------------------------------ development-name search (v2.1) */
 
 	/** Words a development's name is often typed with or without ("Capella" finds "Capella Residency"). */
-	function blockke_home_dev_filler() {
+	function blockke_hm21_dev_filler() {
 		return array( 'apartment' => 1, 'apartments' => 1, 'residence' => 1, 'residences' => 1, 'residency' => 1, 'residencies' => 1, 'homes' => 1, 'estate' => 1, 'the' => 1, 'at' => 1 );
 	}
 
@@ -596,7 +601,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * as the last word it is a name still being typed, "N" for Nova), apostrophes dropped, other punctuation a space.
 	 * Same as fold() in the page script.
 	 */
-	function blockke_home_dev_fold( $s ) {
+	function blockke_hm21_dev_fold( $s ) {
 		$s = html_entity_decode( (string) $s, ENT_QUOTES, 'UTF-8' );
 		$s = str_replace( array( '&', "'", "\xE2\x80\x99", '`' ), array( ' and ', '', '', '' ), $s );
 		$s = strtolower( remove_accents( $s ) );
@@ -610,7 +615,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** A name or query ready to compare: w = its words, k = without the filler words (all of them when nothing else is left), c / f = k / w run together, o = only filler words. Same as prep() in the page script. */
-	function blockke_home_dev_prep( $s ) {
+	function blockke_hm21_dev_prep( $s ) {
 		static $memo = array(); // the same names are compared for every query
 		$s = (string) $s;
 		if ( isset( $memo[ $s ] ) ) {
@@ -619,15 +624,15 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( count( $memo ) > 5000 ) {
 			$memo = array();
 		}
-		$memo[ $s ] = blockke_home_dev_prep_words( $s );
+		$memo[ $s ] = blockke_hm21_dev_prep_words( $s );
 		return $memo[ $s ];
 	}
 
 	/** prep() without the memo. */
-	function blockke_home_dev_prep_words( $s ) {
-		$f = blockke_home_dev_fold( $s );
+	function blockke_hm21_dev_prep_words( $s ) {
+		$f = blockke_hm21_dev_fold( $s );
 		$w = '' === $f ? array() : explode( ' ', $f );
-		$x = blockke_home_dev_filler();
+		$x = blockke_hm21_dev_filler();
 		$k = array();
 		foreach ( $w as $word ) {
 			if ( ! isset( $x[ $word ] ) ) {
@@ -645,7 +650,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * Edits between two words, counting two neighbouring letters swapped ("wset" for "west") as one edit, the commonest slip
 	 * (optimal string alignment distance; PHP's levenshtein() counts a swap as two). Same as osa() in the page script.
 	 */
-	function blockke_home_dev_osa( $a, $b ) {
+	function blockke_hm21_dev_osa( $a, $b ) {
 		if ( $a === $b ) {
 			return 0;
 		}
@@ -671,28 +676,28 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Two words start with the same letter, c and k counting as one ("Kapella" for "Capella"): the first letter is rarely the slip, but it is often spelt by its sound. Same as lead() in the page script. */
-	function blockke_home_dev_lead( $t, $u ) {
+	function blockke_hm21_dev_lead( $t, $u ) {
 		return '' !== $t && '' !== $u && ( $t[0] === $u[0] || ( false !== strpos( 'ck', $t[0] ) && false !== strpos( 'ck', $u[0] ) ) );
 	}
 
 	/** One typed word is a whole-word slip of a word of the name: the same first letter (c = k), one slip, two from eight letters. Same as slip() in the page script. */
-	function blockke_home_dev_slip( $t, $u ) {
+	function blockke_hm21_dev_slip( $t, $u ) {
 		$n = strlen( $t );
-		return $n >= 4 && $n <= 40 && strlen( $u ) <= 60 && blockke_home_dev_lead( $t, $u ) && blockke_home_dev_osa( $t, $u ) <= ( $n >= 8 ? 2 : 1 ); // no name has such long words
+		return $n >= 4 && $n <= 40 && strlen( $u ) <= 60 && blockke_hm21_dev_lead( $t, $u ) && blockke_hm21_dev_osa( $t, $u ) <= ( $n >= 8 ? 2 : 1 ); // no name has such long words
 	}
 
 	/** One typed word is a near miss for a word of the name: a whole-word slip, or one slip from how the word starts. Same as near() in the page script. */
-	function blockke_home_dev_near( $t, $u ) {
+	function blockke_hm21_dev_near( $t, $u ) {
 		$n = strlen( $t );
-		if ( $n < 4 || $n > 40 || strlen( $u ) > 60 || ! blockke_home_dev_lead( $t, $u ) ) {
+		if ( $n < 4 || $n > 40 || strlen( $u ) > 60 || ! blockke_hm21_dev_lead( $t, $u ) ) {
 			return false;
 		}
-		if ( blockke_home_dev_slip( $t, $u ) ) {
+		if ( blockke_hm21_dev_slip( $t, $u ) ) {
 			return true;
 		}
 		if ( strlen( $u ) > $n ) {
 			for ( $k = $n - 1; $k <= $n + 1; $k++ ) {
-				if ( blockke_home_dev_osa( $t, substr( $u, 0, $k ) ) <= 1 ) {
+				if ( blockke_hm21_dev_osa( $t, substr( $u, 0, $k ) ) <= 1 ) {
 					return true;
 				}
 			}
@@ -705,7 +710,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * "Oak Rise Residency"), 80 the name starts with it, 60 each word starts a word of the name (64 when the first one starts
 	 * the name), 40 inside the name, 20 a near miss, 0 not at all. Same as score() in the page script.
 	 */
-	function blockke_home_dev_score( $q, $m ) {
+	function blockke_hm21_dev_score( $q, $m ) {
 		if ( '' === $q['c'] ) {
 			return 0;
 		}
@@ -742,7 +747,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		foreach ( $q['k'] as $t ) {
 			$hit = false;
 			foreach ( $m['w'] as $u ) {
-				if ( 0 === strpos( $u, $t ) || blockke_home_dev_near( $t, $u ) ) {
+				if ( 0 === strpos( $u, $t ) || blockke_hm21_dev_near( $t, $u ) ) {
 					$hit = true;
 					break;
 				}
@@ -755,7 +760,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Which developments suit the mode first: Rent prefers those with rentals, Buy and Off-plan those for sale (Off-plan: off-plan ones first). */
-	function blockke_home_dev_pref( $b, $mode ) {
+	function blockke_hm21_dev_pref( $b, $mode ) {
 		$b = (int) $b;
 		if ( 'rent' === $mode ) {
 			return ( $b & 2 ) ? 2 : 0;
@@ -764,25 +769,25 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** A query against a development's name and its aliases (Project names that read differently), an alias scoring 1 lower. Same as all() in the page script. */
-	function blockke_home_dev_score_all( $q, $e ) {
-		$s = blockke_home_dev_score( $q, blockke_home_dev_prep( $e['n'] ) );
+	function blockke_hm21_dev_score_all( $q, $e ) {
+		$s = blockke_hm21_dev_score( $q, blockke_hm21_dev_prep( $e['n'] ) );
 		foreach ( (array) $e['al'] as $a ) {
-			$s = max( $s, blockke_home_dev_score( $q, blockke_home_dev_prep( $a ) ) - 1 );
+			$s = max( $s, blockke_hm21_dev_score( $q, blockke_hm21_dev_prep( $a ) ) - 1 );
 		}
 		return $s;
 	}
 
 	/** Words of an area's name that say nothing on their own ("Ngong Road", "Tatu City", "Lower Kabete"): never taken for the area. */
-	function blockke_home_dev_notarea() {
+	function blockke_hm21_dev_notarea() {
 		return array( 'road' => 1, 'city' => 1, 'town' => 1, 'general' => 1, 'river' => 1, 'rivers' => 1, 'spring' => 1, 'springs' => 1, 'valley' => 1, 'south' => 1, 'north' => 1, 'east' => 1, 'west' => 1, 'upper' => 1, 'lower' => 1, 'garden' => 1, 'gardens' => 1, 'plains' => 1, 'park' => 1, 'hill' => 1, 'hills' => 1, 'view' => 1, 'views' => 1, 'estate' => 1, 'beach' => 1, 'heights' => 1, 'ridge' => 1, 'gate' => 1, 'green' => 1, 'court' => 1, 'place' => 1, 'square' => 1 );
 	}
 
 	/** Every area word the index knows (from each development's place, at least 4 letters, not a word like "Road"), plus Nairobi and Kenya. Same as areas() in the page script. */
-	function blockke_home_dev_areas( $d ) {
-		$no  = blockke_home_dev_notarea();
+	function blockke_hm21_dev_areas( $d ) {
+		$no  = blockke_hm21_dev_notarea();
 		$out = array();
 		foreach ( $d as $e ) {
-			foreach ( blockke_home_dev_prep( $e['pl'] )['w'] as $u ) {
+			foreach ( blockke_hm21_dev_prep( $e['pl'] )['w'] as $u ) {
 				if ( strlen( $u ) >= 4 && ! isset( $no[ $u ] ) ) {
 					$out[ $u ] = true;
 				}
@@ -796,7 +801,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * letters), or the start of one when it is the last word, still being typed ("Capella W"). Null when no word is a place
 	 * word, or when nothing but place or filler words would be left. Same as unplace() in the page script.
 	 */
-	function blockke_home_dev_unplace( $q, $place ) {
+	function blockke_hm21_dev_unplace( $q, $place ) {
 		$n = count( $q['w'] );
 		if ( ! $place || $n < 2 ) {
 			return null;
@@ -805,7 +810,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		foreach ( $q['w'] as $i => $t ) {
 			$hit = false;
 			foreach ( $place as $u ) {
-				if ( $u === $t || ( $i === $n - 1 && 0 === strpos( $u, $t ) ) || ( strlen( $t ) >= 5 && blockke_home_dev_slip( $t, $u ) ) ) {
+				if ( $u === $t || ( $i === $n - 1 && 0 === strpos( $u, $t ) ) || ( strlen( $t ) >= 5 && blockke_hm21_dev_slip( $t, $u ) ) ) {
 					$hit = true;
 					break;
 				}
@@ -817,7 +822,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( ! $keep || count( $keep ) === $n ) {
 			return null;
 		}
-		$r = blockke_home_dev_prep( implode( ' ', $keep ) );
+		$r = blockke_hm21_dev_prep( implode( ' ', $keep ) );
 		return $r['o'] ? null : $r;
 	}
 
@@ -828,31 +833,31 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * A query that also names the development's own area is matched without it, 1 lower ("Capella Westlands", "Capella W");
 	 * when nothing better than a near miss matches, without any area word the index knows, 2 lower ("Capella Kilimani").
 	 * Ties: the mode's preference, then the homepage's own developments in their order (config developments, see
-	 * blockke_home_dev_feat()), then the shorter name, then the index order (busiest first). Same as find() in the page script.
+	 * blockke_hm21_dev_feat()), then the shorter name, then the index order (busiest first). Same as find() in the page script.
 	 */
-	function blockke_home_dev_find( $text, $d, $mode ) {
-		$q = blockke_home_dev_prep( $text );
+	function blockke_hm21_dev_find( $text, $d, $mode ) {
+		$q = blockke_hm21_dev_prep( $text );
 		if ( '' === $q['c'] ) {
 			return array();
 		}
-		$ft  = blockke_home_dev_feat( $d );
+		$ft  = blockke_hm21_dev_feat( $d );
 		$sc  = array();
 		$len = array();
 		$top = 0;
 		foreach ( $d as $i => $e ) {
-			$len[ $i ] = strlen( blockke_home_dev_prep( $e['n'] )['c'] );
-			$s         = blockke_home_dev_score_all( $q, $e );
-			$q1        = blockke_home_dev_unplace( $q, blockke_home_dev_prep( $e['pl'] )['w'] );
+			$len[ $i ] = strlen( blockke_hm21_dev_prep( $e['n'] )['c'] );
+			$s         = blockke_hm21_dev_score_all( $q, $e );
+			$q1        = blockke_hm21_dev_unplace( $q, blockke_hm21_dev_prep( $e['pl'] )['w'] );
 			if ( $q1 ) {
-				$s = max( $s, blockke_home_dev_score_all( $q1, $e ) - 1 );
+				$s = max( $s, blockke_hm21_dev_score_all( $q1, $e ) - 1 );
 			}
 			$sc[ $i ] = $s;
 			$top      = max( $top, $s );
 		}
-		$q2 = $top < 35 ? blockke_home_dev_unplace( $q, blockke_home_dev_areas( $d ) ) : null;
+		$q2 = $top < 35 ? blockke_hm21_dev_unplace( $q, blockke_hm21_dev_areas( $d ) ) : null;
 		if ( $q2 ) {
 			foreach ( $d as $i => $e ) {
-				$sc[ $i ] = max( $sc[ $i ], blockke_home_dev_score_all( $q2, $e ) - 2 );
+				$sc[ $i ] = max( $sc[ $i ], blockke_hm21_dev_score_all( $q2, $e ) - 2 );
 				$top      = max( $top, $sc[ $i ] );
 			}
 		}
@@ -869,8 +874,8 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 				if ( $x[1] !== $y[1] ) {
 					return $y[1] - $x[1];
 				}
-				$px = blockke_home_dev_pref( $d[ $x[0] ]['b'], $mode );
-				$py = blockke_home_dev_pref( $d[ $y[0] ]['b'], $mode );
+				$px = blockke_hm21_dev_pref( $d[ $x[0] ]['b'], $mode );
+				$py = blockke_hm21_dev_pref( $d[ $y[0] ]['b'], $mode );
 				if ( $px !== $py ) {
 					return $py - $px;
 				}
@@ -890,12 +895,12 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 
 	/**
 	 * The homepage's own developments (config developments: property_project slugs) as index => position in that
-	 * list; a development not on it is left out. It breaks ties in blockke_home_dev_find() and orders blockke_home_dev_top(), and
+	 * list; a development not on it is left out. It breaks ties in blockke_hm21_dev_find() and orders blockke_hm21_dev_top(), and
 	 * the page script gets it as dv.f. Worked out per request from the config, so a config change counts at once.
 	 */
-	function blockke_home_dev_feat( $d ) {
+	function blockke_hm21_dev_feat( $d ) {
 		static $memo = array();
-		$cfg   = blockke_home_config();
+		$cfg   = blockke_hm21_config();
 		$slugs = array_values( array_filter( (array) $cfg['developments'], 'is_string' ) );
 		$key   = md5( wp_json_encode( array( $slugs, count( $d ), isset( $d[0]['n'] ) ? (string) $d[0]['n'] : '' ) ) ); // the index is a list
 		if ( isset( $memo[ $key ] ) ) {
@@ -930,8 +935,8 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * area are left out first ("capela westlands"). A slip of how a word starts does not count ("santa" is not Santorini).
 	 * Same as strong() in the page script.
 	 */
-	function blockke_home_dev_strong( $res, $text, $d ) {
-		$q = blockke_home_dev_prep( $text );
+	function blockke_hm21_dev_strong( $res, $text, $d ) {
+		$q = blockke_hm21_dev_prep( $text );
 		if ( ! $res || $q['o'] ) {
 			return null;
 		}
@@ -944,18 +949,18 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( 1 !== count( $res ) || $a >= 35 || ! isset( $d[ $i ] ) ) {
 			return null;
 		}
-		$k = blockke_home_dev_unplace( $q, blockke_home_dev_prep( $d[ $i ]['pl'] )['w'] );
+		$k = blockke_hm21_dev_unplace( $q, blockke_hm21_dev_prep( $d[ $i ]['pl'] )['w'] );
 		$k = $k ? $k : $q;
 		if ( preg_match_all( '/[a-z]/', $k['c'] ) < 5 ) {
 			return null;
 		}
 		foreach ( array_merge( array( $d[ $i ]['n'] ), (array) $d[ $i ]['al'] ) as $nm ) {
-			$w  = blockke_home_dev_prep( $nm )['w'];
+			$w  = blockke_hm21_dev_prep( $nm )['w'];
 			$ok = true;
 			foreach ( $k['k'] as $t ) {
 				$hit = false;
 				foreach ( $w as $u ) {
-					if ( 0 === strpos( $u, $t ) || blockke_home_dev_slip( $t, $u ) ) {
+					if ( 0 === strpos( $u, $t ) || blockke_hm21_dev_slip( $t, $u ) ) {
 						$hit = true;
 						break;
 					}
@@ -973,19 +978,19 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** A name worth offering: not a listing title ("3 Bedroom Apartment for Sale"), at most 60 characters. */
-	function blockke_home_dev_named( $n ) {
+	function blockke_hm21_dev_named( $n ) {
 		$n = trim( (string) $n );
 		return '' !== $n && mb_strlen( $n ) <= 60 && preg_match( '/\p{L}/u', $n ) && ! preg_match( '/\b(?:bedrooms?|for sale|for rent|to let)\b/iu', $n );
 	}
 
 	/** Project names that read differently from the development's own name (compared as the search compares them). */
-	function blockke_home_dev_aliases( $name, $names ) {
-		$seen = array( blockke_home_dev_prep( $name )['c'] => true );
+	function blockke_hm21_dev_aliases( $name, $names ) {
+		$seen = array( blockke_hm21_dev_prep( $name )['c'] => true );
 		$out  = array();
 		foreach ( $names as $n ) {
 			$n = trim( html_entity_decode( (string) $n, ENT_QUOTES, 'UTF-8' ) );
-			$c = blockke_home_dev_prep( $n )['c'];
-			if ( '' === $c || isset( $seen[ $c ] ) || ! blockke_home_dev_named( $n ) ) {
+			$c = blockke_hm21_dev_prep( $n )['c'];
+			if ( '' === $c || isset( $seen[ $c ] ) || ! blockke_hm21_dev_named( $n ) ) {
 				continue;
 			}
 			$seen[ $c ] = true;
@@ -995,7 +1000,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** Listing id => array( term_id => term name ) for property_project, in one query per 500 listings. */
-	function blockke_home_dev_projects( $ids ) {
+	function blockke_hm21_dev_projects( $ids ) {
 		$out = array();
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
 		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
@@ -1011,7 +1016,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** The developments from snippet 42706 (blockke_bkn_devs()): one per development, its main listing, the site's own cleaned name. */
-	function blockke_home_dev_from_bkn() {
+	function blockke_hm21_dev_from_bkn() {
 		$all = blockke_bkn_devs();
 		if ( empty( $all['devs'] ) || ! is_array( $all['devs'] ) ) {
 			return array();
@@ -1020,11 +1025,11 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		foreach ( $all['devs'] as $c ) {
 			$ids = array_merge( $ids, (array) $c['ids'] );
 		}
-		$pj  = blockke_home_dev_projects( $ids );
+		$pj  = blockke_hm21_dev_projects( $ids );
 		$out = array();
 		foreach ( $all['devs'] as $c ) {
 			$name = trim( (string) $c['name'] );
-			if ( ! blockke_home_dev_named( $name ) || empty( $c['url'] ) ) {
+			if ( ! blockke_hm21_dev_named( $name ) || empty( $c['url'] ) ) {
 				continue;
 			}
 			$acts = (array) $c['acts'];
@@ -1052,7 +1057,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 				'r'  => (float) $c['rfrom'],
 				'rf' => $c['rto'] > $c['rfrom'],
 				'b'  => $b,
-				'al' => blockke_home_dev_aliases( $name, $terms ),
+				'al' => blockke_hm21_dev_aliases( $name, $terms ),
 				'pj' => array_keys( $terms ),
 				'k'  => (int) $c['n'],
 				'ft' => ! empty( $c['ft'] ),
@@ -1064,11 +1069,11 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 
 	/**
 	 * Without snippet 42706: property_project terms with listings, each linked to its main listing (the one with units, else
-	 * the newest by date), as blockke_home_development() does. Its area: the main listing's bke_dev_area (a slug) when set, else
+	 * the newest by date), as blockke_hm21_development() does. Its area: the main listing's bke_dev_area (a slug) when set, else
 	 * the one of its areas that most of the development's listings carry, else the first. A few queries for every project
 	 * together, not one per project.
 	 */
-	function blockke_home_dev_from_terms() {
+	function blockke_hm21_dev_from_terms() {
 		global $wpdb;
 		$ids = get_posts( array(
 			'post_type'      => 'estate_property',
@@ -1076,7 +1081,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			'posts_per_page' => 3000,
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
-			'orderby'        => array( 'date' => 'DESC', 'ID' => 'ASC' ), // newest first, as blockke_home_development() takes a project's listings (same date: the lower ID, as MariaDB returns them there)
+			'orderby'        => array( 'date' => 'DESC', 'ID' => 'ASC' ), // newest first, as blockke_hm21_development() takes a project's listings (same date: the lower ID, as MariaDB returns them there)
 			'tax_query'      => array( array( 'taxonomy' => 'property_project', 'operator' => 'EXISTS' ) ),
 		) );
 		$ids = array_map( 'intval', $ids );
@@ -1123,7 +1128,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 				}
 			}
 			$name = trim( html_entity_decode( (string) $p['name'], ENT_QUOTES, 'UTF-8' ) );
-			if ( ! $live || ! blockke_home_dev_named( $name ) ) {
+			if ( ! $live || ! blockke_hm21_dev_named( $name ) ) {
 				continue;
 			}
 			usort(
@@ -1242,14 +1247,14 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * is saved, say) the copy is kept, at most 12 hours old, so the homepage neither pays for that rebuild (about half a second)
 	 * nor waits on 42706's build lock. Names and links rarely change; prices catch up within the hour.
 	 */
-	function blockke_home_dev_index() {
+	function blockke_hm21_dev_index() {
 		static $idx = null;
 		if ( null !== $idx ) {
 			return $idx;
 		}
-		$cfg  = blockke_home_config();
+		$cfg  = blockke_hm21_config();
 		$key  = 'blockke_home_v2_devs';
-		$st   = blockke_home_stamp();
+		$st   = blockke_hm21_stamp();
 		$skip = isset( $_GET['bkhome_nocache'] ) || isset( $_GET['elementor-preview'] ) || is_preview(); // phpcs:ignore WordPress.Security.NonceVerification
 		$hit  = $skip ? false : get_transient( $key );
 		$age  = is_array( $hit ) && isset( $hit['st'], $hit['src'], $hit['d'], $hit['t'] ) && is_array( $hit['d'] ) && $hit['d'] ? time() - (int) $hit['t'] : null;
@@ -1257,7 +1262,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			$idx = $hit;
 			return $idx;
 		}
-		if ( null !== $age && 'bkn' === $hit['src'] && $age < 12 * HOUR_IN_SECONDS && ! blockke_home_dev_bkn_ready() ) {
+		if ( null !== $age && 'bkn' === $hit['src'] && $age < 12 * HOUR_IN_SECONDS && ! blockke_hm21_dev_bkn_ready() ) {
 			$idx = $hit;
 			return $idx;
 		}
@@ -1265,7 +1270,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		$src = '';
 		if ( function_exists( 'blockke_bkn_devs' ) ) {
 			try {
-				$d   = blockke_home_dev_from_bkn();
+				$d   = blockke_hm21_dev_from_bkn();
 				$src = 'bkn';
 			} catch ( Throwable $e ) {
 				error_log( 'BLOCK homepage v2.1 (developments from 42706): ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
@@ -1273,7 +1278,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			}
 		}
 		if ( ! $d ) {
-			$d   = blockke_home_dev_from_terms();
+			$d   = blockke_hm21_dev_from_terms();
 			$src = $d ? 'terms' : '';
 		}
 		usort(
@@ -1283,7 +1288,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			}
 		);
 		$idx = array( 'st' => $st, 'src' => $src, 't' => time(), 'd' => array_values( $d ) );
-		if ( ! $skip && $d && blockke_home_tax_ready() ) { // v2.1.1
+		if ( ! $skip && $d && blockke_hm21_tax_ready() ) { // v2.1.1
 			set_transient( $key, $idx, 12 * HOUR_IN_SECONDS );
 		}
 		return $idx;
@@ -1294,7 +1299,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * day blockke_bkn_rows() accepts), so reading its developments costs no rebuild. True when that cannot be told (another
 	 * 42706 version): the index is then built as it always was.
 	 */
-	function blockke_home_dev_bkn_ready() {
+	function blockke_hm21_dev_bkn_ready() {
 		if ( ! function_exists( 'blockke_bkn_ver' ) ) {
 			return true;
 		}
@@ -1313,7 +1318,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * (an @ is kept only between letters, as in Pazuri@Vipingo), and every digit once there are five or more of them, however
 	 * they are spaced (phone, till and paybill numbers). At most 80 characters.
 	 */
-	function blockke_home_dev_query() {
+	function blockke_hm21_dev_query() {
 		static $q = false;
 		if ( false !== $q ) {
 			return $q;
@@ -1350,30 +1355,30 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** The search mode the visitor was in (?bkfor=rent | offplan, set by the page script), else 'buy'. */
-	function blockke_home_dev_mode() {
+	function blockke_hm21_dev_mode() {
 		$m = isset( $_GET['bkfor'] ) && is_scalar( $_GET['bkfor'] ) ? (string) $_GET['bkfor'] : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		return in_array( $m, array( 'rent', 'offplan' ), true ) ? $m : 'buy';
 	}
 
 	/** The page showing this layout when it is not the front page yet (a preview of this layout), else 0. */
-	function blockke_home_dev_page() {
+	function blockke_hm21_dev_page() {
 		return ( ! is_front_page() && is_singular() ) ? (int) get_queried_object_id() : 0;
 	}
 
-	/** Where the name search posts: the homepage, or the preview page it is on (its cached copy is kept apart, see blockke_home_output()). */
-	function blockke_home_dev_action() {
-		$id = blockke_home_dev_page();
+	/** Where the name search posts: the homepage, or the preview page it is on (its cached copy is kept apart, see blockke_hm21_output()). */
+	function blockke_hm21_dev_action() {
+		$id = blockke_hm21_dev_page();
 		$p  = $id ? get_permalink( $id ) : '';
 		return $p ? $p : home_url( '/' );
 	}
 
 	/** "39.5M" / "120K": the price without the currency or "a month" (the page script adds them back). */
-	function blockke_home_dev_short( $n, $rent = false ) {
-		return preg_replace( '/^KES\s+|\s+a month$/', '', blockke_home_price( $n, $rent ) );
+	function blockke_hm21_dev_short( $n, $rent = false ) {
+		return preg_replace( '/^KES\s+|\s+a month$/', '', blockke_hm21_price( $n, $rent ) );
 	}
 
 	/** What one development shows in a mode: array( url, price, meta ). Same as show() in the page script. */
-	function blockke_home_dev_show( $e, $mode ) {
+	function blockke_hm21_dev_show( $e, $mode ) {
 		$b    = (int) $e['b'];
 		$rent = 'rent' === $mode;
 		$use  = $rent ? ( ( $b & 2 ) || ! ( $b & 1 ) ) : ( ! ( $b & 1 ) && ( $b & 2 ) );
@@ -1399,7 +1404,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		}
 		return array(
 			'url'   => ( $use && '' !== $e['ru'] ) ? $e['ru'] : $e['u'],
-			'price' => $n > 0 ? ( $from ? 'From ' : '' ) . blockke_home_price( $n, $use ) : 'Prices on request',
+			'price' => $n > 0 ? ( $from ? 'From ' : '' ) . blockke_hm21_price( $n, $use ) : 'Prices on request',
 			'meta'  => implode( ' · ', $meta ),
 		);
 	}
@@ -1407,9 +1412,9 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	/**
 	 * The index for the page script, as small as it will go: b = the common start of the listing paths, d = one array per
 	 * development: [ name, place, path, sale price ("+" = from), rent price, bits, rental path, aliases ], trailing blanks dropped;
-	 * f = the homepage's own developments, index => position (blockke_home_dev_feat()), which break ties as on the server.
+	 * f = the homepage's own developments, index => position (blockke_hm21_dev_feat()), which break ties as on the server.
 	 */
-	function blockke_home_dev_data( $d ) {
+	function blockke_hm21_dev_data( $d ) {
 		$home = untrailingslashit( home_url() );
 		$rel  = function ( $u ) use ( $home ) {
 			return ( '' !== $home && 0 === strpos( $u, $home . '/' ) ) ? substr( $u, strlen( $home ) ) : $u;
@@ -1435,8 +1440,8 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 				$e['n'],
 				$e['pl'],
 				$path( $e['u'] ),
-				$e['s'] > 0 ? ( $e['sf'] ? '+' : '' ) . blockke_home_dev_short( $e['s'] ) : '',
-				$e['r'] > 0 ? ( $e['rf'] ? '+' : '' ) . blockke_home_dev_short( $e['r'], true ) : '',
+				$e['s'] > 0 ? ( $e['sf'] ? '+' : '' ) . blockke_hm21_dev_short( $e['s'] ) : '',
+				$e['r'] > 0 ? ( $e['rf'] ? '+' : '' ) . blockke_hm21_dev_short( $e['r'], true ) : '',
 				(int) $e['b'],
 				'' !== $e['ru'] ? $path( $e['ru'] ) : '',
 				array_values( (array) $e['al'] ),
@@ -1446,7 +1451,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			}
 			$out[] = $row;
 		}
-		return array( 'b' => $base, 'f' => (object) blockke_home_dev_feat( $d ), 'd' => $out );
+		return array( 'b' => $base, 'f' => (object) blockke_hm21_dev_feat( $d ), 'd' => $out );
 	}
 
 	/**
@@ -1454,12 +1459,12 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * list is never short where few developments have rentals; within each, the homepage's own (config developments),
 	 * then featured, then on the new layout, then the busiest.
 	 */
-	function blockke_home_dev_top( $d, $mode, $n = 6 ) {
-		$ft   = blockke_home_dev_feat( $d );
+	function blockke_hm21_dev_top( $d, $mode, $n = 6 ) {
+		$ft   = blockke_hm21_dev_feat( $d );
 		$rank = array();
 		foreach ( $d as $i => $e ) {
 			$w          = isset( $ft[ $i ] ) ? $ft[ $i ] : 999;
-			$rank[ $i ] = array( blockke_home_dev_pref( $e['b'], $mode ) < 2 ? 1 : 0, $w, $e['ft'] ? 0 : 1, $e['vt'] ? 0 : 1, $i );
+			$rank[ $i ] = array( blockke_hm21_dev_pref( $e['b'], $mode ) < 2 ? 1 : 0, $w, $e['ft'] ? 0 : 1, $e['vt'] ? 0 : 1, $i );
 		}
 		uasort(
 			$rank,
@@ -1471,18 +1476,18 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** The search form under the filters: its own GET form, with a datalist of every name for browsers without the page script. */
-	function blockke_home_dev_form( $d, $q ) {
+	function blockke_hm21_dev_form( $d, $q ) {
 		$names = array();
 		foreach ( $d as $e ) {
 			$names[ $e['n'] ] = true;
 		}
 		$names = array_keys( $names );
 		usort( $names, 'strcasecmp' );
-		$o  = '<form class="bkh-ds" role="search" aria-label="Find a development by name" method="get" action="' . esc_url( blockke_home_dev_action() . '#bkh-dr' ) . '">';
+		$o  = '<form class="bkh-ds" role="search" aria-label="Find a development by name" method="get" action="' . esc_url( blockke_hm21_dev_action() . '#bkh-dr' ) . '">';
 		$o .= '<div class="bkh-ds-field"><label for="bkh-ds-q">Know the development?</label>';
-		$o .= '<div class="bkh-ds-row">' . blockke_home_svg( 'search' ) . '<input id="bkh-ds-q" type="search" name="bkdev" value="' . esc_attr( (string) $q ) . '" maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" placeholder="e.g. Golden Hill" data-long="Type a development name, e.g. Golden Hill" list="bkh-ds-list"></div></div>';
+		$o .= '<div class="bkh-ds-row">' . blockke_hm21_svg( 'search' ) . '<input id="bkh-ds-q" type="search" name="bkdev" value="' . esc_attr( (string) $q ) . '" maxlength="80" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" placeholder="e.g. Golden Hill" data-long="Type a development name, e.g. Golden Hill" list="bkh-ds-list"></div></div>';
 		$o .= '<input type="hidden" name="bkfor" value="" disabled>';
-		$o .= '<button type="submit" class="bkh-ds-go"><span>Find</span>' . blockke_home_svg( 'arrow' ) . '</button>';
+		$o .= '<button type="submit" class="bkh-ds-go"><span>Find</span>' . blockke_hm21_svg( 'arrow' ) . '</button>';
 		$o .= '<datalist id="bkh-ds-list">';
 		foreach ( $names as $n ) {
 			$o .= '<option value="' . esc_attr( $n ) . '">';
@@ -1496,9 +1501,9 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	 * most such words first, then as the mode prefers. When no name has such a word, those with a word two slips or fewer
 	 * from one of its words (five letters or more, the same first letter, c = k: "kapela" for Capella).
 	 */
-	function blockke_home_dev_partial( $q, $d, $mode ) {
+	function blockke_hm21_dev_partial( $q, $d, $mode ) {
 		$tw = array();
-		foreach ( blockke_home_dev_prep( $q )['k'] as $t ) {
+		foreach ( blockke_hm21_dev_prep( $q )['k'] as $t ) {
 			if ( strlen( $t ) >= 3 && 'and' !== $t ) {
 				$tw[ $t ] = true;
 			}
@@ -1508,12 +1513,12 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			foreach ( $tw && ! $hit ? $d : array() as $i => $e ) {
 				$best = 0;
 				foreach ( array_merge( array( $e['n'] ), (array) $e['al'] ) as $nm ) {
-					$w = blockke_home_dev_prep( $nm )['w'];
+					$w = blockke_hm21_dev_prep( $nm )['w'];
 					$c = 0;
 					foreach ( array_keys( $tw ) as $t ) {
 						$t = (string) $t;
 						foreach ( $w as $u ) {
-							if ( 'start' === $how ? 0 === strpos( $u, $t ) : ( strlen( $t ) >= 5 && strlen( $t ) <= 40 && strlen( $u ) <= 60 && blockke_home_dev_lead( $t, $u ) && blockke_home_dev_osa( $t, $u ) <= 2 ) ) {
+							if ( 'start' === $how ? 0 === strpos( $u, $t ) : ( strlen( $t ) >= 5 && strlen( $t ) <= 40 && strlen( $u ) <= 60 && blockke_hm21_dev_lead( $t, $u ) && blockke_hm21_dev_osa( $t, $u ) <= 2 ) ) {
 								$c++;
 								break;
 							}
@@ -1522,7 +1527,7 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 					$best = max( $best, $c );
 				}
 				if ( $best ) {
-					$hit[] = array( (int) $i, $best, blockke_home_dev_pref( $e['b'], $mode ) );
+					$hit[] = array( (int) $i, $best, blockke_hm21_dev_pref( $e['b'], $mode ) );
 				}
 			}
 		}
@@ -1540,9 +1545,9 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 	}
 
 	/** The results panel for ?bkdev= (rendered fresh, never cached): the matches best first, or a plain "no match" with somewhere to go next. */
-	function blockke_home_dev_results( $d, $q, $mode ) {
-		$res  = '' === $q ? array() : blockke_home_dev_find( $q, $d, $mode );
-		$best = blockke_home_dev_strong( $res, $q, $d );
+	function blockke_hm21_dev_results( $d, $q, $mode ) {
+		$res  = '' === $q ? array() : blockke_hm21_dev_find( $q, $d, $mode );
+		$best = blockke_hm21_dev_strong( $res, $q, $d );
 		$all  = count( $res );
 		$near = $res && $res[0][1] < 35;
 		$show = array();
@@ -1552,17 +1557,17 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 		if ( null !== $best ) {
 			$show = array_values( array_unique( array_merge( array( $best ), $show ) ) );
 		}
-		$part = ( $show || '' === $q ) ? array() : array_slice( blockke_home_dev_partial( $q, $d, $mode ), 0, 6 );
-		$top  = $show ? array() : array_slice( array_values( array_unique( array_merge( $part, blockke_home_dev_top( $d, $mode ) ) ) ), 0, 6 );
+		$part = ( $show || '' === $q ) ? array() : array_slice( blockke_hm21_dev_partial( $q, $d, $mode ), 0, 6 );
+		$top  = $show ? array() : array_slice( array_values( array_unique( array_merge( $part, blockke_hm21_dev_top( $d, $mode ) ) ) ), 0, 6 );
 		$said = mb_strlen( $q ) > 48 ? rtrim( mb_substr( $q, 0, 47 ) ) . '…' : $q;
 		$item = function ( $i, $is_best ) use ( $d, $mode ) {
-			$p  = blockke_home_dev_show( $d[ $i ], $mode );
+			$p  = blockke_hm21_dev_show( $d[ $i ], $mode );
 			$o  = '<li' . ( $is_best ? ' class="is-best"' : '' ) . '><a class="bkh-dr-item' . ( $is_best ? ' is-best' : '' ) . '" href="' . esc_url( $p['url'] ) . '">';
 			$o .= $is_best ? '<span class="bkh-dr-tag">Best match</span>' : '';
 			$o .= '<span class="bkh-dr-name">' . esc_html( $d[ $i ]['n'] ) . '</span>';
 			$o .= '' !== $p['meta'] ? '<span class="bkh-dr-meta">' . esc_html( $p['meta'] ) . '</span>' : '';
 			$o .= '<span class="bkh-dr-price">' . esc_html( $p['price'] ) . '</span>';
-			$o .= $is_best ? '<span class="bkh-dr-cta">View the development' . blockke_home_svg( 'arrow' ) . '</span>' : '';
+			$o .= $is_best ? '<span class="bkh-dr-cta">View the development' . blockke_hm21_svg( 'arrow' ) . '</span>' : '';
 			return $o . '</a></li>';
 		};
 		$o = '<div class="bkh-dr" id="bkh-dr" role="region" aria-labelledby="bkh-dr-h" data-where="home_dev"><div class="bkh-dr-head">';
@@ -1590,16 +1595,16 @@ if ( ! function_exists( 'blockke_home_config' ) ) {
 			$o .= $item( $i, null !== $best && 0 === $pos );
 		}
 		$o .= '</ol><div class="bkh-dr-foot">';
-		$o .= '<a class="bkh-more" href="' . esc_url( blockke_home_url( 'offplan' ) ) . '">All new developments' . blockke_home_svg( 'arrow' ) . '</a>';
+		$o .= '<a class="bkh-more" href="' . esc_url( blockke_hm21_url( 'offplan' ) ) . '">All new developments' . blockke_hm21_svg( 'arrow' ) . '</a>';
 		$topic = ( '' !== $q && ! $show ) ? 'a development called “' . $said . '”.' : 'a development.';
-		$o .= '<a class="bkh-dr-wa" href="' . esc_url( blockke_home_wa( $topic ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'Ask us on WhatsApp</a>';
-		$o .= '<a class="bkh-dr-alt" href="' . esc_url( blockke_home_url( 'consult' ) ) . '">Or book a free consultation</a>';
+		$o .= '<a class="bkh-dr-wa" href="' . esc_url( blockke_hm21_wa( $topic ) ) . '" target="_blank" rel="noopener">' . blockke_hm21_svg( 'wa' ) . 'Ask us on WhatsApp</a>';
+		$o .= '<a class="bkh-dr-alt" href="' . esc_url( blockke_hm21_url( 'consult' ) ) . '">Or book a free consultation</a>';
 		return $o . '</div></div>';
 	}
 
 	/* ------------------------------------------------------------------ CSS */
 
-	function blockke_home_css() {
+	function blockke_hm21_css() {
 		return <<<'CSS'
 .bkh{--navy:#0D2440;--navy-2:#16345C;--navy-3:#091A2E;--ink:#22303C;--slate:#46586A;--muted:#5F6D7E;--paper:#FBF9F6;--mist:#F4EEE4;--line:#E6DFD4;--line-2:#D5CBBB;--brass:#B98A44;--brass-d:#80602A;--brass-l:#DDB97F;--brass-tint:#F1E4CC;--on-navy:#C9D3DF;--wa:#1EBE5D;--font:"Montserrat",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--display:"Instrument Serif",Georgia,"Times New Roman",serif;--max:1200px;--gutter:clamp(20px,4vw,48px);--sec:clamp(72px,9vw,128px);
 position:relative;display:block;float:none;clear:both;width:100%;max-width:100%;margin:0;padding:0;text-align:left;font:400 16px/1.6 var(--font);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;overflow-x:clip}
@@ -1933,7 +1938,7 @@ CSS;
 
 	/* ------------------------------------------------------------------ JS */
 
-	function blockke_home_js() {
+	function blockke_hm21_js() {
 		return <<<'JS'
 (function(){
   var root=document.querySelector('.bkh');if(!root){return;}
@@ -1967,16 +1972,16 @@ CSS;
       try{if(typeof window.gtag==='function'){window.gtag('event','search',{search_term:(form.getAttribute('data-mode')||'buy')+' '+(root.querySelector('[name="property_area[]"]')||{value:''}).value,placement:'home_hero'});}}catch(x){}
     });
   }
-  /* development-name search (v2.1): a typeahead over C.dv, ARIA 1.2 combobox + listbox; matching = blockke_home_dev_find() */
+  /* development-name search (v2.1): a typeahead over C.dv, ARIA 1.2 combobox + listbox; matching = blockke_hm21_dev_find() */
   (function(){
     var ds=root.querySelector('.bkh-ds'),inp=ds&&ds.querySelector('input[name="bkdev"]'),dv=C.dv;
     if(!ds||!inp||!dv||!dv.d||!dv.d.length){return;}
     var D=dv.d,FP=dv.f||{},fy=ds.querySelector('input[name="bkfor"]'),FILL={apartment:1,apartments:1,residence:1,residences:1,residency:1,residencies:1,homes:1,estate:1,the:1,at:1};
     function fold(s){s=String(s==null?'':s);try{s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(e){}s=s.toLowerCase().replace(/\u00df/g,'ss').replace(/\u00e6/g,'ae').replace(/\u0153/g,'oe').replace(/\u00f8/g,'o').replace(/&/g,' and ').replace(/['\u2019`]/g,'');var w=s.replace(/[^a-z0-9]+/g,' ').replace(/^ | $/g,'').split(' '),i;for(i=0;i<w.length-1;i++){if(w[i]==='n'){w[i]='and';}}return w.join(' ');}
     function prep(s){var f=fold(s),w=f?f.split(' '):[],k=[],i;for(i=0;i<w.length;i++){if(!FILL[w[i]]){k.push(w[i]);}}var o=w.length>0&&!k.length;if(!k.length){k=w;}return {w:w,k:k,c:k.join(''),f:w.join(''),o:o};}
-    /* edits between two words, a swap of two neighbouring letters counting as one (optimal string alignment) = blockke_home_dev_osa() */
+    /* edits between two words, a swap of two neighbouring letters counting as one (optimal string alignment) = blockke_hm21_dev_osa() */
     function osa(a,b){if(a===b){return 0;}var m=a.length,n=b.length,pp=[],p=[],c,i,j;if(!m||!n){return Math.max(m,n);}for(j=0;j<=n;j++){p[j]=j;}for(i=1;i<=m;i++){c=[i];for(j=1;j<=n;j++){c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1));if(i>1&&j>1&&a.charAt(i-1)===b.charAt(j-2)&&a.charAt(i-2)===b.charAt(j-1)){c[j]=Math.min(c[j],pp[j-2]+1);}}pp=p;p=c;}return p[n];}
-    /* the same first letter, c = k (= blockke_home_dev_lead()); a whole-word slip (= blockke_home_dev_slip()); a near miss (= blockke_home_dev_near()) */
+    /* the same first letter, c = k (= blockke_hm21_dev_lead()); a whole-word slip (= blockke_hm21_dev_slip()); a near miss (= blockke_hm21_dev_near()) */
     function lead(t,u){var a=t.charAt(0),b=u.charAt(0);return !!a&&!!b&&(a===b||('ck'.indexOf(a)>=0&&'ck'.indexOf(b)>=0));}
     function slip(t,u){var n=t.length;return n>=4&&n<=40&&u.length<=60&&lead(t,u)&&osa(t,u)<=(n>=8?2:1);}
     function near(t,u){var n=t.length,k;if(n<4||n>40||u.length>60||!lead(t,u)){return false;}if(slip(t,u)){return true;}if(u.length>n){for(k=n-1;k<=n+1;k++){if(osa(t,u.slice(0,k))<=1){return true;}}}return false;}
@@ -1996,7 +2001,7 @@ CSS;
     var P=[],PL=[],AREA=null,NOTAREA={road:1,city:1,town:1,general:1,river:1,rivers:1,spring:1,springs:1,valley:1,south:1,north:1,east:1,west:1,upper:1,lower:1,garden:1,gardens:1,plains:1,park:1,hill:1,hills:1,view:1,views:1,estate:1,beach:1,heights:1,ridge:1,gate:1,green:1,court:1,place:1,square:1},n,a;
     for(n=0;n<D.length;n++){P[n]=[prep(D[n][0])];for(a=0;a<(D[n][7]||[]).length;a++){P[n].push(prep(D[n][7][a]));}PL[n]=prep(D[n][1]||'').w;}
     function all(q,i){var s=score(q,P[i][0]),x;for(x=1;x<P[i].length;x++){s=Math.max(s,score(q,P[i][x])-1);}return s;}
-    /* area words (= blockke_home_dev_areas()) and the query without them (= blockke_home_dev_unplace()) */
+    /* area words (= blockke_hm21_dev_areas()) and the query without them (= blockke_hm21_dev_unplace()) */
     function areas(){if(AREA){return AREA;}var seen={},i,j,u;AREA=[];for(i=0;i<PL.length;i++){for(j=0;j<PL[i].length;j++){u=PL[i][j];if(u.length>=4&&!NOTAREA[u]&&!seen[u]){seen[u]=1;AREA.push(u);}}}if(!seen.nairobi){AREA.push('nairobi');}if(!seen.kenya){AREA.push('kenya');}return AREA;}
     function unplace(q,pl){
       var n=q.w.length,keep=[],i,j,t,u,hit,r;if(!pl.length||n<2){return null;}
@@ -2016,7 +2021,7 @@ CSS;
       r.sort(function(x,y){return (y[1]-x[1])||(pref(y[0],mode)-pref(x[0],mode))||(fp(x[0])-fp(y[0]))||(P[x[0]][0].c.length-P[y[0]][0].c.length)||(x[0]-y[0]);});
       return r;
     }
-    /* the one development a search clearly means, or -1 (= blockke_home_dev_strong()): a single near miss counts when the name typed has 5 letters or more and each word of it starts a word of the name or is a whole-word slip of one */
+    /* the one development a search clearly means, or -1 (= blockke_hm21_dev_strong()): a single near miss counts when the name typed has 5 letters or more and each word of it starts a word of the name or is a whole-word slip of one */
     function strong(r,text){
       var q=prep(text),i,a,b,k,x,j,y,w,ok,hit;if(!r.length||q.o){return -1;}
       i=r[0][0];a=r[0][1];b=r.length>1?r[1][1]:0;
@@ -2027,7 +2032,7 @@ CSS;
       for(x=0;x<P[i].length;x++){w=P[i][x].w;for(j=0,ok=true;j<k.k.length&&ok;j++){for(y=0,hit=false;y<w.length&&!hit;y++){hit=w[y].indexOf(k.k[j])===0||slip(k.k[j],w[y]);}ok=hit;}if(ok){return i;}}
       return -1;
     }
-    /* what the server keeps of the text typed (= blockke_home_dev_query()): tags, web and e-mail addresses, @handles and every digit
+    /* what the server keeps of the text typed (= blockke_hm21_dev_query()): tags, web and e-mail addresses, @handles and every digit
        once there are 5 or more go, at most 80 characters. GA4 and the address only ever get this, never the text as typed */
     var RX=null;
     function clean(s){
@@ -2234,7 +2239,7 @@ JS;
 
 	/* ------------------------------------------------------------------ SVG */
 
-	function blockke_home_svg( $name ) {
+	function blockke_hm21_svg( $name ) {
 		$svgs = array(
 			'wa'     => '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.87 9.87 0 0 0 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 4.54 0 8.24 3.7 8.24 8.24 0 4.55-3.7 8.24-8.24 8.24zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.16.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z"/></svg>',
 			'phone'  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
@@ -2247,10 +2252,10 @@ JS;
 
 	/* ------------------------------------------------------------------ render */
 
-	function blockke_home_render() {
-		$cfg   = blockke_home_config();
-		$u     = 'blockke_home_url';
-		$stats = blockke_home_stats();
+	function blockke_hm21_render() {
+		$cfg   = blockke_hm21_config();
+		$u     = 'blockke_hm21_url';
+		$stats = blockke_hm21_stats();
 		$wa_n  = preg_replace( '/\D+/', '', $cfg['whatsapp'] );
 		$tel   = 'tel:' . preg_replace( '/[^\d+]/', '', $cfg['phone'] );
 		$h     = '';
@@ -2278,11 +2283,11 @@ JS;
 		foreach ( (array) $cfg['quick_areas'] as $qs ) {
 			$t = get_term_by( 'slug', $qs, 'property_area' );
 			if ( $t ) {
-				$quick .= '<a href="' . esc_url( blockke_home_area_url( $t ) ) . '">' . esc_html( $t->name ) . '</a>';
+				$quick .= '<a href="' . esc_url( blockke_hm21_area_url( $t ) ) . '">' . esc_html( $t->name ) . '</a>';
 			}
 		}
 		$h .= '<section class="bkh-hero" aria-label="Search Nairobi property">';
-		$h .= blockke_home_img( $cfg['hero_image'], 'full', 'bkh-hero-img', '', true, '100vw' );
+		$h .= blockke_hm21_img( $cfg['hero_image'], 'full', 'bkh-hero-img', '', true, '100vw' );
 		$h .= '<div class="bkh-wrap">';
 		$h .= '<span class="bkh-eyebrow">' . esc_html( $cfg['hero_eyebrow'] ) . '</span>';
 		$h .= '<h1 class="bkh-display">' . esc_html( $cfg['hero_title'] ) . '</h1>';
@@ -2294,9 +2299,9 @@ JS;
 		$h .= '<button type="button" class="bkh-tab" role="tab" data-mode="offplan" aria-selected="false">Off-plan</button>';
 		$h .= '</div>';
 		/* v2.1: the development-name search; ?bkdev= pages come back in the mode they were searched in */
-		$devq  = blockke_home_dev_query();
-		$devm  = null !== $devq ? blockke_home_dev_mode() : 'buy';
-		$devix = ! empty( $cfg['dev_search'] ) ? blockke_home_dev_index() : array( 'd' => array() );
+		$devq  = blockke_hm21_dev_query();
+		$devm  = null !== $devq ? blockke_hm21_dev_mode() : 'buy';
+		$devix = ! empty( $cfg['dev_search'] ) ? blockke_hm21_dev_index() : array( 'd' => array() );
 		$h .= '<form class="bkh-form bke-cy-has" data-mode="' . esc_attr( $devm ) . '" method="get" action="' . esc_url( $u( 'search' ) ) . '">';
 		$h .= '<input type="hidden" name="property_action_category[]" value="for-sale">';
 		$h .= '<div class="bkh-field bkh-field--where"><label for="bkh-where">Where</label><select id="bkh-where" name="property_area[]">' . $area_opts . '</select></div>';
@@ -2304,12 +2309,12 @@ JS;
 		$h .= '<div class="bkh-field bkh-field--beds"><label for="bkh-beds">Bedrooms</label><select id="bkh-beds" name="bedrooms"><option value="">Any</option><option value="studio">Studio</option><option value="1">1 bed</option><option value="2">2 bed</option><option value="3">3 bed</option><option value="4">4 bed</option><option value="5">5+ bed</option></select></div>';
 		$h .= '<div class="bkh-field bkh-field--budget"><label for="bkh-budget">Budget</label><select id="bkh-budget" name="price_max"><option value="">Any budget</option><option value="5000000">Under KES 5M</option><option value="8000000">Under KES 8M</option><option value="12000000">Under KES 12M</option><option value="20000000">Under KES 20M</option><option value="35000000">Under KES 35M</option><option value="60000000">Under KES 60M</option></select></div>';
 		$h .= '<div class="bkh-field bkh-field--completion"><label for="bkh-completion">Completion</label><select id="bkh-completion" name="completion"><option value="any">All projects</option><option value="ready-now">Ready now</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029-plus">2029+</option></select></div>';
-		$h .= '<button type="submit" class="bkh-submit">' . blockke_home_svg( 'search' ) . 'Search</button>';
+		$h .= '<button type="submit" class="bkh-submit">' . blockke_hm21_svg( 'search' ) . 'Search</button>';
 		$h .= '</form>';
 		if ( $devix['d'] ) {
-			$h .= blockke_home_dev_form( $devix['d'], $devq );
+			$h .= blockke_hm21_dev_form( $devix['d'], $devq );
 			if ( null !== $devq ) {
-				$h .= blockke_home_dev_results( $devix['d'], $devq, $devm );
+				$h .= blockke_hm21_dev_results( $devix['d'], $devq, $devm );
 			}
 		}
 		$h .= '</div>';
@@ -2326,7 +2331,7 @@ JS;
 		$h .= '<section class="bkh-strip" aria-label="Block in numbers"><div class="bkh-wrap"><div class="bkh-stats">';
 		foreach ( array( 'sale' => 'Homes for sale', 'projects' => 'Developments tracked', 'areas' => 'Nairobi neighbourhoods' ) as $sk => $sl ) {
 			if ( ! empty( $stats[ $sk ] ) ) { // v2.1.1: an empty count is left out, never shown as 0
-				$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_home_plus( $stats[ $sk ] ) ) . '</b><span>' . $sl . '</span></div>';
+				$h .= '<div class="bkh-stat"><b>' . esc_html( blockke_hm21_plus( $stats[ $sk ] ) ) . '</b><span>' . $sl . '</span></div>';
 			}
 		}
 		$h .= '<div class="bkh-stat"><b>Same day</b><span>Replies from a real person</span></div>';
@@ -2335,7 +2340,7 @@ JS;
 		/* ---- developments ---- */
 		$devs = array();
 		foreach ( (array) $cfg['developments'] as $slug ) {
-			$d = blockke_home_development( $slug );
+			$d = blockke_hm21_development( $slug );
 			if ( $d ) {
 				$devs[] = $d;
 			}
@@ -2344,13 +2349,13 @@ JS;
 			$h .= '<section class="bkh-sec" id="developments"><div class="bkh-wrap">';
 			$h .= '<div class="bkh-head"><div><span class="bkh-eyebrow">New developments</span><h2 class="bkh-display">Buy before it&rsquo;s built, with the homework done.</h2>';
 			$h .= '<p class="bkh-lede">Every project here has been through our checks &mdash; developer record, title, approvals, payment terms &mdash; before it earned a place on the site.</p></div>';
-			$h .= '<a class="bkh-more" href="' . esc_url( $u( 'offplan' ) ) . '">All off-plan projects' . blockke_home_svg( 'arrow' ) . '</a></div>';
+			$h .= '<a class="bkh-more" href="' . esc_url( $u( 'offplan' ) ) . '">All off-plan projects' . blockke_hm21_svg( 'arrow' ) . '</a></div>';
 			$h .= '<div class="bkh-devs">';
 			foreach ( $devs as $d ) {
 				$h .= '<a class="bkh-dev" href="' . esc_url( $d['url'] ) . '">';
-				$h .= '<div class="bkh-dev-media">' . blockke_home_img( $d['thumb'], 'large', '', $d['name'] . ( $d['area'] ? ', ' . $d['area'] : '' ), false, '(max-width: 767px) 80vw, (max-width: 1100px) 50vw, 33vw' );
+				$h .= '<div class="bkh-dev-media">' . blockke_hm21_img( $d['thumb'], 'large', '', $d['name'] . ( $d['area'] ? ', ' . $d['area'] : '' ), false, '(max-width: 767px) 80vw, (max-width: 1100px) 50vw, 33vw' );
 				if ( $d['mandate'] ) {
-					$h .= '<span class="bkh-tag bkh-tag--brass">' . blockke_home_svg( 'check' ) . 'Authorised sales agent</span>';
+					$h .= '<span class="bkh-tag bkh-tag--brass">' . blockke_hm21_svg( 'check' ) . 'Authorised sales agent</span>';
 				} elseif ( $d['comp'] ) {
 					$h .= '<span class="bkh-tag">' . esc_html( $d['comp'] ) . '</span>';
 				}
@@ -2365,18 +2370,18 @@ JS;
 				$h .= '<div class="bkh-dev-meta">' . esc_html( implode( ' · ', $meta ) ) . '</div>';
 				$h .= '<h3>' . esc_html( $d['name'] ) . '</h3>';
 				$h .= '<div class="bkh-dev-price"><b>' . esc_html( $d['price'] ) . '</b>' . ( $d['mix'] ? '<span>' . esc_html( $d['mix'] ) . '</span>' : '' ) . '</div>';
-				$h .= '<span class="bkh-dev-cta">Prices &amp; floor plans' . blockke_home_svg( 'arrow' ) . '</span>';
+				$h .= '<span class="bkh-dev-cta">Prices &amp; floor plans' . blockke_hm21_svg( 'arrow' ) . '</span>';
 				$h .= '</div></a>';
 			}
 			$h .= '</div></div></section>';
 		}
 
 		/* ---- worth a viewing ---- */
-		$sale = blockke_home_listings( 'for-sale', (int) $cfg['listings_count'] );
-		$rent = blockke_home_listings( 'for-rent', (int) $cfg['listings_count'] );
+		$sale = blockke_hm21_listings( 'for-sale', (int) $cfg['listings_count'] );
+		$rent = blockke_hm21_listings( 'for-rent', (int) $cfg['listings_count'] );
 		$card = function ( $l ) {
 			$o  = '<a class="bkh-card" href="' . esc_url( $l['url'] ) . '" title="' . esc_attr( $l['full'] ) . '">';
-			$o .= '<div class="bkh-card-media">' . blockke_home_img( $l['thumb'], 'large', '', $l['full'], false, '(max-width: 767px) 100vw, (max-width: 900px) 50vw, 33vw' );
+			$o .= '<div class="bkh-card-media">' . blockke_hm21_img( $l['thumb'], 'large', '', $l['full'], false, '(max-width: 767px) 100vw, (max-width: 900px) 50vw, 33vw' );
 			if ( $l['status'] ) {
 				$o .= '<span class="bkh-tag">' . esc_html( $l['status'] ) . '</span>';
 			}
@@ -2417,7 +2422,7 @@ JS;
 				$h .= $card( $l );
 			}
 			$h .= '</div>';
-			$h .= '<div class="bkh-lfoot"><a class="bkh-btn bkh-btn--navy" data-for="bkh-sale" href="' . esc_url( $u( 'for_sale' ) ) . '">Browse all ' . ( empty( $stats['sale'] ) ? '' : esc_html( blockke_home_plus( $stats['sale'] ) ) . ' ' ) . 'homes for sale</a><a class="bkh-btn bkh-btn--navy" data-for="bkh-rent" href="' . esc_url( $u( 'for_rent' ) ) . '" hidden>Browse all rentals</a></div>';
+			$h .= '<div class="bkh-lfoot"><a class="bkh-btn bkh-btn--navy" data-for="bkh-sale" href="' . esc_url( $u( 'for_sale' ) ) . '">Browse all ' . ( empty( $stats['sale'] ) ? '' : esc_html( blockke_hm21_plus( $stats['sale'] ) ) . ' ' ) . 'homes for sale</a><a class="bkh-btn bkh-btn--navy" data-for="bkh-rent" href="' . esc_url( $u( 'for_rent' ) ) . '" hidden>Browse all rentals</a></div>';
 			$h .= '</div></section>';
 		}
 
@@ -2425,7 +2430,7 @@ JS;
 		$h .= '<section class="bkh-sec bkh-sec--navy bkh-dia" id="diaspora" data-where="home_diaspora"><div class="bkh-wrap"><div class="bkh-dia-grid">';
 		$h .= '<div><span class="bkh-eyebrow">Buying from abroad</span><h2 class="bkh-display">Most of our buyers aren&rsquo;t in Nairobi. That&rsquo;s the point.</h2>';
 		$h .= '<p class="bkh-lede">From London, Dallas, Dubai or Toronto you can&rsquo;t walk the street or sit across from the developer. We do &mdash; and you see everything on video before you commit a shilling.</p>';
-		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--white" href="' . esc_url( blockke_home_wa( 'buying from abroad.' ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'WhatsApp Loyd</a><a class="bkh-btn bkh-btn--ghostw" href="' . esc_url( $u( 'diaspora_guide' ) ) . '">Read the diaspora guide</a></div>';
+		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--white" href="' . esc_url( blockke_hm21_wa( 'buying from abroad.' ) ) . '" target="_blank" rel="noopener">' . blockke_hm21_svg( 'wa' ) . 'WhatsApp Loyd</a><a class="bkh-btn bkh-btn--ghostw" href="' . esc_url( $u( 'diaspora_guide' ) ) . '">Read the diaspora guide</a></div>';
 		$h .= '<div class="bkh-dia-proof"><span>UK</span><span>USA</span><span>UAE</span><span>Canada</span><span>Australia</span>Most of the homes we close are bought from abroad.</div>';
 		$h .= '</div>';
 		$h .= '<ol class="bkh-steps">';
@@ -2436,40 +2441,40 @@ JS;
 		$h .= '</div></div></section>';
 
 		/* ---- know your block ---- */
-		$areas = blockke_home_areas();
+		$areas = blockke_hm21_areas();
 		if ( $areas ) {
 			$h .= '<section class="bkh-sec bkh-sec--mist" id="neighbourhoods"><div class="bkh-wrap">';
 			$h .= '<div class="bkh-head"><div><span class="bkh-eyebrow">Neighbourhoods</span><h2 class="bkh-display">Know your block before you buy it.</h2>';
 			$h .= '<p class="bkh-lede">Prices, commutes, schools, noise &mdash; everything the listings won&rsquo;t tell you, neighbourhood by neighbourhood.</p></div>';
-			$h .= '<a class="bkh-more" href="' . esc_url( $u( 'neighbourhoods' ) ) . '">All neighbourhoods' . blockke_home_svg( 'arrow' ) . '</a></div>';
+			$h .= '<a class="bkh-more" href="' . esc_url( $u( 'neighbourhoods' ) ) . '">All neighbourhoods' . blockke_hm21_svg( 'arrow' ) . '</a></div>';
 			$h .= '<div class="bkh-areas">';
 			foreach ( $areas as $a ) {
-				$h .= '<a class="bkh-area" href="' . esc_url( $a['url'] ) . '">' . blockke_home_img( $a['thumb'], 'large', '', $a['name'], false, '(max-width: 767px) 50vw, 20vw' );
+				$h .= '<a class="bkh-area" href="' . esc_url( $a['url'] ) . '">' . blockke_hm21_img( $a['thumb'], 'large', '', $a['name'], false, '(max-width: 767px) 50vw, 20vw' );
 				$h .= '<div><h3>' . esc_html( $a['name'] ) . '</h3><span>' . esc_html( number_format( $a['count'] ) ) . ' ' . ( 1 === $a['count'] ? 'home' : 'homes' ) . '</span></div></a>';
 			}
 			$h .= '</div></div></section>';
 		}
 
 		/* ---- founder ---- */
-		$founder = blockke_home_agent( $cfg['founder_agent'] );
+		$founder = blockke_hm21_agent( $cfg['founder_agent'] );
 		$team    = array();
 		foreach ( (array) $cfg['team_agents'] as $aid ) {
-			$ag = blockke_home_agent( $aid );
+			$ag = blockke_hm21_agent( $aid );
 			if ( $ag ) {
 				$team[] = $ag;
 			}
 		}
 		$h .= '<section class="bkh-sec bkh-sec--white" id="loyd" data-where="home_founder"><div class="bkh-wrap"><div class="bkh-founder">';
-		$h .= '<figure class="bkh-portrait">' . blockke_home_img( $cfg['founder_image'], 'large', '', 'Loyd Mokaya, founder of Block Real Estate', false, '(max-width: 900px) 90vw, 40vw' ) . '<figcaption>Loyd Mokaya · Founder</figcaption></figure>';
+		$h .= '<figure class="bkh-portrait">' . blockke_hm21_img( $cfg['founder_image'], 'large', '', 'Loyd Mokaya, founder of Block Real Estate', false, '(max-width: 900px) 90vw, 40vw' ) . '<figcaption>Loyd Mokaya · Founder</figcaption></figure>';
 		$h .= '<div><span class="bkh-eyebrow">Loyd from Block</span><h2 class="bkh-display">You&rsquo;ll deal with a person, not a portal.</h2>';
 		$h .= '<p class="bkh-quote">&ldquo;I started Block because buying in Nairobi shouldn&rsquo;t feel like a gamble.&rdquo;</p>';
 		$h .= '<p class="bkh-body">So we check everything first &mdash; the market, the title, the street &mdash; and tell you straight, even when the honest answer is &ldquo;not this one&rdquo;. Nairobi moves fast and unevenly; a price in Kilimani tells you nothing about Lavington. That&rsquo;s why we work it block by block, and why when you message us you get a person who has stood in the building.</p>';
 		$h .= '<div class="bkh-sign">Loyd Mokaya<small>Founder, Block Real Estate</small></div>';
-		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--navy" href="' . esc_url( blockke_home_wa( 'a property.' ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'WhatsApp Loyd</a><a class="bkh-btn bkh-btn--ghost" href="' . esc_url( $u( 'consult' ) ) . '">Book a free consultation</a></div>';
+		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--navy" href="' . esc_url( blockke_hm21_wa( 'a property.' ) ) . '" target="_blank" rel="noopener">' . blockke_hm21_svg( 'wa' ) . 'WhatsApp Loyd</a><a class="bkh-btn bkh-btn--ghost" href="' . esc_url( $u( 'consult' ) ) . '">Book a free consultation</a></div>';
 		if ( $team ) {
 			$h .= '<div class="bkh-team"><div class="bkh-avatars">';
 			foreach ( $team as $ag ) {
-				$h .= blockke_home_img( $ag['thumb'], 'thumbnail', '', $ag['name'], false, '44px' );
+				$h .= blockke_hm21_img( $ag['thumb'], 'thumbnail', '', $ag['name'], false, '44px' );
 			}
 			$h .= '</div><p>' . esc_html( implode( ', ', array_map( function ( $ag ) { return preg_replace( '/\s.*$/', '', $ag['name'] ); }, $team ) ) ) . ' and the rest of the team &mdash; <a href="' . esc_url( $u( 'team' ) ) . '">meet them</a></p></div>';
 		}
@@ -2488,25 +2493,25 @@ JS;
 		$h .= '<div class="bkh-head"><div><span class="bkh-eyebrow">Services</span><h2 class="bkh-display">A service for every move.</h2><p class="bkh-lede">Buy, rent, sell, let, manage or build. One team, one standard throughout.</p></div></div>';
 		$h .= '<div class="bkh-services">';
 		foreach ( $services as $s ) {
-			$h .= '<a class="bkh-service" href="' . esc_url( $s[2] ) . '"><h3>' . $s[0] . blockke_home_svg( 'arrow' ) . '</h3><p>' . $s[1] . '</p></a>';
+			$h .= '<a class="bkh-service" href="' . esc_url( $s[2] ) . '"><h3>' . $s[0] . blockke_hm21_svg( 'arrow' ) . '</h3><p>' . $s[1] . '</p></a>';
 		}
 		$h .= '</div>';
 		$h .= '<div class="bkh-val"><div><h3>Own a property in Nairobi?</h3><p>Tell us about it and we&rsquo;ll tell you what it&rsquo;s worth &mdash; before we list a thing.</p></div><a class="bkh-btn bkh-btn--white" href="' . esc_url( $u( 'valuation' ) ) . '">Get a free valuation</a></div>';
 		$h .= '</div></section>';
 
 		/* ---- homework ---- */
-		$arts = blockke_home_articles( 4 );
+		$arts = blockke_hm21_articles( 4 );
 		if ( $arts ) {
 			$lead = array_shift( $arts );
 			$h   .= '<section class="bkh-sec bkh-sec--white" id="homework"><div class="bkh-wrap">';
 			$h   .= '<div class="bkh-head"><div><span class="bkh-eyebrow">The homework</span><h2 class="bkh-display">What we&rsquo;d tell you over coffee.</h2><p class="bkh-lede">Market data, legal landmines and neighbourhood deep-dives, written by the people doing the deals.</p></div>';
-			$h   .= '<a class="bkh-more" href="' . esc_url( $u( 'blog' ) ) . '">All articles' . blockke_home_svg( 'arrow' ) . '</a></div>';
+			$h   .= '<a class="bkh-more" href="' . esc_url( $u( 'blog' ) ) . '">All articles' . blockke_hm21_svg( 'arrow' ) . '</a></div>';
 			$h   .= '<div class="bkh-hw">';
-			$h   .= '<a class="bkh-lead" href="' . esc_url( $lead['url'] ) . '"><div class="bkh-lead-media">' . blockke_home_img( $lead['thumb'], 'large', '', $lead['title'], false, '(max-width: 900px) 100vw, 55vw' ) . '</div>';
+			$h   .= '<a class="bkh-lead" href="' . esc_url( $lead['url'] ) . '"><div class="bkh-lead-media">' . blockke_hm21_img( $lead['thumb'], 'large', '', $lead['title'], false, '(max-width: 900px) 100vw, 55vw' ) . '</div>';
 			$h   .= '<span class="bkh-cat">' . esc_html( $lead['cat'] ) . '</span><h3>' . esc_html( $lead['title'] ) . '</h3><p>' . esc_html( $lead['ex'] ) . '</p><time>' . esc_html( $lead['date'] ) . '</time></a>';
 			$h   .= '<div class="bkh-list">';
 			foreach ( $arts as $a ) {
-				$h .= '<a class="bkh-item" href="' . esc_url( $a['url'] ) . '"><div class="bkh-item-media">' . blockke_home_img( $a['thumb'], 'medium', '', $a['title'], false, '112px' ) . '</div><div><span class="bkh-cat">' . esc_html( $a['cat'] ) . '</span><h3>' . esc_html( $a['title'] ) . '</h3><time>' . esc_html( $a['date'] ) . '</time></div></a>';
+				$h .= '<a class="bkh-item" href="' . esc_url( $a['url'] ) . '"><div class="bkh-item-media">' . blockke_hm21_img( $a['thumb'], 'medium', '', $a['title'], false, '112px' ) . '</div><div><span class="bkh-cat">' . esc_html( $a['cat'] ) . '</span><h3>' . esc_html( $a['title'] ) . '</h3><time>' . esc_html( $a['date'] ) . '</time></div></a>';
 			}
 			$h .= '</div></div></div></section>';
 		}
@@ -2515,23 +2520,23 @@ JS;
 		$h .= '<section class="bkh-sec bkh-sec--navy bkh-close" id="contact" data-where="home_close"><div class="bkh-wrap">';
 		$h .= '<span class="bkh-eyebrow">Start here</span><h2 class="bkh-display">Your next move starts with one message.</h2>';
 		$h .= '<p class="bkh-lede">A real person replies the same day. No bots, no runaround.</p>';
-		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--white" href="' . esc_url( blockke_home_wa( 'my next move.' ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'WhatsApp us</a><a class="bkh-btn bkh-btn--ghostw" href="' . esc_attr( $tel ) . '">' . blockke_home_svg( 'phone' ) . 'Call ' . esc_html( $cfg['phone_label'] ) . '</a></div>';
+		$h .= '<div class="bkh-ctas"><a class="bkh-btn bkh-btn--white" href="' . esc_url( blockke_hm21_wa( 'my next move.' ) ) . '" target="_blank" rel="noopener">' . blockke_hm21_svg( 'wa' ) . 'WhatsApp us</a><a class="bkh-btn bkh-btn--ghostw" href="' . esc_attr( $tel ) . '">' . blockke_hm21_svg( 'phone' ) . 'Call ' . esc_html( $cfg['phone_label'] ) . '</a></div>';
 		$h .= '<p class="bkh-alt">Prefer a sit-down? <a href="' . esc_url( $u( 'consult' ) ) . '">Book a free consultation</a> &middot; Mon&ndash;Sat 07:00&ndash;21:00</p>';
 		$h .= '</div></section>';
 
 		/* ---- sticky bar (phones) ---- */
-		$bar = '<div class="bkh-bar" data-where="home_sticky" aria-label="Contact Block"><a class="bkh-bar-wa" href="' . esc_url( blockke_home_wa( 'a property.' ) ) . '" target="_blank" rel="noopener">' . blockke_home_svg( 'wa' ) . 'WhatsApp</a><a class="bkh-bar-call" href="' . esc_attr( $tel ) . '">' . blockke_home_svg( 'phone' ) . 'Call us</a></div>';
+		$bar = '<div class="bkh-bar" data-where="home_sticky" aria-label="Contact Block"><a class="bkh-bar-wa" href="' . esc_url( blockke_hm21_wa( 'a property.' ) ) . '" target="_blank" rel="noopener">' . blockke_hm21_svg( 'wa' ) . 'WhatsApp</a><a class="bkh-bar-call" href="' . esc_attr( $tel ) . '">' . blockke_hm21_svg( 'phone' ) . 'Call us</a></div>';
 
 		$js_cfg = array( 'endpoint' => esc_url_raw( rest_url( 'block/v1/contact-click' ) ) );
 		if ( $devix['d'] ) {
-			$js_cfg['dv'] = blockke_home_dev_data( $devix['d'] ); // v2.1: the development-name typeahead
+			$js_cfg['dv'] = blockke_hm21_dev_data( $devix['d'] ); // v2.1: the development-name typeahead
 		}
-		$out    = '<!-- BLOCK homepage v' . blockke_home_ver() . ' -->';
+		$out    = '<!-- BLOCK homepage v' . blockke_hm21_ver() . ' -->';
 		$out   .= '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;display=swap">';
-		$out   .= '<style id="bkh-css">' . blockke_home_css() . '</style>';
+		$out   .= '<style id="bkh-css">' . blockke_hm21_css() . '</style>';
 		$out   .= '<div class="bkh" id="bkh" data-where="home_hero">' . $h . '</div>' . $bar;
 		$out   .= '<script id="bkh-cfg">window.BLOCKHOME=' . wp_json_encode( $js_cfg, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS ) . ';</script>';
-		$out   .= '<script id="bkh-js">' . blockke_home_js() . '</script>';
+		$out   .= '<script id="bkh-js">' . blockke_hm21_js() . '</script>';
 		return $out;
 	}
 
@@ -2539,36 +2544,36 @@ JS;
 	 * Content stamp: the newest change to any listing, article or agent. Part of every cache key, so the
 	 * page rebuilds itself after an edit without hooks (this code only runs where the shortcode renders).
 	 */
-	function blockke_home_stamp() {
+	function blockke_hm21_stamp() {
 		static $stamp = null;
 		if ( null !== $stamp ) {
 			return $stamp;
 		}
 		global $wpdb;
 		$stamp = (string) $wpdb->get_var( "SELECT MAX(post_modified_gmt) FROM {$wpdb->posts} WHERE post_type IN ('estate_property','post','estate_agent') AND post_status = 'publish'" );
-		$stamp = substr( md5( blockke_home_ver() . '|' . $stamp . '|' . wp_json_encode( get_option( 'blockke_homepage', array() ) ) ), 0, 12 );
+		$stamp = substr( md5( blockke_hm21_ver() . '|' . $stamp . '|' . wp_json_encode( get_option( 'blockke_homepage', array() ) ) ), 0, 12 );
 		return $stamp;
 	}
 
-	function blockke_home_output() {
-		$cfg   = blockke_home_config();
-		$key   = 'blockke_home_v2_' . blockke_home_stamp() . ( blockke_home_dev_page() ? '_p' . blockke_home_dev_page() : '' ); // v2.1: a preview page's copy (its name search posts to itself) is not the front page's
+	function blockke_hm21_output() {
+		$cfg   = blockke_hm21_config();
+		$key   = 'blockke_home_v2_' . blockke_hm21_stamp() . ( blockke_hm21_dev_page() ? '_p' . blockke_hm21_dev_page() : '' ); // v2.1: a preview page's copy (its name search posts to itself) is not the front page's
 		$skip  = isset( $_GET['bkhome_nocache'] ) || isset( $_GET['elementor-preview'] ) || is_preview() || isset( $_GET['bkdev'] ); // v2.1: a name search is rendered fresh and never stored
 		$cache = $skip ? false : get_transient( $key );
 		if ( is_string( $cache ) && '' !== $cache ) {
 			return $cache;
 		}
 		try {
-			$html = blockke_home_render();
+			$html = blockke_hm21_render();
 		} catch ( Throwable $e ) {
 			error_log( 'BLOCK homepage v2: ' . $e->getMessage() );
 			return '<div style="padding:120px 20px 60px;text-align:center;font-family:Montserrat,sans-serif"><h1 style="font-size:32px">Block Real Estate</h1><p>Nairobi property, block by block.</p><p><a href="' . esc_url( home_url( '/for-sale/' ) ) . '">Homes for sale</a> · <a href="' . esc_url( home_url( '/for-rent/' ) ) . '">Rentals</a> · <a href="' . esc_url( home_url( '/contact-us/' ) ) . '">Contact</a></p></div>';
 		}
-		if ( ! $skip && ! blockke_home_nostore() && blockke_home_tax_ready() ) { // v2.1.1
+		if ( ! $skip && ! blockke_hm21_nostore() && blockke_hm21_tax_ready() ) { // v2.1.1
 			set_transient( $key, $html, max( 1, (int) $cfg['cache_minutes'] ) * MINUTE_IN_SECONDS );
 		}
 		return $html;
 	}
 }
 
-echo blockke_home_output();
+echo blockke_hm21_output();
