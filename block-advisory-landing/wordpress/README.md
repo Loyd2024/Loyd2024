@@ -433,13 +433,12 @@ Enquiries the theme's contact forms send to an agent are copied (Bcc) to the enq
 
 Tested on the local WordPress copy: leads from both sources in date order, the agent copy, failed and sent emails, private subjects, Zoho replies, the page, the dashboard box, the CSV (formulas neutralised, phones kept as text, refused without its security token) and the test email.
 
-## Homepage (`block-homepage.php`)
+## Homepage (`block-homepage-v2.php`, live) and v3.1 (`block-homepage.php`, preview)
 
-A separate WPCode PHP snippet that renders the whole block.ke homepage where its shortcode is placed: page 44132's Elementor Shortcode widget holds `[wpcode id=45138]`, and page 44132 is the front page since 2 Nov 2026. Version 3.1 is version 3.0.2 (snippet 44131, unchanged) plus a search by development name under the hero's Buy | Rent | Off-plan filters: "Know the development?" suggests developments as you type, goes straight to the one meant on a clear match, and otherwise shows a results panel (`/?bkdev=<name>`), which also works without JavaScript. Its header comment describes every section and setting.
+**The front page is Home v2** (page 44129, Elementor Shortcode widget `[wpcode id=44128]`), since 2 Nov 2026. `block-homepage-v2.php` is snippet 44128 as stored (without the first line, `<?php`, and the final newline). It is rendered entirely on the server; its script only switches the For sale / For rent tabs and the budget list, and logs WhatsApp and call taps.
 
-- **Settings:** option `blockke_homepage_v3` overrides any key of `blockke_hm3_config()`; `'dev_search' => false` hides the name search.
-- **Speed:** snippet 44133 (Homepage speed) acts only on pages carrying one of the snippets in its option `blockke_home_speed` → `shortcode_ids`, now `[44131, 45138]`.
-- **SEO:** page 44132 carries the Rank Math title, description, focus keyword and index setting the previous front page (18618) had.
-- **Roll back:** set the front page back to page 18618 (Settings → Reading), or point page 44132's widget back at `[wpcode id=44131]` to keep the layout without the name search.
+- **Settings:** option `blockke_homepage` overrides any key of `blockke_home_config()`. It holds `{"mandates": []}`, so no development carries the "Authorised sales agent" tag (Golden Hill had it by default).
+- **SEO:** page 44129 carries the Rank Math title, description, focus keyword and index setting the previous front page (18618) had.
+- **Roll back:** set the front page back to page 18618 (Settings → Reading).
 
-The stored snippet is this file without its first line (`<?php`) and final newline (md5 7ebffc317b976b4783daf12026f234d3), checked byte for byte against what WordPress holds.
+**Home v3.1** (`block-homepage.php`, snippet 45138) is v3.0.2 (snippet 44131) plus a search by development name under the hero filters. It is only on the preview page 44132 (/home-v3/, noindex). Its settings are in option `blockke_homepage_v3`; snippet 44133 (Homepage speed) acts on pages carrying 44131 or 45138 (option `blockke_home_speed` → `shortcode_ids`). The stored snippet 45138 is `block-homepage.php` without its first line and final newline (md5 7ebffc317b976b4783daf12026f234d3).
