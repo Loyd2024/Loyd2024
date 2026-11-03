@@ -13,7 +13,7 @@
  *   reply to each lead, to find out why leads don't show up there.
  * - A "Latest enquiries" box on the WordPress dashboard, and a count of new ones on the menu.
  * - Download every enquiry as a CSV file, and send a test email to the enquiry addresses.
- * - Enquiries the theme's contact forms send to an agent are copied (Bcc) to the enquiry addresses:
+ * - Enquiries the theme's contact forms send to an agent, or to the theme's company address (the contact page form), are copied (Bcc) to the enquiry addresses:
  *   the price-check popup's notify list, set in option blockke_buyer_popup['notify_emails'].
  * Keeps the last 300 emails (option blockke_mail_log) and 50 Zoho replies (blockke_zoho_log),
  * neither autoloaded. Emails about passwords, logins or codes are listed without their text.
@@ -23,6 +23,8 @@
  *   page snippet saved it with 'kind' => 'rent' (v1.8.3), or, saved without a kind, when its listing reads as a rental now.
  *   Runs as its own snippet at a lower priority number (5) than v1.0 (42847, priority 10), which stays active as the
  *   fallback: whichever runs first defines these functions, and the other skips itself.
+ * v1.1.1 (2026-11-03): the theme's company address (WPResidence wp_estate_email_adr, info@block.ke) counts as an agent's,
+ *   so the contact page form's enquiries are copied too. The same change is in v1.0 (42847) as v1.0.1.
  * Rollback: deactivate this snippet; v1.0 (42847) takes over. Nothing on the public site changes.
  * Created by Claude session 2026-10-10; v1.1 by Claude session 2026-10-23.
  */
@@ -57,6 +59,12 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 				if ( $em ) {
 					$emails[] = $em;
 				}
+			}
+			// The theme's company address (WPResidence option wp_estate_email_adr, info@block.ke): its contact page form sends there.
+			$theme   = get_option( 'wpresidence_admin', array() );
+			$company = is_array( $theme ) && isset( $theme['wp_estate_email_adr'] ) ? strtolower( sanitize_email( (string) $theme['wp_estate_email_adr'] ) ) : '';
+			if ( $company ) {
+				$emails[] = $company;
 			}
 		}
 		return $emails;
@@ -370,7 +378,7 @@ if ( ! function_exists( 'blockke_inbox_recipients' ) ) {
 		if ( ! blockke_inbox_has_mailer() ) {
 			echo '<div class="notice notice-warning"><p><b>Enquiry emails may not be arriving.</b> This site sends email straight from its web server, and many inboxes reject or hide those emails. Connect an email service with a plugin such as WP Mail SMTP (Gmail, Google Workspace, Zoho Mail or Brevo). Until then, every enquiry is kept on this page.</p></div>';
 		}
-		echo '<p>Every enquiry from the website, newest first. Enquiry emails go to <b>' . esc_html( implode( ', ', $to ) ) . '</b>; enquiries sent to an agent are copied to them too.</p>';
+		echo '<p>Every enquiry from the website, newest first. Enquiry emails go to <b>' . esc_html( implode( ', ', $to ) ) . '</b>; enquiries sent to an agent or to the company address (the contact page form) are copied to them too.</p>';
 		echo '<div class="bki-actions"><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="blockke_inbox_test">' . wp_nonce_field( 'blockke_inbox_test', '_wpnonce', true, false ) . '<button class="button">Send a test email</button></form>'
 			. '<a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=blockke_inbox_csv' ), 'blockke_inbox_csv' ) ) . '">Download all as CSV</a></div>';
 

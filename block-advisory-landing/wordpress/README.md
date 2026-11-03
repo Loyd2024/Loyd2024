@@ -290,7 +290,7 @@ A note is ignored when the visitor reached the development again from another pa
 Every form posts to `/wp-json/block/v1/development-lead`, which:
 
 - saves the enquiry in the option `blockke_dev_leads` (the last 200) before Zoho and the email, so a slow or failing step can't lose it;
-- emails the enquiry addresses (`notify_emails`; on block.ke loyd@block.ke, sales@block.ke and loydmokaya@gmail.com) and the listing's agent;
+- emails the enquiry addresses (`notify_emails`; on block.ke loyd@block.ke, sales@block.ke, loydmokaya@gmail.com and elkana.magati@block.ke) and the listing's agent;
 - forwards the lead to Zoho through the popup snippet's Web-to-Lead connection, once its tokens are set;
 - tags the source (Google Ads, Meta, organic and so on) using the same rules as the popup;
 - fires the Google Ads lead conversion (`window.blockkeLeadConversion`), GA4 `generate_lead` and Meta `Lead`.
@@ -485,7 +485,7 @@ A separate WPCode PHP snippet that keeps every website enquiry inside WordPress,
 - **Consultation requests** (since 23 Oct 2026): the requests from the consultation page (option `blockke_consult_leads`, written by the consultation endpoint snippet 44127).
 - **Type (v1.1):** a Type column on the page and in the CSV: *Sale* (the price-check popup and development pages), *Rental*, *Area*, *Index* (the new developments page), *Topic* (other website pages, such as the land-and-build page) or *Consultation*. A row is a Rental when the development page snippet saved it with `'kind' => 'rent'` (v1.9.1, with `rent_pages` on), or, saved without a kind, when its listing reads as a rental now. Rental rows show "Move-in" instead of "Timeline", and no "Buying to".
 
-Enquiries the theme's contact forms send to an agent are copied (Bcc) to the enquiry addresses. Those addresses are the price-check popup's `notify_emails` (option `blockke_buyer_popup`), also used by the development pages (option `blockke_dev_page`). On block.ke both are set to loyd@block.ke, sales@block.ke and loydmokaya@gmail.com.
+Enquiries the theme's contact forms send to an agent, or to the theme's company address (`wp_estate_email_adr`, info@block.ke, where the contact page form sends; since v1.0.1 / v1.1.1, 3 Nov 2026), are copied (Bcc) to the enquiry addresses. Those addresses are the price-check popup's `notify_emails` (option `blockke_buyer_popup`), also used by the development pages (option `blockke_dev_page`). On block.ke both are set to loyd@block.ke, sales@block.ke, loydmokaya@gmail.com and elkana.magati@block.ke (added 3 Nov 2026). The AI chat gate has its own list (option `blockke_ai_chat`, `notify_emails`): loyd@block.ke and elkana.magati@block.ke.
 
 **Emails still need an email service.** WordPress hands email to the web server, and many inboxes reject or hide those messages. Install WP Mail SMTP, or a similar plugin, and connect Gmail, Google Workspace, Zoho Mail or Brevo; then use *Send a test email*. Until then, the Enquiries page shows a warning.
 
