@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 1. Page title and description (what Google and WhatsApp previews show) -->
+<title>Development Name, Area | Apartments from KES 0M | Block Advisory</title>
+<meta name="description" content="One or two sentences: what it is, where, price from, and the standout feature.">
+<meta name="theme-color" content="#0D2440">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Development Name, Area">
+<meta property="og:description" content="Short description for link previews.">
+<meta property="og:image" content="https://block.ke/wp-content/uploads/.../hero.jpg">
+<link rel="icon" href="https://block.ke/wp-content/uploads/2026/08/block-advisory-favicon-1.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../assets/landing.css">
+<script>document.documentElement.classList.add('js');</script>
+<!-- Tracking: paste the Google Tag Manager and Meta Pixel snippets here. -->
+</head>
+<body>
+<div id="app"><noscript><p style="padding:40px">Please enable JavaScript to view this page, or call 0725 937 686.</p></noscript></div>
+
+<script src="../../assets/agency.js"></script>
+<script>
+/* =============================================================================
+   2. Fill in the development below. Everything on the page comes from here.
+   - Leave out (or delete) anything you don't have: that section simply won't show.
+   - Text goes in 'single quotes'. If the text contains an apostrophe, write it as \'
+   - Prices are plain numbers: 4600000, not "4.6M".
+   ========================================================================== */
+window.DEVELOPMENT = {
+  slug: 'development-name',                 // short id, used in tracking and lead records
+  name: 'Development Name',
+  status: 'Off-plan · Selling now',          // e.g. 'Ready to move in', 'Final units', 'Now launching'
+  area: 'Area, City',
+  address: 'Road, Area, City',
+  developer: '',                             // optional, shown in the footer
+  tagline: 'One sentence that tells a buyer what this is and why it matters.',
+  priceFrom: 0,                              // KES, e.g. 8500000
+  completion: 'Q4 2027',                     // or 'Ready now'
+  unitsCount: 0,                             // optional, total residences
+  brochure: '',                              // optional PDF link: unlocked right after a visitor leaves their details
+
+  heroImage: '',                             // main image URL (portrait-friendly works best)
+  images: [                                  // gallery: 3 or more images shows the photo section
+    // 'https://block.ke/wp-content/uploads/.../1.jpg',
+  ],
+  imageNote: "Images are artist's impressions.",
+  video: null,                               // optional: { youtube: 'VIDEO_ID', caption: 'Walkthrough' }
+
+  facts: [                                   // 3 to 6 short facts for the strip under the hero
+    { label: 'Residences', value: '1 – 3 Bed' },
+    { label: 'Sizes', value: '60 – 140 m²' },
+    { label: 'Building', value: '12 floors' }
+  ],
+
+  overview: {
+    heading: 'A short, confident headline about the place.',
+    lead: 'The opening paragraph: who it is for and what makes it different.',
+    body: [
+      'A second paragraph with detail on the homes and the building.'
+    ],
+    highlights: [                            // 3 to 6 short bullet points
+      'Open-plan layouts with natural light'
+    ]
+  },
+
+  unitsHeading: 'Availability and pricing',
+  units: [                                   // one row per layout; group is used for the filter buttons
+    { group: '1 Bed', type: '1 Bedroom', size: '60 m²', price: 0, url: '', plan: '' }
+    // plan: optional floor-plan link, opened right after the visitor leaves their details
+    // note: optional small line under the type, e.g. 'Two en-suite bedrooms'
+  ],
+  unitsNote: 'Starting prices. Ask for the latest price list for current availability.',
+
+  amenitiesHeading: 'Everything close to home',
+  amenitiesIntro: '',
+  amenities: [                               // icons: waves, users, book, shield, leaf, lotus, dumbbell, film, laptop, ball, sun, car, building, key, calendar, sofa, star
+    { icon: 'waves', title: 'Leisure & wellness', items: ['Swimming pool', 'Gym'] },
+    { icon: 'shield', title: 'Security', text: 'A sentence works too, instead of a list.' }
+  ],
+
+  paymentPlan: {
+    short: 'Flexible',                       // shown in the hero, e.g. '24 months'
+    heading: 'Payment plan',
+    text: 'How buyers can pay.',
+    months: null,                            // a number (e.g. 24) shows the instalment calculator
+    until: '',                               // or count months from today to completion, e.g. '2029-12'
+    reservation: 0,                          // optional, e.g. 200000
+    depositPct: 10,
+    steps: [                                 // optional
+      // { title: 'Reserve', text: 'Hold your unit with a reservation fee.' }
+    ]
+  },
+
+  location: {
+    heading: 'Road, Area',
+    intro: 'One sentence about the neighbourhood.',
+    lat: null, lng: null,                    // or use query: 'Road, Area, City'
+    query: 'Road, Area, City',
+    places: [
+      { name: 'Nearest mall', time: '≈ 5 min' }
+    ],
+    note: 'Approximate drive times; they vary with traffic.'
+  },
+
+  faqs: [
+    { q: 'When will it be complete?', a: 'Completion is scheduled for ...' }
+  ],
+
+  similarHeading: 'Similar developments',
+  similar: [                                 // optional cards linking to other listings
+    // { name: 'Other Development', price: 'From KES 8M', meta: '2 Bed · Road', image: 'https://...', url: 'https://block.ke/property/...' }
+  ]
+};
+</script>
+<script src="../../assets/landing.js"></script>
+</body>
+</html>
